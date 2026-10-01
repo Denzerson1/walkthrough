@@ -1,0 +1,54 @@
+[project]
+name = "walkthrough"
+version = "0.0.0"
+description = "3D property walkthrough MVP — API and capture-to-scene pipeline"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "sqlmodel>=0.0.22",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "python-multipart>=0.0.12",
+    "itsdangerous>=2.2",
+    "typer>=0.15",
+    "rich>=13.9",
+    "numpy>=1.26,<3",
+    "pillow>=11.0",
+    "opencv-python-headless>=4.10",
+    "scipy>=1.14",
+    "plyfile>=1.1",
+    "anthropic>=0.40",
+    "httpx>=0.27",
+]
+
+[project.scripts]
+pipeline = "walkthrough_pipeline.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["services/api/src/walkthrough_api", "pipeline/src/walkthrough_pipeline"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = ["data", "node_modules", ".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["B008"]  # FastAPI Depends() in defaults is the documented pattern.
+
+[tool.pytest.ini_options]
+testpaths = ["services/api/tests", "pipeline/tests"]
+pythonpath = ["services/api/src", "pipeline/src"]
+filterwarnings = ["ignore::DeprecationWarning"]

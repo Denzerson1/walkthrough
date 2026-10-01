@@ -10,24 +10,27 @@
   "scripts": {
     "dev": "concurrently -n web,api -c cyan,magenta \"pnpm dev:web\" \"pnpm dev:api\"",
     "dev:web": "pnpm --filter @walkthrough/web dev",
-    "dev:api": "uv run --project services/api uvicorn walkthrough_api.main:app --reload --host 127.0.0.1 --port 8000",
+    "dev:api": "uv run uvicorn walkthrough_api.main:app --reload --host 127.0.0.1 --port 8000",
     "build": "pnpm --filter @walkthrough/web build",
     "test": "pnpm test:web && pnpm test:py",
     "test:web": "pnpm --filter @walkthrough/web test",
-    "test:py": "uv run --project services/api pytest services/api/tests pipeline/tests -q",
+    "test:py": "uv run pytest -q",
     "test:e2e": "pnpm --filter @walkthrough/web test:e2e",
     "lint": "pnpm lint:web && pnpm lint:py",
     "lint:web": "pnpm --filter @walkthrough/web lint && pnpm --filter @walkthrough/web typecheck",
-    "lint:py": "uv run --project services/api ruff check services/api pipeline scripts",
-    "seed:testscene": "uv run --project services/api python scripts/make_test_scene.py --project demo-01",
-    "seed:floors": "uv run --project services/api python scripts/seed_floors.py",
-    "seed:furniture": "uv run --project services/api python scripts/seed_furniture.py",
-    "evals:assistant": "uv run --project services/api python scripts/run_assistant_evals.py"
+    "lint:py": "uv run ruff check services pipeline scripts",
+    "seed:testscene": "uv run python scripts/make_test_scene.py --project demo-01",
+    "seed:floors": "uv run python scripts/seed_floors.py",
+    "seed:furniture": "uv run python scripts/seed_furniture.py",
+    "evals:assistant": "uv run python scripts/run_assistant_evals.py",
+    "pipeline": "uv run pipeline"
   },
   "devDependencies": {
     "concurrently": "9.1.2"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }
