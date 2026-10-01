@@ -1,0 +1,134 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+# No GPU jobs here, per docs/BRIEF.md §3. Training and pose estimation run
+# on the WSL2 box; CI covers lint, unit tests and browser smoke tests only.
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python — ruff + pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Sync dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Lint
+        run: uv run ruff check services pipeline scripts
+
+      - name: Test
+        run: uv run pytest -q
+
+  web:
+    name: Web — eslint + tsc + vitest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.13.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm --filter @walkthrough/web typecheck
+
+      - name: Unit tests
+        run: pnpm --filter @walkthrough/web test
+
+  e2e:
+    name: Playwright smoke (desktop + iPhone)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.13.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - run: uv python install 3.11
+      - run: uv sync --all-extras --dev
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install browsers
+        run: pnpm --filter @walkthrough/web exec playwright install --with-deps chromium webkit
+
+      - name: Generate the synthetic test scene
+        # Committing a 24 MB splat is forbidden (brief §2.2), so CI regenerates
+        # it from the committed generator.
+        run: pnpm seed:testscene
+
+      - name: Seed catalogs
+        run: |
+          pnpm seed:floors
+          pnpm seed:furniture
+
+      - name: Start API
+        run: |
+          uv run uvicorn walkthrough_api.main:app --host 127.0.0.1 --port 8000 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8000/api/health && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8000/api/health
+
+      - name: Start web
+        run: |
+          pnpm --filter @walkthrough/web dev &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:5173/ && break
+            sleep 1
+          done
+          curl -sf -o /dev/null http://localhost:5173/
+
+      - name: Run smoke tests
+        run: pnpm --filter @walkthrough/web exec playwright test
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: docs/screenshots/
+          if-no-files-found: ignore
+
+      - name: Upload failure traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: apps/web/test-results/
+          if-no-files-found: ignore

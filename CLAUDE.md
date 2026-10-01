@@ -1,0 +1,124 @@
+# walkthrough — working notes
+
+3D property walkthrough MVP. Real apartments captured on an iPhone, rebuilt as
+Gaussian splats, viewable in the browser with swappable floors and furniture
+and one AI assistant driving it all.
+
+Working name `walkthrough` until a brand name is chosen.
+Full scope: `docs/BRIEF.md`. Decisions and architecture: `docs/SPEC.md`.
+State of play: `docs/PROGRESS.md`.
+
+## Commands
+
+```bash
+# install
+pnpm install
+uv sync
+
+# run both servers (web :5173, api :8000)
+pnpm dev
+
+# tests
+pnpm test            # vitest + pytest
+pnpm test:web        # vitest only
+pnpm test:py         # pytest only
+pnpm test:e2e        # playwright, needs pnpm dev running
+
+# lint
+pnpm lint            # eslint + tsc + ruff
+
+# seed data
+pnpm seed:testscene  # synthetic splat apartment -> data/projects/demo-01
+pnpm seed:floors     # 16 floor materials into catalog/floors
+pnpm seed:furniture  # 23 items + 7 styles into catalog/
+
+# capture pipeline (needs WSL2 + CUDA; see docs/PIPELINE.md)
+pnpm pipeline -- ingest video.mov --project flat-01
+pnpm pipeline -- frames --project flat-01
+pnpm pipeline -- poses --project flat-01
+pnpm pipeline -- train --project flat-01
+pnpm pipeline -- align --project flat-01
+pnpm pipeline -- export --project flat-01
+pnpm pipeline -- run-all video.mov --project flat-01
+
+# assistant evals (needs ANTHROPIC_API_KEY)
+pnpm evals:assistant
+uv run python scripts/run_assistant_evals.py --dry-run
+```
+
+## Layout
+
+```
+apps/web/          Vite + React + TS + three.js + Spark, Zustand, Tailwind
+services/api/      FastAPI + SQLModel + SQLite, storage adapter
+pipeline/          Typer CLI: video -> scene
+catalog/           floors/ furniture/ styles/ (JSON + small thumbnails)
+scripts/           seeding and the synthetic test scene
+docs/              BRIEF, SPEC, CAPTURE, PIPELINE, PROGRESS, ROADMAP, DEMO, LICENSES
+data/              git-ignored: projects, uploads, cache
+```
+
+## Constraints that are not negotiable
+
+These come from `docs/BRIEF.md` §2. Breaking one is a bug, not a trade-off.
+
+1. **Licences.** Everything must permit commercial use. Never use the Inria/
+   GraphDeco `gaussian-splatting` code — its licence forbids it. Use gsplat
+   (Apache-2.0), COLMAP/GLOMAP, Spark (MIT) with three.js. Run
+   `/licence-check` before adding any dependency, model, dataset, texture or
+   3D asset, and record it in `docs/LICENSES.md`. If a licence is unclear or
+   non-commercial, stop and ask.
+2. **No large binaries in git.** Anything over 1 MB — videos, frames, splats,
+   GLBs, textures — lives under `data/` (git-ignored) or R2. Catalog JSON and
+   small thumbnails may be committed.
+3. **Secrets only in `.env`**, which is git-ignored. Keep `.env.example`
+   current.
+4. **Honest staging.** Every modified view shows the "Virtually staged" badge
+   and can return to the original in one tap.
+5. **Privacy.** The editor can blur or delete regions before publishing.
+6. **No faked results.** If something cannot run or be verified, say so and
+   use the documented fallback. Never report an unrun step as passing.
+
+## Conventions
+
+- **Scene space is metres, Y up, floor at y = 0.** The pipeline's `align`
+  stage guarantees it; the viewer relies on it and applies no orientation
+  flip. Raw 3DGS exports are Y-down — convert, do not special-case.
+- **Manifest vs viewer state.** `scene/manifest.json` describes the building
+  and only the editor writes it. What the user changes (floors, furniture,
+  recolors) is a separate object that encodes into a share URL and is never
+  written back into the manifest.
+- **The manifest schema lives in two places** and must stay in sync:
+  `pipeline/src/walkthrough_pipeline/manifest.py` and
+  `apps/web/src/lib/manifest.ts`.
+- **Geometry is duplicated deliberately** in `layout.py` and `geometry.ts`,
+  because the solver runs server-side and placement runs client-side. They
+  must agree, including edge cases — a point exactly on a polygon edge counts
+  as inside in both.
+- **Zoom changes field of view only** (clamped 30–90°). The camera never
+  leaves its waypoint.
+- **The assistant may only name catalog ids.** Every tool call is validated
+  against the catalog server-side before it reaches the viewer. Mutating
+  tools are applied client-side; read-only tools run on the server.
+- Prefer simple code over clever abstractions. No dead code, no unused
+  dependencies.
+- When a product decision is unclear, ask. When a technical fact is unclear
+  (an API, a licence, a file format), check the official docs rather than
+  guessing.
+
+## Testing
+
+- Logic gets a unit test: geometry, floor voting, plane fitting, homography,
+  the layout solver, assistant tool handling.
+- Visual features get a Playwright screenshot in `docs/screenshots/`.
+- A green test that cannot fail is worse than no test. The splat render check
+  screenshots a centre crop and requires 30% coverage, because an earlier
+  version passed against an empty canvas.
+- CI runs lint and tests only. No GPU jobs.
+
+## Workflow
+
+Milestones run one at a time via `/milestone <id>`: plan, wait for OK,
+implement in small steps with tests after each, show evidence for the
+"Done when" check, review the diff with a subagent, update
+`docs/PROGRESS.md`, commit.
