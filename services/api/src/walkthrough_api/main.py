@@ -12,7 +12,8 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 from walkthrough_pipeline.manifest import Manifest
 
-from . import auth, catalog as catalog_mod, projects
+from . import auth, projects
+from . import catalog as catalog_mod
 from .config import Settings, get_settings
 from .db import AnalyticsEvent, get_session
 from .storage import build_storage

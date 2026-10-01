@@ -28,7 +28,12 @@ from walkthrough_pipeline.manifest import (  # noqa: E402
     Waypoint,
 )
 from walkthrough_pipeline.paths import ProjectPaths, repo_root  # noqa: E402
-from walkthrough_pipeline.splat import SplatCloud, SpzUnavailable, write_ply, write_spz  # noqa: E402
+from walkthrough_pipeline.splat import (  # noqa: E402
+    SplatCloud,
+    SpzUnavailable,
+    write_ply,
+    write_spz,
+)
 
 RNG_SEED = 7
 

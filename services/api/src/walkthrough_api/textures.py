@@ -183,7 +183,8 @@ def default_roughness(tile: np.ndarray, base: float = 0.65) -> np.ndarray:
     """
     grey = cv2.cvtColor(tile, cv2.COLOR_BGR2GRAY) if tile.ndim == 3 else tile
     grey_f = grey.astype(np.float32) / 255.0
-    local_var = cv2.GaussianBlur(grey_f**2, (0, 0), 3.0) - cv2.GaussianBlur(grey_f, (0, 0), 3.0) ** 2
+    mean = cv2.GaussianBlur(grey_f, (0, 0), 3.0)
+    local_var = cv2.GaussianBlur(grey_f**2, (0, 0), 3.0) - mean**2
     local_var = np.clip(local_var, 0, None)
     texture = np.sqrt(local_var)
     texture = texture / (texture.max() + 1e-6)

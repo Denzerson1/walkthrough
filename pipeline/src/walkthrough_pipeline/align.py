@@ -60,9 +60,8 @@ def fit_plane_ransac(
         if norm < 1e-9:
             continue
         normal = normal / norm
-        if up_hint is not None:
-            if abs(float(np.dot(normal, up_hint))) < cos_limit:
-                continue
+        if up_hint is not None and abs(float(np.dot(normal, up_hint))) < cos_limit:
+            continue
         d = -float(np.dot(normal, p0))
         distances = np.abs(pts @ normal + d)
         mask = distances < threshold
