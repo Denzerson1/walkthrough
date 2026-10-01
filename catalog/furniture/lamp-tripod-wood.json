@@ -1,0 +1,27 @@
+{
+  "id": "lamp-tripod-wood",
+  "name": "Wooden tripod lamp",
+  "category": "lamp",
+  "styles": [
+    "minimalist",
+    "traditional"
+  ],
+  "colors": [
+    "#b89b74"
+  ],
+  "materials": [
+    "beech",
+    "linen"
+  ],
+  "dimensionsM": [
+    0.5,
+    1.55,
+    0.5
+  ],
+  "glb": null,
+  "thumbnail": null,
+  "assetStatus": "pending",
+  "license": "CC0",
+  "source": "https://polyhaven.com/models (CC0)",
+  "note": "No mesh downloaded yet. The viewer draws a correctly sized placeholder box. Record the real licence in docs/LICENSES.md when the GLB is added."
+}

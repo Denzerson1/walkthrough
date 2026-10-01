@@ -1,0 +1,21 @@
+{
+  "id": "transitional",
+  "name": "Transitional",
+  "description": "Traditional shapes stripped of ornament, in a modern palette.",
+  "palette": [
+    "#ece6da",
+    "#b89b74",
+    "#4c5056"
+  ],
+  "materials": [
+    "oak",
+    "linen",
+    "brushed brass"
+  ],
+  "floorIds": [
+    "oak-plank-natural",
+    "marble-carrara"
+  ],
+  "picks": {},
+  "complete": false
+}

@@ -1,0 +1,25 @@
+{
+  "id": "bookcase-painted",
+  "name": "Painted bookcase",
+  "category": "shelf",
+  "styles": [
+    "traditional"
+  ],
+  "colors": [
+    "#e3ded2"
+  ],
+  "materials": [
+    "painted pine"
+  ],
+  "dimensionsM": [
+    0.9,
+    1.9,
+    0.32
+  ],
+  "glb": null,
+  "thumbnail": null,
+  "assetStatus": "pending",
+  "license": "CC0",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets (CC0/CC-BY per model)",
+  "note": "No mesh downloaded yet. The viewer draws a correctly sized placeholder box. Record the real licence in docs/LICENSES.md when the GLB is added."
+}

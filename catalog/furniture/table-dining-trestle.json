@@ -1,0 +1,25 @@
+{
+  "id": "table-dining-trestle",
+  "name": "Trestle dining table",
+  "category": "dining_table",
+  "styles": [
+    "traditional"
+  ],
+  "colors": [
+    "#6f5436"
+  ],
+  "materials": [
+    "pine"
+  ],
+  "dimensionsM": [
+    1.8,
+    0.75,
+    0.85
+  ],
+  "glb": null,
+  "thumbnail": null,
+  "assetStatus": "pending",
+  "license": "CC0",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets (CC0/CC-BY per model)",
+  "note": "No mesh downloaded yet. The viewer draws a correctly sized placeholder box. Record the real licence in docs/LICENSES.md when the GLB is added."
+}

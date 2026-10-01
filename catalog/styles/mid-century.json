@@ -1,0 +1,44 @@
+{
+  "id": "mid-century",
+  "name": "Mid-Century Modern",
+  "description": "Teak and walnut, tapered legs, olive and burnt orange against warm neutrals.",
+  "palette": [
+    "#e5dcc9",
+    "#b8743f",
+    "#7d8c7a",
+    "#4a3a2a"
+  ],
+  "materials": [
+    "teak",
+    "walnut",
+    "wool",
+    "moulded ply"
+  ],
+  "floorIds": [
+    "oak-herringbone-light",
+    "vintage-parquet-chevron",
+    "terrazzo-grey"
+  ],
+  "picks": {
+    "living": [
+      "sofa-kjaer-2",
+      "armchair-shell",
+      "coffee-noguchi",
+      "sideboard-teak",
+      "lamp-arc-floor"
+    ],
+    "bedroom": [
+      "bed-double-oak",
+      "sideboard-teak"
+    ],
+    "dining": [
+      "table-ercol-oval",
+      "armchair-shell"
+    ],
+    "office": [
+      "desk-simple-oak",
+      "shelf-string-wall"
+    ]
+  },
+  "complete": true
+}

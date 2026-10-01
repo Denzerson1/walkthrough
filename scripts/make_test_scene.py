@@ -178,9 +178,12 @@ def build_cloud(total_splats: int) -> SplatCloud:
     height_factor = np.clip(1.15 - positions[:, 1] * 0.12, 0.75, 1.15)[:, None]
     colours = np.clip(colours * height_factor, 0, 1).astype(np.float32)
 
-    scales = np.full((n, 3), 0.018, dtype=np.float32)
-    scales += rng.normal(0, 0.003, (n, 3)).astype(np.float32)
-    scales = np.clip(scales, 0.005, 0.05)
+    # At this count the mean spacing between splats on a surface is about
+    # 1.7 cm, so the radius has to exceed that for neighbours to overlap into
+    # a continuous surface instead of speckling.
+    scales = np.full((n, 3), 0.014, dtype=np.float32)
+    scales += rng.normal(0, 0.002, (n, 3)).astype(np.float32)
+    scales = np.clip(scales, 0.008, 0.03)
 
     rotations = np.zeros((n, 4), dtype=np.float32)
     rotations[:, 0] = 1.0  # identity quaternion, wxyz
@@ -201,7 +204,7 @@ def build_manifest(project_id: str, scene_asset: str) -> Manifest:
         id="living",
         name="Living room",
         type="living",
-        waypoint=Waypoint(position=(2.1, 1.6, 2.4), yaw=180.0),
+        waypoint=Waypoint(position=(2.1, 1.55, 3.25), yaw=0.0),
         floorPolygon=[
             (LIVING["x0"], LIVING["z0"]),
             (LIVING["x1"], LIVING["z0"]),
@@ -223,7 +226,7 @@ def build_manifest(project_id: str, scene_asset: str) -> Manifest:
         id="bedroom",
         name="Bedroom",
         type="bedroom",
-        waypoint=Waypoint(position=(5.8, 1.6, 1.3), yaw=0.0),
+        waypoint=Waypoint(position=(5.0, 1.55, 1.1), yaw=200.0),
         floorPolygon=[
             (BEDROOM["x0"], BEDROOM["z0"]),
             (BEDROOM["x1"], BEDROOM["z0"]),
@@ -275,7 +278,7 @@ def build_manifest(project_id: str, scene_asset: str) -> Manifest:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project", default="demo-01")
-    parser.add_argument("--splats", type=int, default=220_000)
+    parser.add_argument("--splats", type=int, default=350_000)
     args = parser.parse_args()
 
     paths = ProjectPaths.for_project(repo_root(), args.project)

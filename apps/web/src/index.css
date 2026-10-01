@@ -1,0 +1,103 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  walkthrough — visual system.
+
+  The content is a photoreal capture of a real room, so the interface reads as
+  architectural instrumentation over the image rather than app chrome on top of
+  it. Amber is reserved for one thing only: the "Virtually staged" state, which
+  the brief requires to be unmistakable.
+*/
+
+:root {
+  --ink: #14171c;
+  --ink-soft: #2a2f38;
+  --paper: #faf9f6;
+  --paper-dim: #e8e6e0;
+  --blueprint: #2f5fd0;
+  --blueprint-dim: #8fa8e4;
+  --staged: #e8a33d;
+  --line: rgba(250, 249, 246, 0.22);
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--ink);
+  color: var(--paper);
+  font-family: Archivo, "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  /* The viewer owns all gestures; never rubber-band the page behind it. */
+  overscroll-behavior: none;
+}
+
+/* Measurements in metres are real data, so they get the technical face. */
+.measure {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Hairline rules that survive on top of photography. */
+.rule {
+  border-color: var(--line);
+}
+
+.panel {
+  background: rgba(20, 23, 28, 0.92);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+}
+
+/* Focus must stay visible over arbitrary imagery. */
+:where(button, a, input, [tabindex]):focus-visible {
+  outline: 2px solid var(--paper);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.scroll-x {
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.scroll-x::-webkit-scrollbar {
+  display: none;
+}
+
+canvas {
+  display: block;
+  touch-action: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}

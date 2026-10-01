@@ -1,0 +1,27 @@
+{
+  "id": "table-dining-slab",
+  "name": "Slab dining table",
+  "category": "dining_table",
+  "styles": [
+    "modern",
+    "minimalist"
+  ],
+  "colors": [
+    "#cfc9bd"
+  ],
+  "materials": [
+    "concrete",
+    "steel"
+  ],
+  "dimensionsM": [
+    1.7,
+    0.74,
+    0.88
+  ],
+  "glb": null,
+  "thumbnail": null,
+  "assetStatus": "pending",
+  "license": "CC0",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets (CC0/CC-BY per model)",
+  "note": "No mesh downloaded yet. The viewer draws a correctly sized placeholder box. Record the real licence in docs/LICENSES.md when the GLB is added."
+}

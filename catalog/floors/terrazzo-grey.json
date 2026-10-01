@@ -1,0 +1,22 @@
+{
+  "id": "terrazzo-grey",
+  "name": "Grey terrazzo",
+  "category": "tile",
+  "tags": [
+    "cool",
+    "speckled",
+    "mid-century",
+    "contemporary",
+    "terrazzo"
+  ],
+  "description": "Fine grey terrazzo with pale chips.",
+  "tileSizeM": [
+    0.6,
+    0.6
+  ],
+  "glossy": true,
+  "license": "CC0",
+  "source": "https://ambientcg.com/view?id=Terrazzo009",
+  "maps": {},
+  "note": "Texture maps not downloaded yet. Fetch from `source` and place under data/textures/, then fill `maps`."
+}

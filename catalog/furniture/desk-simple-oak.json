@@ -1,0 +1,26 @@
+{
+  "id": "desk-simple-oak",
+  "name": "Simple oak desk",
+  "category": "desk",
+  "styles": [
+    "minimalist",
+    "mid-century"
+  ],
+  "colors": [
+    "#b58a57"
+  ],
+  "materials": [
+    "oak"
+  ],
+  "dimensionsM": [
+    1.4,
+    0.74,
+    0.65
+  ],
+  "glb": null,
+  "thumbnail": null,
+  "assetStatus": "pending",
+  "license": "CC0",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets (CC0/CC-BY per model)",
+  "note": "No mesh downloaded yet. The viewer draws a correctly sized placeholder box. Record the real licence in docs/LICENSES.md when the GLB is added."
+}

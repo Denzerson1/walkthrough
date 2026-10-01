@@ -1,0 +1,24 @@
+{
+  "id": "painted-board-white",
+  "name": "White painted boards",
+  "category": "painted",
+  "tags": [
+    "bright",
+    "cottage",
+    "painted",
+    "white",
+    "nordic"
+  ],
+  "description": "Floorboards painted a chalky white.",
+  "tileSizeM": [
+    1.2,
+    0.18
+  ],
+  "glossy": false,
+  "license": "CC0",
+  "source": "Generated procedurally by scripts/seed_floors.py",
+  "maps": {
+    "albedo": "/catalog/floors/thumbnails/painted-board-white.png"
+  },
+  "thumbnail": "/catalog/floors/thumbnails/painted-board-white.png"
+}

@@ -1,0 +1,23 @@
+{
+  "id": "terracotta-rustic",
+  "name": "Rustic terracotta",
+  "category": "tile",
+  "tags": [
+    "warm",
+    "tuscan",
+    "rustic",
+    "earthy",
+    "terracotta",
+    "mediterranean"
+  ],
+  "description": "Aged terracotta with uneven firing. Mediterranean.",
+  "tileSizeM": [
+    0.3,
+    0.3
+  ],
+  "glossy": false,
+  "license": "CC0",
+  "source": "https://ambientcg.com/view?id=Tiles074",
+  "maps": {},
+  "note": "Texture maps not downloaded yet. Fetch from `source` and place under data/textures/, then fill `maps`."
+}

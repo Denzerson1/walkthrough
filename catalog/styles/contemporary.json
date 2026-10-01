@@ -1,0 +1,21 @@
+{
+  "id": "contemporary",
+  "name": "Contemporary",
+  "description": "Current, gallery-like: large forms, matt finishes, restrained colour.",
+  "palette": [
+    "#f2f0ec",
+    "#a8a49c",
+    "#3a3f49"
+  ],
+  "materials": [
+    "concrete",
+    "boucle",
+    "blackened steel"
+  ],
+  "floorIds": [
+    "concrete-polished",
+    "limestone-sand"
+  ],
+  "picks": {},
+  "complete": false
+}

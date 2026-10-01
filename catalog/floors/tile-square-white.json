@@ -1,0 +1,22 @@
+{
+  "id": "tile-square-white",
+  "name": "White square tile",
+  "category": "tile",
+  "tags": [
+    "bright",
+    "clean",
+    "bathroom",
+    "kitchen",
+    "white"
+  ],
+  "description": "Plain white square tile with a fine grout line.",
+  "tileSizeM": [
+    0.2,
+    0.2
+  ],
+  "glossy": true,
+  "license": "CC0",
+  "source": "https://ambientcg.com/view?id=Tiles101",
+  "maps": {},
+  "note": "Texture maps not downloaded yet. Fetch from `source` and place under data/textures/, then fill `maps`."
+}

@@ -1,0 +1,23 @@
+{
+  "id": "concrete-polished",
+  "name": "Polished concrete",
+  "category": "stone",
+  "tags": [
+    "cool",
+    "industrial",
+    "minimalist",
+    "grey",
+    "loft",
+    "concrete"
+  ],
+  "description": "Smooth polished concrete, lightly mottled.",
+  "tileSizeM": [
+    1.0,
+    1.0
+  ],
+  "glossy": true,
+  "license": "CC0",
+  "source": "https://ambientcg.com/view?id=Concrete034",
+  "maps": {},
+  "note": "Texture maps not downloaded yet. Fetch from `source` and place under data/textures/, then fill `maps`."
+}

@@ -1,0 +1,26 @@
+{
+  "id": "rug-persian-faded",
+  "name": "Faded Persian rug",
+  "category": "rug",
+  "styles": [
+    "traditional",
+    "eclectic"
+  ],
+  "colors": [
+    "#9a4f43"
+  ],
+  "materials": [
+    "wool"
+  ],
+  "dimensionsM": [
+    2.6,
+    0.01,
+    1.8
+  ],
+  "glb": null,
+  "thumbnail": null,
+  "assetStatus": "pending",
+  "license": "CC0",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets (CC0/CC-BY per model)",
+  "note": "No mesh downloaded yet. The viewer draws a correctly sized placeholder box. Record the real licence in docs/LICENSES.md when the GLB is added."
+}

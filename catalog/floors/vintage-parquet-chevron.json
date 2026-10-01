@@ -1,0 +1,24 @@
+{
+  "id": "vintage-parquet-chevron",
+  "name": "Vintage chevron parquet",
+  "category": "vintage",
+  "tags": [
+    "warm",
+    "chevron",
+    "parquet",
+    "period",
+    "golden"
+  ],
+  "description": "Golden chevron parquet with age in the finish.",
+  "tileSizeM": [
+    0.5,
+    0.5
+  ],
+  "glossy": false,
+  "license": "CC0",
+  "source": "Generated procedurally by scripts/seed_floors.py",
+  "maps": {
+    "albedo": "/catalog/floors/thumbnails/vintage-parquet-chevron.png"
+  },
+  "thumbnail": "/catalog/floors/thumbnails/vintage-parquet-chevron.png"
+}

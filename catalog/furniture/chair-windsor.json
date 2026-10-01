@@ -1,0 +1,25 @@
+{
+  "id": "chair-windsor",
+  "name": "Windsor chair",
+  "category": "chair",
+  "styles": [
+    "traditional"
+  ],
+  "colors": [
+    "#6b4a2f"
+  ],
+  "materials": [
+    "beech"
+  ],
+  "dimensionsM": [
+    0.46,
+    0.95,
+    0.48
+  ],
+  "glb": null,
+  "thumbnail": null,
+  "assetStatus": "pending",
+  "license": "CC0",
+  "source": "https://github.com/KhronosGroup/glTF-Sample-Assets (CC0/CC-BY per model)",
+  "note": "No mesh downloaded yet. The viewer draws a correctly sized placeholder box. Record the real licence in docs/LICENSES.md when the GLB is added."
+}

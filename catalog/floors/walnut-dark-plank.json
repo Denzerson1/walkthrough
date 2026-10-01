@@ -1,0 +1,22 @@
+{
+  "id": "walnut-dark-plank",
+  "name": "Dark walnut plank",
+  "category": "wood",
+  "tags": [
+    "dark",
+    "warm",
+    "walnut",
+    "traditional",
+    "rich"
+  ],
+  "description": "Deep walnut boards. Grounding, suits bright rooms.",
+  "tileSizeM": [
+    1.2,
+    0.18
+  ],
+  "glossy": false,
+  "license": "CC0",
+  "source": "https://ambientcg.com/view?id=WoodFloor051",
+  "maps": {},
+  "note": "Texture maps not downloaded yet. Fetch from `source` and place under data/textures/, then fill `maps`."
+}

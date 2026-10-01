@@ -1,0 +1,41 @@
+{
+  "id": "minimalist",
+  "name": "Minimalist",
+  "description": "Few pieces, pale woods, generous empty floor. Every object has to earn its place.",
+  "palette": [
+    "#faf9f6",
+    "#e8e6e0",
+    "#b9b2a6",
+    "#14171c"
+  ],
+  "materials": [
+    "ash",
+    "plywood",
+    "jute"
+  ],
+  "floorIds": [
+    "ash-pale-wide",
+    "painted-board-white",
+    "oak-herringbone-light"
+  ],
+  "picks": {
+    "living": [
+      "sofa-oslo-3",
+      "coffee-block-oak",
+      "plant-fiddle-fig"
+    ],
+    "bedroom": [
+      "bed-double-oak",
+      "wardrobe-plain"
+    ],
+    "dining": [
+      "table-dining-slab",
+      "chair-stacking-ply"
+    ],
+    "office": [
+      "desk-simple-oak",
+      "chair-stacking-ply"
+    ]
+  },
+  "complete": true
+}

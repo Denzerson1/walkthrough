@@ -1,0 +1,44 @@
+{
+  "id": "traditional",
+  "name": "Traditional",
+  "description": "Dark woods, deep upholstery, patterned rugs and symmetry.",
+  "palette": [
+    "#efe7d7",
+    "#9a4f43",
+    "#5b3a2e",
+    "#2c2a28"
+  ],
+  "materials": [
+    "leather",
+    "mahogany",
+    "wool",
+    "brass"
+  ],
+  "floorIds": [
+    "walnut-dark-plank",
+    "terracotta-rustic",
+    "stencil-victorian-geometric"
+  ],
+  "picks": {
+    "living": [
+      "sofa-chesterfield",
+      "chair-windsor",
+      "rug-persian-faded",
+      "bookcase-painted",
+      "lamp-tripod-wood"
+    ],
+    "bedroom": [
+      "bed-double-upholstered",
+      "bookcase-painted"
+    ],
+    "dining": [
+      "table-dining-trestle",
+      "chair-windsor"
+    ],
+    "office": [
+      "desk-simple-oak",
+      "bookcase-painted"
+    ]
+  },
+  "complete": true
+}

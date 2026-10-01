@@ -1,0 +1,46 @@
+{
+  "id": "modern",
+  "name": "Modern",
+  "description": "Clean lines, low contrast, a calm neutral palette with one quiet accent. Nothing ornate.",
+  "palette": [
+    "#f4f1ec",
+    "#c8c2b8",
+    "#8d8578",
+    "#2f3338"
+  ],
+  "materials": [
+    "linen",
+    "oak",
+    "steel",
+    "lacquer"
+  ],
+  "floorIds": [
+    "oak-plank-natural",
+    "concrete-polished",
+    "ash-pale-wide"
+  ],
+  "picks": {
+    "living": [
+      "sofa-oslo-3",
+      "coffee-block-oak",
+      "rug-flatweave-natural",
+      "lamp-arc-floor",
+      "plant-fiddle-fig"
+    ],
+    "bedroom": [
+      "bed-double-upholstered",
+      "wardrobe-plain",
+      "lamp-tripod-wood"
+    ],
+    "dining": [
+      "table-dining-slab",
+      "chair-stacking-ply"
+    ],
+    "office": [
+      "desk-simple-oak",
+      "chair-stacking-ply",
+      "shelf-string-wall"
+    ]
+  },
+  "complete": true
+}

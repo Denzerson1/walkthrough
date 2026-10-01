@@ -1,0 +1,22 @@
+{
+  "id": "ash-pale-wide",
+  "name": "Pale ash",
+  "category": "wood",
+  "tags": [
+    "pale",
+    "cool",
+    "minimalist",
+    "nordic",
+    "ash"
+  ],
+  "description": "Almost-white ash with a fine grain.",
+  "tileSizeM": [
+    1.4,
+    0.22
+  ],
+  "glossy": false,
+  "license": "CC0",
+  "source": "https://ambientcg.com/view?id=WoodFloor048",
+  "maps": {},
+  "note": "Texture maps not downloaded yet. Fetch from `source` and place under data/textures/, then fill `maps`."
+}

@@ -1,0 +1,22 @@
+{
+  "id": "limestone-sand",
+  "name": "Sand limestone",
+  "category": "stone",
+  "tags": [
+    "warm",
+    "neutral",
+    "soft",
+    "limestone",
+    "coastal"
+  ],
+  "description": "Pale sandy limestone with a honed finish.",
+  "tileSizeM": [
+    0.6,
+    0.6
+  ],
+  "glossy": false,
+  "license": "CC0",
+  "source": "https://ambientcg.com/view?id=Rock030",
+  "maps": {},
+  "note": "Texture maps not downloaded yet. Fetch from `source` and place under data/textures/, then fill `maps`."
+}
