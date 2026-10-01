@@ -1,0 +1,57 @@
+# Secrets
+.env
+.env.local
+*.pem
+
+# Data — all project media, intermediates and outputs (brief §2.2)
+data/
+
+# Large binaries must never be committed (brief §2.2)
+*.ply
+*.spz
+*.glb
+*.gltf
+*.mov
+*.mp4
+*.usdz
+*.exr
+*.hdr
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.tsbuildinfo
+playwright-report/
+test-results/
+blob-report/
+.playwright/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+
+# Allow small committed thumbnails despite the binary rules above
+!catalog/**/thumbnails/*.jpg
+!catalog/**/thumbnails/*.png
+!docs/screenshots/*.png
