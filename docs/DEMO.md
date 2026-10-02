@@ -17,7 +17,7 @@ pnpm install
 uv sync
 pnpm seed:testscene
 pnpm seed:floors
-pnpm seed:furniture
+pnpm seed:assets
 pnpm dev
 ```
 

@@ -80,7 +80,11 @@ def put_manifest(
 #: analytics database — stays private. The brief's privacy rule (§2.5) is
 #: about masking before publication, which is meaningless if the unmasked
 #: source is downloadable from the same host.
-PUBLIC_FILE_PREFIXES = ("projects/", "uploads/")
+#:
+#: `assets/` holds the downloaded catalog meshes and floor textures. They are
+#: public by nature — every viewer has to fetch them — and contain nothing
+#: from a capture.
+PUBLIC_FILE_PREFIXES = ("projects/", "uploads/", "assets/")
 PUBLIC_PROJECT_SUBDIRS = ("scene/",)
 
 

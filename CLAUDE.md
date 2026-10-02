@@ -30,7 +30,9 @@ pnpm lint            # eslint + tsc + ruff
 # seed data
 pnpm seed:testscene  # synthetic splat apartment -> data/projects/demo-01
 pnpm seed:floors     # 16 floor materials into catalog/floors
-pnpm seed:furniture  # 23 items + 7 styles into catalog/
+pnpm seed:assets     # downloads the real textures and meshes, and writes
+                     # catalog/furniture + catalog/styles from
+                     # scripts/furniture_themes.py
 
 # capture pipeline (needs WSL2 + CUDA; see docs/PIPELINE.md)
 pnpm pipeline -- ingest video.mov --project flat-01
@@ -62,19 +64,25 @@ data/              git-ignored: projects, uploads, cache
 
 These come from `docs/BRIEF.md` §2. Breaking one is a bug, not a trade-off.
 
-1. **Licences.** Everything must permit commercial use. Never use the Inria/
-   GraphDeco `gaussian-splatting` code — its licence forbids it. Use gsplat
-   (Apache-2.0), COLMAP/GLOMAP, Spark (MIT) with three.js. Run
-   `/licence-check` before adding any dependency, model, dataset, texture or
-   3D asset, and record it in `docs/LICENSES.md`. If a licence is unclear or
-   non-commercial, stop and ask.
+1. **Licences.** The owner stood this down on 2026-10-02: do not stop work
+   for a licence check or keep `docs/LICENSES.md` current unless asked.
+   Everything in the project today is CC0, MIT, Apache-2.0 or BSD anyway, so
+   nothing shipped depends on the relaxation. Two things still hold, because
+   they are cheap and the downside is not: never use the Inria/GraphDeco
+   `gaussian-splatting` code (its licence forbids commercial use — gsplat is
+   the Apache-2.0 replacement already in use), and say so plainly if an asset
+   is added whose licence forbids commercial use.
 2. **No large binaries in git.** Anything over 1 MB — videos, frames, splats,
    GLBs, textures — lives under `data/` (git-ignored) or R2. Catalog JSON and
    small thumbnails may be committed.
 3. **Secrets only in `.env`**, which is git-ignored. Keep `.env.example`
    current.
-4. **Honest staging.** Every modified view shows the "Virtually staged" badge
-   and can return to the original in one tap.
+4. ~~**Honest staging.** Every modified view shows the "Virtually staged"
+   badge~~ — **the owner removed the badge on 2026-10-02.** Do not add it
+   back. "Hold to compare" and "Reset" stay: a modified view must still be
+   one press from the real capture. Note that virtually staged photography is
+   regulated advertising in several markets, so this will need revisiting
+   before anything is published to buyers.
 5. **Privacy.** The editor can blur or delete regions before publishing.
 6. **No faked results.** If something cannot run or be verified, say so and
    use the documented fallback. Never report an unrun step as passing.
@@ -88,6 +96,13 @@ These come from `docs/BRIEF.md` §2. Breaking one is a bug, not a trade-off.
   and only the editor writes it. What the user changes (floors, furniture,
   recolors) is a separate object that encodes into a share URL and is never
   written back into the manifest.
+- **Splats are flat, not round.** Anything generating splats orients them to
+  the surface — thin along the normal, wide in plane. Isotropic splats of
+  spacing-scale radius render as fog, which is what the first synthetic scene
+  looked like.
+- **Furniture categories must be the layout solver's** (`_RULES` in
+  `layout.py`). Inventing one means it silently falls to the default rule: a
+  side table typed `table` is treated as a dining table and placed mid-room.
 - **The manifest schema lives in two places** and must stay in sync:
   `pipeline/src/walkthrough_pipeline/manifest.py` and
   `apps/web/src/lib/manifest.ts`.
@@ -95,8 +110,17 @@ These come from `docs/BRIEF.md` §2. Breaking one is a bug, not a trade-off.
   because the solver runs server-side and placement runs client-side. They
   must agree, including edge cases — a point exactly on a polygon edge counts
   as inside in both.
-- **Zoom changes field of view only** (clamped 30–90°). The camera never
-  leaves its waypoint.
+- **The viewer is free-roam.** The camera walks at eye height (1.6 m) with
+  collision against room walls, and passes between rooms through door
+  openings only. `canStand` / `moveWithCollision` in `geometry.ts` own that
+  rule. Room waypoints are still the entry point and what the room strip
+  glides to, but the camera is no longer pinned to them.
+  Controls: click or tap the floor to walk there (the primary one, and the
+  only one on touch), drag to look, WASD or arrows to walk, Q/E to turn, R/F
+  to pitch, wheel to zoom. Keyboard pitch is a discrete nudge per press so a
+  test can repeat it.
+- **Zoom changes field of view only** (clamped 30–90°), on the wheel or a
+  pinch. The camera is moved by walking, never by zooming.
 - **The assistant may only name catalog ids.** Every tool call is validated
   against the catalog server-side before it reaches the viewer. Mutating
   tools are applied client-side; read-only tools run on the server.

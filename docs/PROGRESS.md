@@ -7,6 +7,419 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-10-02 (fifth pass) — Walls that read as a room, and two owner overrides
+
+### The walls were weird because the positions were random
+
+Scattered sample points clump — Poisson, not even — so discs sized to the mean
+spacing leave gaps between the clumps. I had covered those gaps by widening
+the discs to 1.45x, and wide discs blur exactly the corners and edges that
+make a room read as a room. The result was a soft white void: no corner lines,
+no ceiling junction, no definition anywhere.
+
+Surfaces are now sampled on a **jittered grid** instead. Even coverage at a
+radius just over half the spacing, so the discs are small and the corners stay
+sharp; the jitter is what keeps it from reading as a lattice.
+
+With sharp edges available, two things could finally be added:
+
+- **Corner shading.** A plain white box with no falloff where surfaces meet
+  does not read as a room, it reads as a rendering fault. Floors, ceilings and
+  walls now darken towards their edges, walls using the positions of the walls
+  that actually cross them.
+- **Opening reveals.** The jambs, head and sill around every door and window —
+  the wall thickness you see standing beside one. Without them an opening was
+  a slot straight through to the background, so every window looked like a
+  hole punched in paper.
+
+1.39 M splats, 94 MB. Verified by screenshot: crisp corners, a visible
+ceiling line, windows with depth.
+
+### Owner overrides, recorded in CLAUDE.md
+
+Both of these contradict `docs/BRIEF.md` §2, so they are written down rather
+than just done, to stop a later session "fixing" them back.
+
+1. **The "Virtually staged" chip is removed.** "Hold to compare" and "Reset"
+   stay, so a modified view is still one press from the real capture. Worth
+   revisiting before anything is published to buyers: virtually staged
+   photography is regulated advertising in several markets.
+2. **Licence checks are stood down.** Everything in the project today is CC0,
+   MIT, Apache-2.0 or BSD, so nothing shipped depends on the relaxation. Two
+   narrow rules kept: no Inria/GraphDeco `gaussian-splatting`, and say so
+   plainly if an asset arrives that forbids commercial use.
+
+### The demo scene is now heavy, and the test budget had to follow
+
+1.39 M splats, 94 MB on disk, ~77 MB the browser downloads. That is what the
+clean walls cost, and on a GPU it is fine. Two consequences recorded rather
+than discovered later:
+
+- **The e2e suite was failing on time, not on faults.** The 180 s per-test
+  budget was set when the scene was 350 k splats; under SwiftShader every
+  `capture()` forces a frame at roughly 1 fps. Raised to 360 s with the settle
+  time scaled to match. Assertions untouched.
+- **CI now seeds a 400 k scene instead of the full one.** These tests check
+  behaviour — that the splat is on screen, that a floor swap changes pixels —
+  not how good it looks. At full size the suite took 40 minutes and two tests
+  still timed out on the first attempt before passing on retry.
+
+**77 MB is too heavy to ship.** SPZ compression typically cuts it 5–10x and
+the pipeline already has the hook; the `spz` CLI is simply not installed. This
+needs solving before anything is published, not at launch.
+
+### Also
+
+The layout note no longer fires on arrival. The flat furnishes itself, and
+"Placed 4; 1 did not fit" is a report on something nobody asked for. It still
+shows when the user furnishes a room themselves.
+
+---
+
+## 2026-10-02 (fourth pass) — Furniture handling, and walls that are actually white
+
+### You could grab furniture through a wall, and drags stole the turn
+
+Three separate faults behind one complaint:
+
+1. **Picking ignored walls.** The scene's walls are splats, and three.js's
+   raycaster does not test against them, so the pick ray went straight
+   through and hit a sofa in the next room. Picking is now limited to
+   furniture in the room the camera is standing in.
+2. **Any drag over a piece moved it.** In a furnished room that is most
+   drags, so turning around was close to impossible. A drag now moves a piece
+   only when it is *already selected*: tap to select, then drag. Every other
+   drag looks around.
+3. **Drags crossed walls.** The move only required the item's *centre* to be
+   in *some* room, so a sofa could be pulled through a wall, and could hang
+   half-through one. The whole footprint now has to stay inside the item's own
+   room — and when it will not, the move slides along the axis that still
+   fits rather than refusing outright, because the solver places pieces flush
+   to walls and an all-or-nothing test made them feel welded down.
+
+Verified by driving the running app: an unselected drag over furniture moves
+nothing; a selected piece moves on drag; a drag into a wall is refused.
+
+### The walls were still not white
+
+The splats were already flat and surface-aligned, but they were still being
+painted with mottle, a ceiling gradient, per-splat colour noise and varying
+opacity. None of that reads as texture on a soft blob — it reads as grime.
+Walls and ceiling are now flat white, zero variation, fully opaque, and wall
+splats get 45% wider discs so scattered coverage closes up instead of
+blotching. Floors keep the tighter radius, because plank edges and grout lines
+need it.
+
+Window and door openings now read as daylight. They are cut out of the wall
+splats, so what showed through them was the renderer's clear colour — which
+was the UI's paper beige, making every window look like a panel painted on
+the wall.
+
+### A green test that could not fail
+
+`sceneCoverage` measured each pixel's distance from `rgb(20, 23, 28)` — the
+clear colour from when the viewer was dark. The background became near-white
+two passes ago and this constant was never updated, so **every** pixel counted
+as "different" and the check passed unconditionally. Exactly the failure mode
+the testing note in `CLAUDE.md` exists to warn about, reintroduced by me.
+
+Now: the crop sits lower so it contains floor and furniture rather than blank
+wall; the colour test uses the current clear colour; and a second,
+colour-independent signal requires non-trivial luminance variance, since an
+empty canvas is perfectly uniform whatever colour it is.
+
+### Also
+
+- Auto-furnish asked the solver to furnish the bathroom, which no theme has
+  picks for — a 409 and a console error on every load, for something that is
+  not a fault. It now skips rooms a theme has no picks for.
+- Added a favicon; the 404 is gone.
+
+### Verified
+
+| What | Evidence |
+|---|---|
+| 219 Python tests, 76 web tests | `pnpm test` |
+| ruff, eslint, tsc clean | `pnpm lint` |
+| Unselected drag over furniture moves nothing | Share URL unchanged after the drag |
+| Selected piece moves on drag | Share URL changes; into-wall drag refused |
+| No console errors on load | Was a 409 and a 404 |
+| Walls render flat white, windows as daylight | Screenshot |
+
+---
+
+## 2026-10-02 (third pass) — Bigger flat, sharp splats, real themed furniture
+
+Seven changes asked for after walking the demo.
+
+### The scene was blurry because the splats were spheres
+
+`make_test_scene.py` emitted **isotropic** Gaussians with identity rotations.
+Real 3DGS training flattens its Gaussians onto the surfaces they describe — a
+wall ends up covered in wide, paper-thin discs lying in the plane of the wall.
+Spheres of 1.7 cm floating around a plane is what blur looks like, however many
+you add. Splats are now flat discs (in-plane radius ≈ 0.78 × mean spacing,
+thickness ≈ 11% of it) with a per-surface quaternion putting the thin axis
+along the normal, at 1.4 M over the flat. Walls, ceilings and window reveals
+read as clean flat surfaces now.
+
+Surfaces also carry coherent procedural texture — floorboards with per-board
+shade and grain, tile grout, skirting boards — rather than per-splat colour
+noise, which at splat scale reads as fog.
+
+**Still a stand-in.** This is a generated scene, not a capture. A real flat
+trained with gsplat resolves far more than anything generated here.
+
+### A seven-room flat, generated from data
+
+108 m²: a corridor the length of the plan with three rooms off each side
+(hallway, living, kitchen, two bedrooms, bathroom, study). Rooms, doors and
+windows are a table at the top of the generator; walls and openings are
+derived, so changing the layout is editing data.
+
+Door openings are computed from world-space points rather than written by
+hand, because `offset` is measured from each wall's start and the walls wind
+counter-clockwise — half of them run backwards along their axis, and a
+hand-written offset is a wall you can walk through, or a room you cannot enter.
+
+`pipeline/tests/test_test_scene.py` flood-fills the generated plan on a 10 cm
+grid and asserts every room is reachable on foot. It re-implements `canStand`
+rather than importing it, deliberately: a test that imported the
+implementation would only prove it agrees with itself.
+
+### Furniture: picked by looking at it
+
+The previous pass chose models by name and produced a "Modern" theme
+containing a buttoned chesterfield, a carved wing chair and a floral day bed.
+Every candidate has now been rendered to a contact sheet and looked at.
+
+Four themes built only from pieces that hold up: **Contemporary** (default),
+**Mid-Century**, **Industrial**, and **Period** — the antiques kept
+deliberately as their own labelled option rather than leaking into the others.
+
+Two findings worth recording:
+
+1. **Poly Haven has no contemporary sofa and no contemporary bed.** Across
+   ~190 furniture assets, every sofa is a period settee and all three beds are
+   a gothic four-poster, a rusty frame and a floral day bed. Those two pieces
+   are now built in the viewer as slab forms.
+2. **The catalog categories did not match the layout solver's vocabulary.** A
+   side table typed `table` is treated as a *dining* table and placed in the
+   middle of the room with 0.8 m clearance, so it never fitted — which is why
+   bedrooms furnished with a bed and nothing else. Categories now use the
+   solver's own names.
+
+Mesh scale is measured from the glTF and corrected to a stated real-world
+height, because the library is not consistently to scale.
+
+The flat furnishes itself on arrival with the Contemporary theme. The staged
+badge goes up immediately, which is correct — this IS staging — and Reset
+gives back the bare capture.
+
+### Moving
+
+Reworked to one obvious control. Click or tap the floor to walk there, with a
+ring showing where you would land and whether you can reach it; drag to look.
+WASD still walks for anyone who wants it. The wheel went back to zooming:
+having it walk made a third way to move on top of tapping and WASD, which is
+what made the controls feel unpredictable. Glides are distance-based rather
+than a fixed second.
+
+### The mini plan tracks the camera
+
+It drew the active room's *waypoint*, so it showed which room you were in but
+not where you were standing. It now takes the live camera pose, throttled to
+about 11 Hz and to meaningful movement, because pushing every frame into React
+would re-render the overlay 60 times a second.
+
+### Buttons, and a cleanup pass
+
+Squared-off `.btn` / `.btn-primary` instead of pills. Dead `nudgeForward`
+removed. `scripts/seed_furniture.py` deleted — the catalog is written by
+`fetch_assets.py` now, and the old script's only remaining effect would have
+been to overwrite it.
+
+**One live footgun found and fixed:** `seed_floors.py` rewrote every floor
+entry with `maps: {}`, so running `pnpm seed:floors` after `pnpm seed:assets`
+silently reverted all 16 floors to flat colour. It now preserves what the
+fetcher owns.
+
+**And the floor textures did not match their names** — `ash-pale-wide` was
+nearly black (lum 39) and `marble-carrara` dark grey. Remapped by measuring
+each candidate's preview rather than trusting its ambientCG name;
+`ash-pale-wide` is now lum 200 and `marble-carrara` 174.
+
+### Verified by running it
+
+| What | Evidence |
+|---|---|
+| 219 Python tests pass (4 new, scene reachability) | `pnpm test:py` |
+| 76 web unit tests pass | `pnpm test:web` |
+| ruff, eslint and tsc clean | `pnpm lint` |
+| Every room reachable on foot | Flood fill over the generated manifest |
+| Walls and ceilings render as clean flat surfaces | Screenshots after the splat-shape fix |
+| Real furniture places and renders per theme | Screenshots; `/api/layout` per room per theme |
+| Floor textures match their names | Mean luminance of each downloaded `color.jpg` |
+
+### Not verified
+
+| What | Why |
+|---|---|
+| Drag-to-move, tap-to-walk, theme switching by hand | Driven only through automation and screenshots; not used as a person would. |
+| Mobile | No real device. |
+| How the built sofa and bed read beside photoreal pieces at close range | Seen at room distance only. |
+
+---
+
+## 2026-10-02 (later) — Free-roam navigation, real assets, warm theme
+
+Three changes asked for after the first look at the demo.
+
+### 1. Free-roam navigation (replaces waypoint-only)
+
+The camera now walks. WASD or the arrow keys move, Q/E turn, R/F pitch, a
+plain wheel scroll steps forward, drag looks around, and pinch or ctrl+wheel
+still changes field of view only. Movement is damped so it eases in and out
+rather than snapping, and is framerate-independent.
+
+Tapping the floor walks there, which is the only way to move on a touch
+device — there is no keyboard and no wheel. The path is sampled rather than
+trusted, so a tap across a wall walks up to the wall instead of through it.
+
+Keyboard pitch is a discrete nudge per press rather than a held rate, so one
+press is one repeatable amount. This replaced the arrow keys' old pitch role,
+and `screenshots.spec.ts` was updated to press `f` where it pressed `ArrowUp`.
+
+Collision lives in `geometry.ts` (`canStand`, `moveWithCollision`) and is unit
+tested — 22 new tests. A person may stand inside any room polygon but not
+within 0.24 m of a wall, unless that wall has a door opening there, which is
+what lets someone walk from one room to the next. Blocked moves retry per axis
+so walking into a wall at an angle slides along it instead of stopping dead.
+Windows are explicitly not walkable.
+
+Walking into another room updates the active room, and that no longer triggers
+the waypoint glide — only a room change from the room strip, a share link or
+the assistant does.
+
+**This supersedes the brief's "the camera never leaves its waypoint" rule**,
+on the owner's instruction. `CLAUDE.md` is updated to match.
+
+### 2. Real catalog assets
+
+`pnpm seed:assets` (`scripts/fetch_assets.py`) downloads both catalogs:
+
+| What | Source | Licence | Result |
+|---|---|---|---|
+| 16 floor materials | ambientCG 1K-JPG | CC0-1.0 | colour + normal + roughness per floor |
+| 23 furniture meshes | Kenney Furniture Kit | CC0-1.0 | one GLB per catalog entry |
+
+Everything lands in `data/assets/` (git-ignored) and is served through the
+API's `/files/` route, which now allows an `assets/` prefix. Catalog JSON
+records the exact source id. Five floors that were procedurally generated are
+now mapped onto real scans; `docs/LICENSES.md` has the full id mapping.
+
+Furniture renders as the real mesh, scaled uniformly to fit the catalog's
+`dimensionsM` box so the rendered footprint still matches what the layout
+solver validated, and tinted to the catalog colour. A correctly sized box is
+shown for the frames before the mesh arrives, and kept if it fails to load.
+
+**The meshes are stylised low-poly, not photoreal.** They are the right size
+and read as furniture, but they do not look like photography. Replacing them
+is a roadmap item, not a licensing one.
+
+### 3. Furniture can be moved, and the theme is warmer
+
+Tap a piece to select it (a ring appears), drag it across the floor, rotate it
+in 15° steps or remove it. A drag is rejected if it would leave the floor
+polygon, and the item stays at the last spot that was inside one.
+
+The drag moves the mesh directly and writes to the store once, on release. A
+store write rebuilds every placed mesh, so committing per pointer move turned
+a drag into a slideshow as soon as a room had a few pieces in it. Furniture
+cannot be grabbed while "hold to compare" is down, because the raycaster does
+not test visibility and you would otherwise drag a sofa you cannot see.
+
+Theme: warm paper over the photograph instead of dark instrumentation —
+Fraunces for names, Inter for UI, a beige palette, clay for the staged badge.
+The fps readout is gone and the bottom bar is a compact pill rather than four
+full-width buttons. Measurements lost the monospace face.
+
+The furniture picker now shows a render of each real mesh instead of a flat
+colour swatch (`lib/thumbnails.ts`). They are rendered in the browser on first
+open and cached for the session, by one shared WebGL context that is torn down
+when the queue empties — browsers cap concurrent contexts at around 16 and the
+viewer needs one. The item's colour remains the placeholder behind the render,
+so a tile looks deliberate while loading and if the mesh never arrives.
+
+### Verified by running it
+
+| What | Evidence |
+|---|---|
+| 76 web unit tests pass (22 new, walking) | `pnpm test:web` |
+| 215 Python tests pass | `pnpm test:py` |
+| ruff, eslint and tsc clean | `pnpm lint` |
+| Floor textures and meshes serve over HTTP | `200` on `/files/assets/floors/...` and `/files/assets/furniture/...` |
+| The downloaded oak texture renders on the floor | Screenshot after a floor swap; plank grain visible |
+| A real sofa mesh loads and renders | Screenshot after adding "Oslo 3-seat sofa" |
+| Walking moves the camera and walls stop it | Screenshot before/after scrolling forward into a wall |
+| All 23 furniture thumbnails render | Counted 23 `img` elements in the picker, and a screenshot of them |
+| 21 desktop Playwright tests pass | `playwright test --project=desktop` |
+| The floor-swap test is no longer flaky | `--repeat-each=2`: 2 passed, 99.5% each, no retries |
+
+### Not verified
+
+| What | Why |
+|---|---|
+| Drag-to-move by hand | Automated pointer drag against a raycast was not completed in this session. The logic is wired, typechecks and lints; it has not been seen working. |
+| Tap-to-walk | Same — written and typechecked, not observed running. |
+| Walking through a doorway in the running app | Covered by unit tests on the real geometry, not by driving the live viewer. |
+| Touch controls on real hardware | Tap-to-walk is implemented and is the touch movement path, but has only been reasoned about, not tried on a phone. |
+
+### Defects found and fixed during this work
+
+1. **The camera was never placed at its first waypoint**, because the "has the
+   room changed" guard was seeded with the initial room id and so skipped the
+   opening placement. The viewer opened at the world origin — a corner of the
+   first room, facing out of it — and rendered an empty frame. Caught by
+   looking at the running app, not by a test.
+
+2. **Every primary button was invisible.** The dark-to-warm colour sweep
+   rewrote `text-[#14171C]` to the paper colour everywhere, including on the
+   buttons whose background was already paper. "Apply style", the editor's
+   login and save, and the landing CTA were all paper on paper. They are now
+   accent-filled with paper text.
+
+3. **Two e2e tests asserted behaviour this work changed**, and were updated
+   rather than worked around: `ArrowUp` no longer pitches the camera (it
+   walks), so the floor-swap test presses `f`; and the share button says
+   "Copied" rather than "Link copied" now the bar is a compact pill.
+
+4. **A stale uvicorn worker from an earlier run kept serving on :8000**, which
+   is why the new `/files/assets/` route returned 404 long after it was
+   correct. Not a code defect, but it cost real time — worth knowing that
+   `--reload` does not always take a route-guard change, and that the port
+   can outlive the process that logged it.
+
+5. **The floor-swap screenshot test became flaky, and the first fix for it was
+   wrong.** Real floor textures (~2.4 MB a set) replaced what used to be an
+   instantly applied flat colour, so the test's fixed 8 s wait passed on a warm
+   HTTP cache and failed on a cold one (4.5% of floor pixels changed, against a
+   40% bar).
+
+   The first attempt waited on the three map responses before sampling. That
+   made it worse: a texture served from the browser cache emits no network
+   response, so on a warm run the wait hung until the test's own 180 s budget
+   expired. A cold-cache flake had been traded for a warm-cache hang.
+
+   It now polls the pixels themselves — the thing the test is actually about —
+   with the per-test budget raised to 300 s, because every screenshot in that
+   loop costs roughly a frame at SwiftShader's ~1 fps. **The assertion and its
+   40% threshold are unchanged**: the test still fails if the floor is not
+   drawn. Confirmed with `--repeat-each=2`, covering both the cold and warm
+   paths: 2 passed, 99.5% both times, no retries.
+
+---
+
 ## 2026-10-02 — Initial build across M0–M8 and M10
 
 Built in one session on the user's instruction to build the whole MVP rather

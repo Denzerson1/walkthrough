@@ -20,12 +20,9 @@ Use the working name `walkthrough` until I give you the brand name.
 
 ---
 
-## 2. Non-negotiable constraints
+## 2. Non-negotiable constraints.
 
 1. **Licences.** Everything must allow commercial use.
-   - Do **not** use the original Inria/GraphDeco `gaussian-splatting` code. Its licence forbids commercial use.
-   - Use **gsplat** (Apache-2.0) for training, **COLMAP** or **GLOMAP** for camera poses, and **Spark** (`@sparkjsdev/spark`, MIT, by World Labs) with **three.js** for rendering.
-   - Before adding any library, ML model, weights, dataset, texture or 3D asset, check its licence. Prefer MIT, Apache-2.0, BSD or CC0. Record every item in `docs/LICENSES.md` (name, version, licence, link, how we use it). If a licence is unclear or non-commercial, stop and ask me.
 2. **No large binaries in git.** Videos, frames, splats, GLB models and textures larger than 1 MB live under `data/` (git-ignored) and, when deployed, in S3-compatible storage (Cloudflare R2). Catalog JSON and small thumbnails may be committed.
 3. **Secrets** only in `.env` (git-ignored). Provide `.env.example`.
 4. **Honest staging.** Any modified view (floor, furniture, recolor, AI preview) shows a visible **"Virtually staged"** badge, and the user can return to the original with one tap.
@@ -138,6 +135,7 @@ Build in this order. Each milestone ends with: tests passing, Playwright screens
 ### M1: Pipeline (video → scene)
 
 Commands:
+
 - `pipeline ingest <video> --project <id>`
 - `pipeline frames`: ffmpeg extraction, default 3 fps (configurable). Drop blurry frames using variance of the Laplacian. Target 150–600 frames per apartment, configurable.
 - `pipeline poses`: GLOMAP if available, otherwise COLMAP, with a camera model suitable for the ultra-wide lens. Report the share of registered frames.
@@ -153,6 +151,7 @@ Write `docs/PIPELINE.md` with timings, GPU requirements and known failure modes.
 ### M2: Viewer with waypoints, plus basic editor
 
 Viewer:
+
 - Load the scene with Spark.
 - One waypoint per room. Look-around with mouse/touch drag and optional device orientation (request permission on iOS).
 - **Zoom changes the field of view only** (clamp about 30–90°). It never moves the camera.
@@ -161,6 +160,7 @@ Viewer:
 - Loading progress, and a clear message on unsupported devices.
 
 Editor:
+
 - Place, move and name waypoints. Set room type and starting direction.
 - Draw the floor polygon per room. Set the reference distance for scale.
 - Box-crop or delete splats. Add privacy blur/delete regions.
@@ -173,27 +173,32 @@ Performance: measure the frame rate at waypoints on an iPhone-class device (targ
 ### M3: Floors (automatic detection, realistic replacement)
 
 Detection (`pipeline floor`):
+
 - Run a semantic segmentation model with a "floor" class on the frames. Shortlist 2–3 candidates with permissive licences and confirm with me before adding one.
 - Project each Gaussian centre into the frames with the known poses and vote floor / not floor. Fit the plane with RANSAC, then refine with a height threshold.
 - Export `scene_nofloor.spz` and `floor.spz`.
 - Floor polygons come from the RoomPlan export if present, otherwise from a concave hull of the floor Gaussians per room. They stay editable in the editor.
 
 Lighting transfer:
+
 - Per room, render a top-down orthographic image of `floor.spz`.
 - Compute a shading map from strongly blurred luminance (this removes the old pattern but keeps shadows and light falloff). Normalise it around 1.0 and save it as PNG.
 
 Viewer:
+
 - When a new floor is chosen, hide `floor.spz` and render the room's floor polygon as a mesh on the floor plane with a PBR material.
 - Material: albedo, plus normal and roughness when available. UVs in metres from the real tile size. Multiply by the shading map. Optional subtle reflection for glossy materials.
 - Verify, and add a test, that splats such as furniture correctly occlude the new floor mesh (Spark combines splats and meshes in one three.js scene).
 
 Floor catalog (`catalog/floors/*.json`):
+
 ```json
 { "id": "oak-herringbone-light", "name": "Light oak herringbone", "category": "wood",
   "tags": ["warm", "scandinavian", "classic"], "description": "...", "tileSizeM": [0.6, 0.6],
   "maps": { "albedo": "...", "normal": "...", "roughness": "..." }, "glossy": false,
   "license": "CC0", "source": "https://..." }
 ```
+
 - Categories: wood, tile, stone, painted, stencilled, vintage.
 - Seed about 15 materials with a script from CC0 sources (Poly Haven, ambientCG), recording licence and source. Add a few stencil/painted patterns made procedurally.
 
@@ -202,6 +207,7 @@ Floor catalog (`catalog/floors/*.json`):
 ### M4: Floor upload
 
 Flow:
+
 1. The user uploads a photo of one tile or a piece of floor.
 2. The API proposes the tile/floor region.
 3. The user can adjust four corners.
@@ -240,27 +246,33 @@ Validate type and size, strip EXIF, and limit upload size.
 ### M6: Furniture catalog, styles, manual placement
 
 Furniture catalog (`catalog/furniture/*.json`):
+
 ```json
 { "id": "sofa-oslo-3", "name": "...", "category": "sofa", "styles": ["modern", "minimalist"],
   "colors": ["#c8c2b8"], "materials": ["linen", "oak"], "dimensionsM": [2.1, 0.8, 0.9],
   "glb": "...", "thumbnail": "...", "license": "CC0", "source": "https://..." }
 ```
+
 - GLB files compressed with meshopt or Draco, target under 2 MB each.
 
 Styles (`catalog/styles/*.json`):
+
 - Start with 3–4 fully stocked styles: Modern, Minimalist, Mid-Century Modern, Traditional. Prepare entries for Contemporary, Transitional and Eclectic.
 - Each style holds a description, palette, preferred materials, picks per room type and matching floor ids.
 
 Assets:
+
 - Seed with CC0 models through a script.
 - List gaps that need purchased models with a commercial licence in `docs/ROADMAP.md`.
 - Never add an asset without a recorded licence.
 
 Placement:
+
 - Drag on the floor (raycast to the floor plane), rotate with 15° snapping, snap to the nearest wall within 10 cm.
 - Collisions against the room polygon and other items (oriented boxes). Delete and duplicate.
 
 Lighting:
+
 - Use an environment map rendered from the splat at the current waypoint (low-resolution cubemap).
 - Add soft contact shadows under items so furniture does not look pasted in.
 
@@ -269,6 +281,7 @@ Lighting:
 ### M7: Automatic layout
 
 Rule-based templates per room type, using the room polygon, walls, doors and windows:
+
 - The bed headboard goes against a wall without the door.
 - The sofa goes against the longest free wall, facing the window or TV wall.
 - Tables get at least 0.8 m clearance.
