@@ -33,8 +33,6 @@ class Item:
     category: str
     #: footprint on the floor, (width, depth) in metres
     size: Vec2
-    #: True when the item is designed to stand against a wall
-    against_wall: bool = True
 
 
 @dataclass
@@ -267,28 +265,24 @@ def _candidate_walls(room: Room, strategy: str) -> list[int]:
     return order
 
 
-def facing_yaw(wall: Wall, inward: Vec2) -> float:
+def facing_yaw(inward: Vec2) -> float:
     """
-    Yaw that puts the item's back against the wall and its front into the room.
+    Yaw that puts an item's back against the wall and its front into the room.
 
-    In the 2D convention a yaw of `w` points the item's front along
-    (-sin w, cos w). That equals the wall's left normal only when the room
-    interior happens to lie on that side; for the other half of the cases —
-    any clockwise-wound polygon, or a wall emitted in the reverse direction —
-    it must be turned around, or beds and sofas face into the wall.
+    Derived directly from the inward normal rather than from the wall
+    direction plus a correction: a yaw of `w` points the front along
+    (-sin w, cos w), so the yaw we want is simply the one whose front IS
+    `inward`. Correct for any winding and any wall direction by
+    construction, with no branch to forget.
     """
-    dx, dy = wall.end[0] - wall.start[0], wall.end[1] - wall.start[1]
-    length = math.hypot(dx, dy) or 1.0
-    left_normal = (-dy / length, dx / length)
-    aligned = inward[0] * left_normal[0] + inward[1] * left_normal[1] > 0
-    return wall.yaw if aligned else wall.yaw + 180.0
+    return math.degrees(math.atan2(-inward[0], inward[1]))
 
 
 def _wall_positions(wall: Wall, item: Item, inward: Vec2) -> list[tuple[Vec2, float]]:
     """Candidate centre positions along a wall, centred in each free span."""
     out: list[tuple[Vec2, float]] = []
     half_depth = item.size[1] / 2
-    yaw = facing_yaw(wall, inward)
+    yaw = facing_yaw(inward)
     for start, end in wall.free_spans(margin=DOOR_SWING_M / 2):
         span = end - start
         if span < item.size[0]:
@@ -334,6 +328,9 @@ def solve_layout(room: Room, items: list[Item]) -> LayoutResult:
     placed: list[tuple[Placement, Item]] = []
     skipped: list[str] = []
     centroid = polygon_centroid(room.polygon)
+    # Depends only on the wall and the room, so compute once rather than
+    # once per (item, wall) pair.
+    inwards = [inward_normal(wall, room.polygon) for wall in room.walls]
 
     for item in ordered:
         rule = rule_for(item.category)
@@ -368,8 +365,7 @@ def solve_layout(room: Room, items: list[Item]) -> LayoutResult:
                 wall = room.walls[wall_index]
                 if wall.length < item.size[0]:
                     continue
-                inward = inward_normal(wall, room.polygon)
-                candidates.extend(_wall_positions(wall, item, inward))
+                candidates.extend(_wall_positions(wall, item, inwards[wall_index]))
 
         chosen: Placement | None = None
         for centre, yaw in candidates:

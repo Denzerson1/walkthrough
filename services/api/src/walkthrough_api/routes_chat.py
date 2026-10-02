@@ -11,8 +11,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from . import assistant as asst
-from .catalog import Catalog, load_catalog
+from .catalog import Catalog
 from .config import Settings, get_settings
+from .deps import catalog_dep, load_manifest_or_404
 
 router = APIRouter(prefix="/api", tags=["assistant"])
 
@@ -41,12 +42,19 @@ def reset_rate_limit() -> None:
 
 
 class ContextBody(BaseModel):
+    """
+    What the browser tells us about the live viewer.
+
+    Note what is NOT here: the room list and the manifest item ids. Those
+    come from the manifest on disk, because the hallucination guard
+    validates against them and must not take the caller's word for what
+    exists.
+    """
+
     activeRoomId: str | None = None
-    rooms: list[dict[str, Any]] = Field(default_factory=list)
     appliedFloors: dict[str, str] = Field(default_factory=dict)
     placedItems: list[dict[str, Any]] = Field(default_factory=list)
     recolors: dict[str, str] = Field(default_factory=dict)
-    manifestItemIds: list[str] = Field(default_factory=list)
 
 
 class ChatBody(BaseModel):
@@ -63,10 +71,6 @@ class ChatReply(BaseModel):
     chips: list[str]
     usage: dict[str, int]
     model: str
-
-
-def catalog_dep(settings: Settings = Depends(get_settings)) -> Catalog:
-    return load_catalog(settings.catalog_root)
 
 
 def _build_client(settings: Settings):
@@ -143,56 +147,42 @@ def run_conversation(
 
         messages.append({"role": "assistant", "content": response.content})
 
-        # All tool results for one assistant turn go back in ONE user message.
+        # All tool results for one assistant turn go back in ONE user message:
+        # splitting them teaches the model to stop calling tools in parallel.
         results: list[dict[str, Any]] = []
         for call in calls:
             name = asst.block_field(call, "name")
             args = asst.block_field(call, "input") or {}
             call_id = asst.block_field(call, "id")
-
-            if name in asst.ACTION_TOOLS:
-                try:
+            try:
+                if name in asst.ACTION_TOOLS:
+                    # Mutating tools are validated here but applied by the
+                    # viewer; acknowledge so the model can finish talking.
                     asst.validate_action(name, args, catalog, ctx)
-                except asst.ValidationFailure as exc:
-                    results.append(
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": call_id,
-                            "is_error": True,
-                            "content": str(exc),
-                        }
-                    )
-                    continue
-                actions.append({"tool": name, "args": args})
-                results.append(
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": call_id,
-                        "content": asst.serialise_result(
-                            {"applied": True, "note": "The viewer has applied this."}
-                        ),
+                    actions.append({"tool": name, "args": args})
+                    payload: Any = {
+                        "applied": True,
+                        "note": "The viewer has applied this.",
                     }
-                )
-            else:
-                try:
+                else:
                     payload = asst.run_read_tool(name, args, catalog, ctx)
-                except asst.ValidationFailure as exc:
-                    results.append(
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": call_id,
-                            "is_error": True,
-                            "content": str(exc),
-                        }
-                    )
-                    continue
+            except asst.ValidationFailure as exc:
                 results.append(
                     {
                         "type": "tool_result",
                         "tool_use_id": call_id,
-                        "content": asst.serialise_result(payload),
+                        "is_error": True,
+                        "content": str(exc),
                     }
                 )
+                continue
+            results.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": call_id,
+                    "content": asst.serialise_result(payload),
+                }
+            )
 
         messages.append({"role": "user", "content": results})
 
@@ -221,14 +211,15 @@ def chat(
         raise HTTPException(status_code=400, detail="Empty message")
 
     client = _build_client(settings)
+    manifest = load_manifest_or_404(settings, body.project_id)
     ctx = asst.ChatContext(
         project_id=body.project_id,
         active_room_id=body.context.activeRoomId,
-        rooms=body.context.rooms,
+        rooms=[{"id": r.id, "name": r.name, "type": r.type} for r in manifest.rooms],
         applied_floors=body.context.appliedFloors,
         placed_items=body.context.placedItems,
         recolors=body.context.recolors,
-        manifest_item_ids=body.context.manifestItemIds,
+        manifest_item_ids=[i.id for i in manifest.items],
     )
     messages = asst.build_messages(body.history, body.message)
     reply = run_conversation(client, settings, catalog, ctx, messages)

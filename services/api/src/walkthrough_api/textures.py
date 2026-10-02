@@ -13,6 +13,11 @@ import numpy as np
 Corners = list[tuple[float, float]]
 
 
+def _grey(image: np.ndarray) -> np.ndarray:
+    """Single-channel view of an image that may already be single-channel."""
+    return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
+
+
 def order_corners(corners: Corners) -> np.ndarray:
     """
     Sort four points into top-left, top-right, bottom-right, bottom-left.
@@ -54,8 +59,7 @@ def propose_quad(image: np.ndarray) -> Corners:
     covering 70% of the image when nothing convincing is found.
     """
     h, w = image.shape[:2]
-    grey = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
-    grey = cv2.GaussianBlur(grey, (5, 5), 0)
+    grey = cv2.GaussianBlur(_grey(image), (5, 5), 0)
     edges = cv2.Canny(grey, 50, 150)
     edges = cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=1)
     contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
@@ -154,8 +158,7 @@ def normal_from_luminance(tile: np.ndarray, strength: float = 2.0) -> np.ndarray
     Not physically correct — luminance is not height — but for floor photos
     the grout lines and grain read as recesses, which is what we want.
     """
-    grey = cv2.cvtColor(tile, cv2.COLOR_BGR2GRAY) if tile.ndim == 3 else tile
-    grey = cv2.GaussianBlur(grey.astype(np.float32) / 255.0, (0, 0), 1.0)
+    grey = cv2.GaussianBlur(_grey(tile).astype(np.float32) / 255.0, (0, 0), 1.0)
 
     dx = cv2.Sobel(grey, cv2.CV_32F, 1, 0, ksize=3)
     dy = cv2.Sobel(grey, cv2.CV_32F, 0, 1, ksize=3)
@@ -183,8 +186,7 @@ def default_roughness(tile: np.ndarray, base: float = 0.65) -> np.ndarray:
     Roughness from local contrast: smooth, bright areas read as polished.
     Returns a single-channel 8-bit map.
     """
-    grey = cv2.cvtColor(tile, cv2.COLOR_BGR2GRAY) if tile.ndim == 3 else tile
-    grey_f = grey.astype(np.float32) / 255.0
+    grey_f = _grey(tile).astype(np.float32) / 255.0
     mean = cv2.GaussianBlur(grey_f, (0, 0), 3.0)
     local_var = cv2.GaussianBlur(grey_f**2, (0, 0), 3.0) - mean**2
     local_var = np.clip(local_var, 0, None)

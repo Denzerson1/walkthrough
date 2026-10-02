@@ -14,15 +14,25 @@ import { type CatalogItem, stagedRoomIds, useStore } from '../lib/store';
 import { isStaged } from '../lib/viewerState';
 import { polygonCentroid } from '../lib/geometry';
 
+/** The arguments the assistant's tools carry, as the server defines them. */
+interface AssistantArgs {
+  roomIds?: string[];
+  roomId?: string;
+  floorId?: string;
+  itemId?: string;
+  styleId?: string;
+  colorHex?: string;
+}
+
 export function Viewer() {
   const { projectId = '' } = useParams();
   const [searchParams] = useSearchParams();
   const session = useMemo(() => sessionId(), []);
 
   const {
-    manifest, loading, error, viewer, activeRoomId, panel, catalog, showingOriginal,
+    manifest, error, viewer, activeRoomId, panel, catalog, showingOriginal,
     setManifest, setError, setCatalog, goToRoom, setPanel, setShowingOriginal,
-    setFloor, addItem, recolorItem, reset, loadStateFromUrl, shareUrl,
+    setFloor, addItems, recolorItem, reset, loadStateFromUrl, shareUrl,
   } = useStore();
 
   const [ready, setReady] = useState(false);
@@ -116,19 +126,19 @@ export function Viewer() {
         }
         const body = await response.json();
         if (body.floor_id) setFloor([roomId], body.floor_id);
-        for (const placement of body.placements as Array<{
+        const placements = body.placements as Array<{
           itemId: string;
           position: [number, number, number];
           yaw: number;
-        }>) {
-          addItem({
-            uid: Math.random().toString(36).slice(2, 9),
-            itemId: placement.itemId,
+        }>;
+        addItems(
+          placements.map((p) => ({
+            itemId: p.itemId,
             roomId,
-            position: placement.position,
-            yaw: placement.yaw,
-          });
-        }
+            position: p.position,
+            yaw: p.yaw,
+          })),
+        );
         setLayoutNote(
           body.skipped?.length
             ? `Placed ${body.placements.length}; ${body.skipped.length} did not fit.`
@@ -139,45 +149,41 @@ export function Viewer() {
         setLayoutNote('Could not reach the layout service.');
       }
     },
-    [projectId, session, setFloor, addItem],
+    [projectId, session, setFloor, addItems],
   );
 
   const applyActions = useCallback(
     (actions: AssistantAction[]) => {
       for (const action of actions) {
-        const args = action.args as Record<string, never>;
-        if (action.tool === 'set_floor') {
-          setFloor(args.roomIds as unknown as string[], args.floorId as unknown as string);
+        // The server validates every id in these args against the catalog
+        // before they reach us, so the shape is all that needs naming.
+        const args = action.args as AssistantArgs;
+        if (action.tool === 'set_floor' && args.floorId) {
+          setFloor(args.roomIds ?? [], args.floorId);
           postEvent(projectId, {
             session_id: session,
             event: 'floor_tried',
-            value: args.floorId as unknown as string,
+            value: args.floorId,
           });
-        } else if (action.tool === 'add_item') {
-          const roomId = args.roomId as unknown as string;
-          addItem({
-            uid: Math.random().toString(36).slice(2, 9),
-            itemId: args.itemId as unknown as string,
-            roomId,
-            position: centreOf(roomId),
-            yaw: 0,
-          });
-        } else if (action.tool === 'recolor_item') {
-          recolorItem(
-            args.itemId as unknown as string,
-            args.colorHex as unknown as string,
-          );
+        } else if (action.tool === 'add_item' && args.roomId && args.itemId) {
+          addItems([
+            {
+              itemId: args.itemId,
+              roomId: args.roomId,
+              position: centreOf(args.roomId),
+              yaw: 0,
+            },
+          ]);
+        } else if (action.tool === 'recolor_item' && args.itemId && args.colorHex) {
+          recolorItem(args.itemId, args.colorHex);
         } else if (action.tool === 'reset') {
-          reset((args.roomId as unknown as string) ?? 'all');
+          reset(args.roomId ?? 'all');
         } else if (action.tool === 'apply_style' || action.tool === 'auto_layout') {
-          void runAutoLayout(
-            args.roomId as unknown as string,
-            args.styleId as unknown as string,
-          );
+          if (args.roomId && args.styleId) void runAutoLayout(args.roomId, args.styleId);
         }
       }
     },
-    [setFloor, addItem, recolorItem, reset, runAutoLayout, centreOf, projectId, session],
+    [setFloor, addItems, recolorItem, reset, runAutoLayout, centreOf, projectId, session],
   );
 
   async function share() {
@@ -229,7 +235,7 @@ export function Viewer() {
         />
       )}
 
-      {(loading || !ready) && !error && (
+      {!ready && !error && (
         <div className="absolute inset-0 flex items-center justify-center bg-[#14171C]">
           {/*
             Spark reports completion but not incremental progress, so this is
@@ -336,13 +342,14 @@ export function Viewer() {
                 furniture={catalog.furniture}
                 styles={catalog.styles}
                 onAdd={(itemId) =>
-                  addItem({
-                    uid: Math.random().toString(36).slice(2, 9),
-                    itemId,
-                    roomId: activeRoom.id,
-                    position: centreOf(activeRoom.id),
-                    yaw: 0,
-                  })
+                  addItems([
+                    {
+                      itemId,
+                      roomId: activeRoom.id,
+                      position: centreOf(activeRoom.id),
+                      yaw: 0,
+                    },
+                  ])
                 }
                 onApplyStyle={(styleId) => {
                   const style = catalog.styles.find((s) => s.id === styleId);

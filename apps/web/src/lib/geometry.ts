@@ -158,7 +158,7 @@ export interface WallSegment {
   end: Vec2;
 }
 
-/** Outward-facing normal is not known from the segment alone, so return both. */
+/** Direction the wall runs in, degrees. Not the direction an item faces. */
 export function wallYaw(wall: WallSegment): number {
   const dx = wall.end[0] - wall.start[0];
   const dy = wall.end[1] - wall.start[1];
@@ -181,6 +181,17 @@ export interface SnapResult {
  * "snap to the nearest wall within 10 cm". The box is rotated to sit flush
  * and pushed out so its back edge touches the wall.
  */
+/**
+ * Yaw that puts an item's back against a wall and its front into the room.
+ *
+ * Mirrors facing_yaw in layout.py. Derived from the inward normal, not from
+ * the wall direction: using wallYaw alone points the item ALONG the wall,
+ * and in a clockwise-wound room it faces into it.
+ */
+export function facingYaw(inward: Vec2): number {
+  return (Math.atan2(-inward[0], inward[1]) * 180) / Math.PI;
+}
+
 export function snapToWall(
   box: OrientedBox,
   walls: WallSegment[],
@@ -197,7 +208,6 @@ export function snapToWall(
     if (gap > threshold) continue;
     if (best && gap >= best.distance) continue;
 
-    const yaw = wallYaw(wall);
     // Push the centre to exactly halfDepth away from the wall, on the side
     // the polygon interior lies.
     const nx = -(wall.end[1] - wall.start[1]);
@@ -205,12 +215,20 @@ export function snapToWall(
     const nlen = Math.hypot(nx, ny) || 1;
     const unit: Vec2 = [nx / nlen, ny / nlen];
     const foot = closestPointOnSegment(box.center, wall.start, wall.end);
-    const candidates: Vec2[] = [
-      [foot[0] + unit[0] * halfDepth, foot[1] + unit[1] * halfDepth],
-      [foot[0] - unit[0] * halfDepth, foot[1] - unit[1] * halfDepth],
+    const candidates: Array<{ at: Vec2; inward: Vec2 }> = [
+      { at: [foot[0] + unit[0] * halfDepth, foot[1] + unit[1] * halfDepth], inward: unit },
+      {
+        at: [foot[0] - unit[0] * halfDepth, foot[1] - unit[1] * halfDepth],
+        inward: [-unit[0], -unit[1]],
+      },
     ];
-    const inside = candidates.find((c) => pointInPolygon(c, polygon)) ?? candidates[0];
-    best = { position: inside, yaw, wallIndex: i, distance: gap };
+    const chosen = candidates.find((c) => pointInPolygon(c.at, polygon)) ?? candidates[0];
+    best = {
+      position: chosen.at,
+      yaw: facingYaw(chosen.inward),
+      wallIndex: i,
+      distance: gap,
+    };
   }
   return best;
 }

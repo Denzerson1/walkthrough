@@ -14,15 +14,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from walkthrough_pipeline.layout import Item, Room, Wall, solve_layout
 
-from . import projects
-from .catalog import Catalog, load_catalog
+from .catalog import Catalog
 from .config import Settings, get_settings
+from .deps import catalog_dep, load_manifest_or_404
+
+#: Footprint for a catalog item with no dimensions. Must match
+#: DEFAULT_ITEM_SIZE in apps/web/src/components/SplatScene.tsx, or the
+#: solver would validate one footprint and the viewer draw another.
+DEFAULT_ITEM_SIZE = [0.6, 0.6, 0.6]
 
 router = APIRouter(prefix="/api", tags=["layout"])
-
-
-def catalog_dep(settings: Settings = Depends(get_settings)) -> Catalog:
-    return load_catalog(settings.catalog_root)
 
 
 class LayoutBody(BaseModel):
@@ -47,12 +48,7 @@ def auto_layout(
     settings: Settings = Depends(get_settings),
     catalog: Catalog = Depends(catalog_dep),
 ) -> LayoutReply:
-    try:
-        manifest = projects.load_manifest(settings, body.project_id)
-    except projects.InvalidProjectId as exc:
-        raise HTTPException(status_code=400, detail="Invalid project id") from exc
-    except projects.ProjectNotFound as exc:
-        raise HTTPException(status_code=404, detail="Project not found") from exc
+    manifest = load_manifest_or_404(settings, body.project_id)
 
     room = manifest.room(body.room_id)
     if room is None:
@@ -89,7 +85,7 @@ def auto_layout(
         if entry is None:
             missing.append(item_id)
             continue
-        dims = entry.get("dimensionsM") or [0.6, 0.6, 0.6]
+        dims = entry.get("dimensionsM") or DEFAULT_ITEM_SIZE
         items.append(
             Item(
                 id=item_id,

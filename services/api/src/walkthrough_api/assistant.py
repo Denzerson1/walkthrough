@@ -220,11 +220,15 @@ def validate_action(name: str, args: dict[str, Any], catalog: Catalog, ctx: Chat
     """
     Guard against hallucinated ids. The brief requires that the assistant can
     never claim an item exists that does not.
+
+    `ctx.rooms` and `ctx.manifest_item_ids` are built from the manifest on
+    disk, never from the request body, so these checks cannot be bypassed by
+    a caller that simply omits them.
     """
     room_ids = {r.get("id") for r in ctx.rooms}
 
     def check_room(room_id: str) -> None:
-        if room_id != "all" and room_ids and room_id not in room_ids:
+        if room_id != "all" and room_id not in room_ids:
             raise ValidationFailure(f"No room called {room_id!r} in this apartment.")
 
     if name == "set_floor":
@@ -245,7 +249,7 @@ def validate_action(name: str, args: dict[str, Any], catalog: Catalog, ctx: Chat
             raise ValidationFailure(f"No furniture with id {item_id!r} in the catalog.")
     elif name == "recolor_item":
         item_id = args.get("itemId", "")
-        if ctx.manifest_item_ids and item_id not in ctx.manifest_item_ids:
+        if item_id not in ctx.manifest_item_ids:
             raise ValidationFailure(f"There is no existing item {item_id!r} to recolor.")
         colour = str(args.get("colorHex", ""))
         if not _HEX_COLOUR.fullmatch(colour):
@@ -273,33 +277,22 @@ def run_read_tool(
     raise ValidationFailure(f"Unknown read tool {name!r}")
 
 
+def block_field(block: Any, name: str) -> Any:
+    """Read a field from a content block, whether SDK object or plain dict."""
+    if isinstance(block, dict):
+        return block.get(name)
+    return getattr(block, name, None)
+
+
 def extract_text(content: list[Any]) -> str:
-    parts: list[str] = []
-    for block in content:
-        btype = getattr(block, "type", None) or (
-            block.get("type") if isinstance(block, dict) else None
-        )
-        if btype == "text":
-            text = getattr(block, "text", None) or block.get("text", "")  # type: ignore[union-attr]
-            parts.append(text)
+    parts = [
+        block_field(b, "text") or "" for b in content if block_field(b, "type") == "text"
+    ]
     return " ".join(p.strip() for p in parts if p.strip()).strip()
 
 
 def tool_uses(content: list[Any]) -> list[Any]:
-    out = []
-    for block in content:
-        btype = getattr(block, "type", None) or (
-            block.get("type") if isinstance(block, dict) else None
-        )
-        if btype == "tool_use":
-            out.append(block)
-    return out
-
-
-def block_field(block: Any, name: str) -> Any:
-    if isinstance(block, dict):
-        return block.get(name)
-    return getattr(block, name, None)
+    return [b for b in content if block_field(b, "type") == "tool_use"]
 
 
 def suggest_chips(actions: list[dict[str, Any]], catalog: Catalog) -> list[str]:

@@ -33,9 +33,51 @@ class Catalog:
         return self.by_id(kind, item_id) is not None
 
 
-def load_catalog(catalog_root: Path) -> Catalog:
+_CACHE: dict[tuple[Path, tuple[CatalogKind, ...]], tuple[int, Catalog]] = {}
+
+
+def _catalog_stamp(catalog_root: Path, kinds: tuple[CatalogKind, ...]) -> int:
+    """Newest mtime across the catalog directories, as a cheap change check."""
+    newest = 0
+    for kind in kinds:
+        directory = catalog_root / kind
+        if not directory.is_dir():
+            continue
+        newest = max(newest, directory.stat().st_mtime_ns)
+        for entry in directory.iterdir():
+            if entry.suffix == ".json":
+                newest = max(newest, entry.stat().st_mtime_ns)
+    return newest
+
+
+def load_catalog(
+    catalog_root: Path, kinds: tuple[CatalogKind, ...] = KINDS
+) -> Catalog:
+    """
+    Read the catalog, cached on the directories' newest mtime.
+
+    Re-reading 46 files on every request cost about 4 ms and dominated
+    /api/layout. The stamp keeps the original reason for reloading — seeding
+    scripts show up without a restart — at the price of a stat per file.
+    """
+    key = (catalog_root, kinds)
+    stamp = _catalog_stamp(catalog_root, kinds)
+    cached = _CACHE.get(key)
+    if cached is not None and cached[0] == stamp:
+        return cached[1]
+    catalog = _read_catalog(catalog_root, kinds)
+    _CACHE[key] = (stamp, catalog)
+    return catalog
+
+
+def clear_catalog_cache() -> None:
+    """Test hook."""
+    _CACHE.clear()
+
+
+def _read_catalog(catalog_root: Path, kinds: tuple[CatalogKind, ...]) -> Catalog:
     catalog = Catalog()
-    for kind in KINDS:
+    for kind in kinds:
         directory = catalog_root / kind
         if not directory.is_dir():
             continue

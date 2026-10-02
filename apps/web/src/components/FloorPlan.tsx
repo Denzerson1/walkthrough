@@ -8,6 +8,8 @@
  */
 
 import { useMemo } from 'react';
+import { polygonBounds } from '../lib/geometry';
+import { findRoom } from '../lib/manifest';
 import type { Manifest, Room, Vec2 } from '../lib/manifest';
 
 interface Props {
@@ -29,7 +31,7 @@ export function FloorPlan({
   size = 132,
 }: Props) {
   const { bounds, scale } = useMemo(() => computeBounds(manifest, size), [manifest, size]);
-  const active = manifest.rooms.find((r) => r.id === activeRoomId);
+  const active = activeRoomId ? findRoom(manifest, activeRoomId) : undefined;
 
   const toX = (x: number) => (x - bounds.minX) * scale + PADDING;
   const toY = (z: number) => (z - bounds.minZ) * scale + PADDING;
@@ -137,14 +139,8 @@ function computeBounds(manifest: Manifest, size: number) {
   if (!points.length) {
     return { bounds: { minX: 0, minZ: 0, maxX: 1, maxZ: 1 }, scale: size };
   }
-  const xs = points.map((p) => p[0]);
-  const zs = points.map((p) => p[1]);
-  const bounds = {
-    minX: Math.min(...xs),
-    maxX: Math.max(...xs),
-    minZ: Math.min(...zs),
-    maxZ: Math.max(...zs),
-  };
+  const { min, max } = polygonBounds(points);
+  const bounds = { minX: min[0], maxX: max[0], minZ: min[1], maxZ: max[1] };
   const spanX = Math.max(bounds.maxX - bounds.minX, 0.001);
   const spanZ = Math.max(bounds.maxZ - bounds.minZ, 0.001);
   const scale = Math.min(size / spanX, size / spanZ);

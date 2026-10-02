@@ -7,20 +7,17 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
-from sqlmodel import Session
+from sqlmodel import Session, select
 
-from . import projects, textures
+from . import textures
 from .config import Settings, get_settings
-from .db import UploadRecord, get_session
-from .storage import build_storage
+from .db import UploadRecord
+from .deps import db_dep, valid_project_id
+from .storage import build_storage, upload_key
 
 router = APIRouter(prefix="/api/uploads", tags=["uploads"])
 
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
-
-
-def db_dep(settings: Settings = Depends(get_settings)):
-    yield from get_session(settings)
 
 
 class ProposeReply(BaseModel):
@@ -39,10 +36,7 @@ async def upload_floor_photo(
     session: Session = Depends(db_dep),
 ) -> ProposeReply:
     """Step 1-2: accept a photo and propose the tile region."""
-    try:
-        projects.validate_project_id(project_id)
-    except projects.InvalidProjectId as exc:
-        raise HTTPException(status_code=400, detail="Invalid project id") from exc
+    valid_project_id(project_id)
     if file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(
             status_code=415,
@@ -71,7 +65,7 @@ async def upload_floor_photo(
     upload_id = uuid.uuid4().hex[:16]
     storage = build_storage(settings)
     # Re-encoded as PNG, which drops EXIF including any GPS tags.
-    original_key = f"uploads/{project_id}/{upload_id}/original.png"
+    original_key = upload_key(project_id, upload_id, "original.png")
     storage.write_bytes(original_key, textures.encode_png(image))
 
     session.add(
@@ -114,10 +108,7 @@ def rectify_floor_photo(
     session: Session = Depends(db_dep),
 ) -> RectifyReply:
     """Steps 3-6: rectify, make seamless, derive normal and roughness."""
-    try:
-        projects.validate_project_id(body.project_id)
-    except projects.InvalidProjectId as exc:
-        raise HTTPException(status_code=400, detail="Invalid project id") from exc
+    valid_project_id(body.project_id)
     if len(body.corners) != 4:
         raise HTTPException(status_code=400, detail="Exactly 4 corners are required.")
     if not 1.0 <= body.tile_size_cm <= 500.0:
@@ -126,7 +117,7 @@ def rectify_floor_photo(
         )
 
     storage = build_storage(settings)
-    key = f"uploads/{body.project_id}/{body.upload_id}/original.png"
+    key = upload_key(body.project_id, body.upload_id, "original.png")
     try:
         raw = storage.read_bytes(key)
     except FileNotFoundError as exc:
@@ -142,22 +133,18 @@ def rectify_floor_photo(
     normal = textures.normal_from_luminance(seamless)
     roughness = textures.default_roughness(seamless)
 
-    base = f"uploads/{body.project_id}/{body.upload_id}"
-    albedo_key = f"{base}/albedo.png"
-    normal_key = f"{base}/normal.png"
-    rough_key = f"{base}/roughness.png"
+    albedo_key = upload_key(body.project_id, body.upload_id, "albedo.png")
+    normal_key = upload_key(body.project_id, body.upload_id, "normal.png")
+    rough_key = upload_key(body.project_id, body.upload_id, "roughness.png")
     storage.write_bytes(albedo_key, textures.encode_png(seamless))
     storage.write_bytes(normal_key, textures.encode_png(normal))
     storage.write_bytes(rough_key, textures.encode_png(roughness))
 
-    record = session.get(UploadRecord, body.upload_id)
-    if record is None:
-        # Row keyed by upload_id rather than primary key in some paths.
-        from sqlmodel import select
-
-        record = session.exec(
-            select(UploadRecord).where(UploadRecord.upload_id == body.upload_id)
-        ).first()
+    # upload_id is a unique column, not the primary key, so the select is the
+    # only lookup that can match.
+    record = session.exec(
+        select(UploadRecord).where(UploadRecord.upload_id == body.upload_id)
+    ).first()
     if record is not None:
         record.albedo_key = albedo_key
         record.normal_key = normal_key
@@ -189,8 +176,6 @@ def get_upload(
     upload_id: str,
     session: Session = Depends(db_dep),
 ) -> dict[str, Any]:
-    from sqlmodel import select
-
     record = session.exec(
         select(UploadRecord).where(UploadRecord.upload_id == upload_id)
     ).first()

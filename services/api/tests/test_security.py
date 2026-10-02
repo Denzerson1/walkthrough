@@ -172,3 +172,46 @@ class TestAssistantColourValidation:
         asst.validate_action(
             "recolor_item", {"itemId": "sofa-1", "colorHex": "#A1b2C3"}, catalog, ctx
         )
+
+
+class TestGuardIsServerAuthoritative:
+    """
+    The hallucination guard used to validate rooms and manifest items against
+    lists the browser supplied, and skipped the check entirely when they were
+    empty — so a caller could bypass it by simply omitting them.
+    """
+
+    def test_context_body_does_not_accept_rooms_from_the_client(self):
+        from walkthrough_api.routes_chat import ContextBody
+
+        fields = set(ContextBody.model_fields)
+        assert "rooms" not in fields
+        assert "manifestItemIds" not in fields
+
+    def test_unknown_room_is_rejected_even_with_no_client_context(self, catalog_root):
+        import pytest as _pytest
+        from walkthrough_api import assistant as asst
+        from walkthrough_api.catalog import load_catalog
+
+        catalog = load_catalog(catalog_root)
+        # Empty context is what a hostile or buggy client would send.
+        ctx = asst.ChatContext(project_id="demo-01")
+        with _pytest.raises(asst.ValidationFailure, match="No room"):
+            asst.validate_action(
+                "set_floor",
+                {"roomIds": ["ballroom"], "floorId": "oak-herringbone-light"},
+                catalog,
+                ctx,
+            )
+
+    def test_recolor_of_an_unknown_item_is_rejected_with_no_context(self, catalog_root):
+        import pytest as _pytest
+        from walkthrough_api import assistant as asst
+        from walkthrough_api.catalog import load_catalog
+
+        catalog = load_catalog(catalog_root)
+        ctx = asst.ChatContext(project_id="demo-01")
+        with _pytest.raises(asst.ValidationFailure, match="no existing item"):
+            asst.validate_action(
+                "recolor_item", {"itemId": "sofa-1", "colorHex": "#112233"}, catalog, ctx
+            )

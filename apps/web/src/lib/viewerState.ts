@@ -32,6 +32,11 @@ export interface ViewerState {
   activeRoomId?: string;
 }
 
+/** Ids for placed items. Lives here because PlacedItem.uid's contract does. */
+export function newUid(): string {
+  return Math.random().toString(36).slice(2, 9);
+}
+
 export const EMPTY_VIEWER_STATE: ViewerState = {
   floors: {},
   items: [],

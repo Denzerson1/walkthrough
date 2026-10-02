@@ -93,13 +93,13 @@ class TestFacingYaw:
     def test_faces_into_the_room_for_ccw_winding(self):
         wall = Wall((0.0, 0.0), (4.0, 0.0))
         inward = inward_normal(wall, CCW_POLY)
-        fx, fy = _front_direction(facing_yaw(wall, inward))
+        fx, fy = _front_direction(facing_yaw(inward))
         assert fx * inward[0] + fy * inward[1] > 0.99
 
     def test_faces_into_the_room_for_cw_winding(self):
         wall = Wall((0.0, 0.0), (0.0, 3.0))
         inward = inward_normal(wall, CW_POLY)
-        fx, fy = _front_direction(facing_yaw(wall, inward))
+        fx, fy = _front_direction(facing_yaw(inward))
         assert fx * inward[0] + fy * inward[1] > 0.99
 
     def test_every_wall_of_a_cw_room_faces_inward(self):
@@ -111,7 +111,7 @@ class TestFacingYaw:
         ]
         for wall in walls:
             inward = inward_normal(wall, CW_POLY)
-            fx, fy = _front_direction(facing_yaw(wall, inward))
+            fx, fy = _front_direction(facing_yaw(inward))
             assert fx * inward[0] + fy * inward[1] > 0.99
 
     def test_solver_places_a_bed_facing_the_room_in_a_cw_room(self):

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import shutil
 from abc import ABC, abstractmethod
+from functools import lru_cache
 from pathlib import Path
 
 from .config import Settings
@@ -42,7 +43,17 @@ class Storage(ABC):
         """Filesystem path when the backend has one, else None."""
 
 
-def _safe_key(key: str) -> str:
+def upload_key(project_id: str, upload_id: str, name: str) -> str:
+    """
+    Where an uploaded floor photo and its derived maps live.
+
+    Written and read back in different request handlers, so the layout lives
+    here rather than being spelled out at each call site.
+    """
+    return f"uploads/{project_id}/{upload_id}/{name}"
+
+
+def safe_key(key: str) -> str:
     """
     Reject traversal. Keys come from URL path parameters, so a project id of
     '../../etc' must not escape the data root.
@@ -62,7 +73,7 @@ class LocalStorage(Storage):
         self.root.mkdir(parents=True, exist_ok=True)
 
     def _path(self, key: str) -> Path:
-        path = (self.root / _safe_key(key)).resolve()
+        path = (self.root / safe_key(key)).resolve()
         # Defence in depth: the resolved path must stay under the root even if
         # a symlink is involved.
         if not path.is_relative_to(self.root):
@@ -95,7 +106,7 @@ class LocalStorage(Storage):
             path.unlink()
 
     def public_url(self, key: str) -> str:
-        return f"/files/{_safe_key(key)}"
+        return f"/files/{safe_key(key)}"
 
     def local_path(self, key: str) -> Path | None:
         return self._path(key)
@@ -133,10 +144,19 @@ class S3Storage(Storage):
         return None
 
 
+@lru_cache(maxsize=8)
+def _build_local(root: Path) -> LocalStorage:
+    return LocalStorage(root)
+
+
 def build_storage(settings: Settings) -> Storage:
+    """
+    LocalStorage resolves its root and mkdirs on construction, which is two
+    syscalls on the hot /files path, so the stateless adapter is cached.
+    """
     backend = settings.storage_backend.lower()
     if backend == "local":
-        return LocalStorage(settings.data_root)
+        return _build_local(settings.data_root)
     if backend in ("s3", "r2"):
         return S3Storage(settings)
     raise StorageError(f"unknown STORAGE_BACKEND: {settings.storage_backend!r}")

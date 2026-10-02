@@ -22,8 +22,15 @@ import {
   lookDirection,
 } from '../lib/camera';
 import type { Manifest, Room } from '../lib/manifest';
+import { FLOOR_DEFAULT_COLOR, floorColor } from '../lib/floorColors';
 import type { CatalogItem } from '../lib/store';
 import type { ViewerState } from '../lib/viewerState';
+
+/**
+ * Footprint used when a catalog item has no dimensions. Shared with the
+ * server solver so a validated layout and the drawn boxes agree.
+ */
+export const DEFAULT_ITEM_SIZE: [number, number, number] = [0.6, 0.6, 0.6];
 
 interface Props {
   manifest: Manifest;
@@ -35,7 +42,7 @@ interface Props {
   floorCatalog: CatalogItem[];
   furnitureCatalog: CatalogItem[];
   showingOriginal: boolean;
-  onProgress: (fraction: number) => void;
+  onProgress?: (fraction: number) => void;
   onReady: () => void;
   onError: (message: string) => void;
   onFps?: (fps: number) => void;
@@ -149,7 +156,7 @@ export function SplatScene({
       if (disposed) return;
       pending -= 1;
       if (pending === 0) {
-        onProgress(1);
+        onProgress?.(1);
         onReady();
       }
     };
@@ -359,7 +366,7 @@ export function SplatScene({
     disposeChildren(group);
 
     const anyReplaced = Object.keys(viewer.floors).length > 0;
-    const hideFloorSplats = anyReplaced && !showingOriginal;
+    const hideFloorSplats = anyReplaced;
 
     // Add/remove rather than toggling .visible: SparkRenderer collects splat
     // meshes itself, so taking it out of the scene graph is the reliable way
@@ -376,7 +383,21 @@ export function SplatScene({
       const floor = floorId ? floorCatalog.find((f) => f.id === floorId) : undefined;
       group.add(buildFloorMesh(room, floor));
     }
-  }, [viewer.floors, manifest, floorCatalog, showingOriginal]);
+  }, [viewer.floors, manifest, floorCatalog]);
+
+  // "Hold to compare" must not hitch: toggle visibility rather than
+  // disposing and rebuilding every floor and furniture mesh twice per press.
+  useEffect(() => {
+    const ctx = sceneRef.current;
+    if (!ctx) return;
+    ctx.floorGroup.visible = !showingOriginal;
+    ctx.furnitureGroup.visible = !showingOriginal;
+    if (ctx.floorSplat) {
+      const show = showingOriginal || Object.keys(viewer.floors).length === 0;
+      if (show && ctx.floorSplat.parent !== ctx.scene) ctx.scene.add(ctx.floorSplat);
+      else if (!show) ctx.scene.remove(ctx.floorSplat);
+    }
+  }, [showingOriginal, viewer.floors]);
 
   // ---- placed furniture -------------------------------------------------
   useEffect(() => {
@@ -384,14 +405,13 @@ export function SplatScene({
     if (!ctx) return;
     const group = ctx.furnitureGroup;
     disposeChildren(group);
-    if (showingOriginal) return;
 
     for (const item of viewer.items) {
       const entry = furnitureCatalog.find((f) => f.id === item.itemId);
-      const size = (entry?.dimensionsM ?? [0.8, 0.8, 0.8]) as [number, number, number];
+      const size = (entry?.dimensionsM ?? DEFAULT_ITEM_SIZE) as [number, number, number];
       group.add(buildPlaceholderItem(item.position, item.yaw, size, item.colorHex));
     }
-  }, [viewer.items, furnitureCatalog, showingOriginal]);
+  }, [viewer.items, furnitureCatalog]);
 
   return <div ref={mountRef} className="absolute inset-0" data-testid="splat-canvas" />;
 }
@@ -456,9 +476,9 @@ function buildFloorMesh(room: Room, floor: CatalogItem | undefined): THREE.Mesh 
   geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
 
   const material = new THREE.MeshStandardMaterial({
-    color: floor
-      ? fallbackColourFor(floor)
-      : new THREE.Color(room.originalFloorColor ?? '#9a8a74').getHex(),
+    color: new THREE.Color(
+      floor ? floorColor(floor) : (room.originalFloorColor ?? FLOOR_DEFAULT_COLOR),
+    ).getHex(),
     roughness: 0.78,
     metalness: 0.0,
     // Sit a hair above y=0 so it never z-fights with floor splats.
@@ -525,25 +545,7 @@ function loadFloorMaps(
   }
 }
 
-/**
- * Colour to draw a floor with before its texture maps exist.
- *
- * The catalog entry's own baseColor comes first: a per-category fallback made
- * every wood floor the same brown, so picking "Dark walnut" over "Pale ash"
- * changed nothing on screen.
- */
-function fallbackColourFor(floor: CatalogItem): number {
-  if (floor.baseColor) return new THREE.Color(floor.baseColor).getHex();
-  const byCategory: Record<string, number> = {
-    wood: 0x9a7247,
-    tile: 0xb9b2a6,
-    stone: 0x8e8e8a,
-    painted: 0xd8d3c8,
-    stencilled: 0xc9c2b4,
-    vintage: 0xa08a6d,
-  };
-  return byCategory[floor.category ?? ''] ?? 0xa89a86;
-}
+
 
 /**
  * Until GLB assets are seeded (M6), placed furniture renders as a correctly

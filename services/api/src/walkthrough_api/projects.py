@@ -54,7 +54,11 @@ def list_projects(settings: Settings) -> list[dict[str, str]]:
     for child in sorted(root.iterdir()):
         if not child.is_dir():
             continue
-        manifest_file = child / "scene" / "manifest.json"
+        try:
+            manifest_file = manifest_path(settings, child.name)
+        except InvalidProjectId:
+            # A stray directory that is not a valid project id.
+            continue
         if not manifest_file.is_file():
             continue
         try:

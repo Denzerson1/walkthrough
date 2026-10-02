@@ -229,3 +229,74 @@ describe('polygonBounds', () => {
     expect(polygonBounds(SQUARE)).toEqual({ min: [0, 0], max: [4, 3] });
   });
 });
+
+/**
+ * Parity with facing_yaw in layout.py.
+ *
+ * snapToWall used to return wallYaw — the direction the wall RUNS in — so a
+ * snapped item faced along the wall, and in a clockwise-wound room it faced
+ * into it. The Python twin was fixed; this copy was not, and nothing caught
+ * it because no production code calls snapToWall yet.
+ */
+describe('snapToWall facing', () => {
+  function front(yaw: number): Vec2 {
+    const r = (yaw * Math.PI) / 180;
+    return [-Math.sin(r), Math.cos(r)];
+  }
+
+  const CCW: Vec2[] = [
+    [0, 0],
+    [4, 0],
+    [4, 3],
+    [0, 3],
+  ];
+  const CW: Vec2[] = [
+    [0, 0],
+    [0, 3],
+    [4, 3],
+    [4, 0],
+  ];
+
+  it('faces into the room from the bottom wall, counter-clockwise winding', () => {
+    const walls = [{ start: [0, 0] as Vec2, end: [4, 0] as Vec2 }];
+    const snapped = snapToWall({ center: [2, 0.45], size: [2, 0.9], yaw: 0 }, walls, CCW);
+    expect(snapped).not.toBeNull();
+    const [fx, fy] = front(snapped!.yaw);
+    // Room interior is +z from this wall.
+    expect(fx * 0 + fy * 1).toBeGreaterThan(0.99);
+  });
+
+  it('faces into the room from a left wall, clockwise winding', () => {
+    const walls = [{ start: [0, 0] as Vec2, end: [0, 3] as Vec2 }];
+    const snapped = snapToWall({ center: [0.45, 1.5], size: [2, 0.9], yaw: 0 }, walls, CW);
+    expect(snapped).not.toBeNull();
+    const [fx, fy] = front(snapped!.yaw);
+    // Room interior is +x from this wall.
+    expect(fx * 1 + fy * 0).toBeGreaterThan(0.99);
+  });
+
+  it('never faces out of the room, whichever way the wall is wound', () => {
+    for (const poly of [CCW, CW]) {
+      for (let i = 0; i < poly.length; i++) {
+        const wall = { start: poly[i], end: poly[(i + 1) % poly.length] };
+        const mid: Vec2 = [
+          (wall.start[0] + wall.end[0]) / 2,
+          (wall.start[1] + wall.end[1]) / 2,
+        ];
+        const centre: Vec2 = [2, 1.5];
+        const toCentre: Vec2 = [centre[0] - mid[0], centre[1] - mid[1]];
+        const len = Math.hypot(...toCentre) || 1;
+        // Place the box just inside the wall so it snaps to this one.
+        const box = {
+          center: [mid[0] + (toCentre[0] / len) * 0.45, mid[1] + (toCentre[1] / len) * 0.45] as Vec2,
+          size: [1, 0.9] as Vec2,
+          yaw: 0,
+        };
+        const snapped = snapToWall(box, [wall], poly);
+        if (!snapped) continue;
+        const [fx, fy] = front(snapped.yaw);
+        expect(fx * (toCentre[0] / len) + fy * (toCentre[1] / len)).toBeGreaterThan(0);
+      }
+    }
+  });
+});

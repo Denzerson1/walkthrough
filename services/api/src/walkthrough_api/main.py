@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from fastapi import Body, Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -15,7 +15,8 @@ from walkthrough_pipeline.manifest import Manifest
 from . import auth, projects
 from . import catalog as catalog_mod
 from .config import Settings, get_settings
-from .db import AnalyticsEvent, get_session
+from .db import AnalyticsEvent
+from .deps import catalog_dep, db_dep, valid_project_id
 from .storage import build_storage
 
 app = FastAPI(title="walkthrough API", version="0.1.0")
@@ -30,20 +31,6 @@ app.add_middleware(
 )
 
 
-def settings_dep() -> Settings:
-    return get_settings()
-
-
-def db_dep(settings: Settings = Depends(settings_dep)):
-    yield from get_session(settings)
-
-
-def catalog_dep(settings: Settings = Depends(settings_dep)) -> catalog_mod.Catalog:
-    # Reloaded per request: the catalog is small and this keeps seeding scripts
-    # visible without a restart during development.
-    return catalog_mod.load_catalog(settings.catalog_root)
-
-
 # --------------------------------------------------------------------------
 # Health and projects
 # --------------------------------------------------------------------------
@@ -55,16 +42,15 @@ def health() -> dict[str, Any]:
 
 
 @app.get("/api/projects")
-def list_projects(settings: Settings = Depends(settings_dep)) -> list[dict[str, str]]:
+def list_projects(settings: Settings = Depends(get_settings)) -> list[dict[str, str]]:
     return projects.list_projects(settings)
 
 
 @app.get("/api/projects/{project_id}/manifest")
-def get_manifest(project_id: str, settings: Settings = Depends(settings_dep)) -> dict[str, Any]:
+def get_manifest(project_id: str, settings: Settings = Depends(get_settings)) -> dict[str, Any]:
+    valid_project_id(project_id)
     try:
         manifest = projects.load_manifest(settings, project_id)
-    except projects.InvalidProjectId as exc:
-        raise HTTPException(status_code=400, detail="Invalid project id") from exc
     except projects.ProjectNotFound as exc:
         raise HTTPException(status_code=404, detail="Project not found") from exc
     return manifest.model_dump(mode="json")
@@ -74,13 +60,10 @@ def get_manifest(project_id: str, settings: Settings = Depends(settings_dep)) ->
 def put_manifest(
     project_id: str,
     manifest: Manifest,
-    settings: Settings = Depends(settings_dep),
+    settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
     """Editor save. Requires the editor session cookie."""
-    try:
-        projects.validate_project_id(project_id)
-    except projects.InvalidProjectId as exc:
-        raise HTTPException(status_code=400, detail="Invalid project id") from exc
+    valid_project_id(project_id)
     if manifest.id != project_id:
         raise HTTPException(status_code=400, detail="Manifest id does not match the URL")
     projects.save_manifest(settings, project_id, manifest)
@@ -119,7 +102,7 @@ def _is_public_key(key: str) -> bool:
 
 
 @app.get("/files/{key:path}")
-def get_file(key: str, settings: Settings = Depends(settings_dep)) -> FileResponse:
+def get_file(key: str, settings: Settings = Depends(get_settings)) -> FileResponse:
     """
     Serve published project assets (splats, shading maps) and upload results.
     In production these come from R2 instead; this keeps dev simple.
@@ -167,7 +150,7 @@ def editor_login(
     request: Request,
     response: Response,
     body: LoginBody,
-    settings: Settings = Depends(settings_dep),
+    settings: Settings = Depends(get_settings),
 ) -> dict[str, bool]:
     client_key = request.client.host if request.client else "unknown"
     auth.rate_limit_login(client_key)
@@ -217,13 +200,10 @@ ALLOWED_EVENTS = {
 def post_event(
     project_id: str,
     body: EventBody,
-    settings: Settings = Depends(settings_dep),
+    settings: Settings = Depends(get_settings),
     session: Session = Depends(db_dep),
 ) -> dict[str, bool]:
-    try:
-        projects.validate_project_id(project_id)
-    except projects.InvalidProjectId as exc:
-        raise HTTPException(status_code=400, detail="Invalid project id") from exc
+    valid_project_id(project_id)
     if body.event not in ALLOWED_EVENTS:
         raise HTTPException(status_code=400, detail=f"Unknown event: {body.event}")
     session.add(
@@ -291,8 +271,3 @@ app.include_router(chat_router)
 app.include_router(layout_router)
 app.include_router(upload_router)
 
-
-@app.post("/api/_echo", include_in_schema=False)
-def echo(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
-    """Tiny endpoint used by the web app's connectivity check in dev."""
-    return {"received": payload}

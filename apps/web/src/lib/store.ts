@@ -1,13 +1,14 @@
 /** Zustand store: manifest, viewer state, UI state. */
 
 import { create } from 'zustand';
-import type { Manifest, PrivacyMask } from './manifest';
+import type { Manifest } from './manifest';
 import {
   EMPTY_VIEWER_STATE,
   type PlacedItem,
   type ViewerState,
   decodeViewerState,
   encodeViewerState,
+  newUid,
 } from './viewerState';
 
 export type PanelId = 'floors' | 'furniture' | 'assistant' | null;
@@ -38,7 +39,6 @@ export interface CatalogItem {
 
 interface AppState {
   manifest: Manifest | null;
-  loading: boolean;
   error: string | null;
 
   viewer: ViewerState;
@@ -55,7 +55,6 @@ interface AppState {
   showingOriginal: boolean;
 
   setManifest: (m: Manifest) => void;
-  setLoading: (v: boolean) => void;
   setError: (e: string | null) => void;
   setCatalog: (c: Partial<AppState['catalog']>) => void;
 
@@ -64,11 +63,9 @@ interface AppState {
   setShowingOriginal: (v: boolean) => void;
 
   setFloor: (roomIds: string[], floorId: string) => void;
-  addItem: (item: PlacedItem) => void;
-  updateItem: (uid: string, patch: Partial<PlacedItem>) => void;
-  removeItem: (uid: string) => void;
+  /** `uid` is assigned here, so callers describe the item and nothing else. */
+  addItems: (items: Array<Omit<PlacedItem, 'uid'>>) => void;
   recolorItem: (itemId: string, colorHex: string) => void;
-  addPrivacyMask: (mask: PrivacyMask) => void;
   reset: (roomId: string) => void;
 
   loadStateFromUrl: (encoded: string) => void;
@@ -77,7 +74,6 @@ interface AppState {
 
 export const useStore = create<AppState>((set, get) => ({
   manifest: null,
-  loading: true,
   error: null,
 
   viewer: { ...EMPTY_VIEWER_STATE },
@@ -91,10 +87,8 @@ export const useStore = create<AppState>((set, get) => ({
     set((s) => ({
       manifest,
       activeRoomId: s.activeRoomId ?? manifest.rooms[0]?.id ?? null,
-      loading: false,
     })),
-  setLoading: (loading) => set({ loading }),
-  setError: (error) => set({ error, loading: false }),
+  setError: (error) => set({ error }),
   setCatalog: (c) => set((s) => ({ catalog: { ...s.catalog, ...c } })),
 
   goToRoom: (roomId) => set({ activeRoomId: roomId }),
@@ -110,33 +104,21 @@ export const useStore = create<AppState>((set, get) => ({
       return { viewer: { ...s.viewer, floors } };
     }),
 
-  addItem: (item) =>
-    set((s) => ({ viewer: { ...s.viewer, items: [...s.viewer.items, item] } })),
-
-  updateItem: (uid, patch) =>
+  // One set() for the whole batch. Adding items one at a time made the
+  // furniture effect dispose and rebuild every mesh per item, so placing k
+  // items built k(k+1)/2 meshes to end up with k.
+  addItems: (items) =>
     set((s) => ({
       viewer: {
         ...s.viewer,
-        items: s.viewer.items.map((i) => (i.uid === uid ? { ...i, ...patch } : i)),
+        items: [...s.viewer.items, ...items.map((i) => ({ ...i, uid: newUid() }))],
       },
-    })),
-
-  removeItem: (uid) =>
-    set((s) => ({
-      viewer: { ...s.viewer, items: s.viewer.items.filter((i) => i.uid !== uid) },
     })),
 
   recolorItem: (itemId, colorHex) =>
     set((s) => ({
       viewer: { ...s.viewer, recolors: { ...s.viewer.recolors, [itemId]: colorHex } },
     })),
-
-  addPrivacyMask: (mask) =>
-    set((s) =>
-      s.manifest
-        ? { manifest: { ...s.manifest, privacyMasks: [...s.manifest.privacyMasks, mask] } }
-        : {},
-    ),
 
   reset: (roomId) =>
     set((s) => {

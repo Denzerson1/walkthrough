@@ -1,6 +1,7 @@
 /** Bottom-sheet panels: floors, furniture and the assistant. */
 
 import { useState } from 'react';
+import { floorColor } from '../lib/floorColors';
 import type { CatalogItem } from '../lib/store';
 
 interface SheetProps {
@@ -144,16 +145,7 @@ export function FloorPanel({
 }
 
 function swatchFor(floor: CatalogItem): string {
-  if (floor.baseColor) return floor.baseColor;
-  const palette: Record<string, string> = {
-    wood: 'linear-gradient(100deg,#9a7247,#b58a57)',
-    tile: 'linear-gradient(100deg,#b9b2a6,#cfc9bd)',
-    stone: 'linear-gradient(100deg,#8e8e8a,#a5a5a0)',
-    painted: 'linear-gradient(100deg,#d8d3c8,#e6e2d9)',
-    stencilled: 'linear-gradient(100deg,#c9c2b4,#ded8ca)',
-    vintage: 'linear-gradient(100deg,#a08a6d,#b9a382)',
-  };
-  return palette[floor.category ?? ''] ?? '#a89a86';
+  return floorColor(floor);
 }
 
 // ---------------------------------------------------------------------------

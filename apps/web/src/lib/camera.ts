@@ -7,6 +7,8 @@
  *   2. Transitions between waypoints take about 1 s and are eased.
  */
 
+import { angleDelta } from './geometry';
+
 export const MIN_FOV = 30;
 export const MAX_FOV = 90;
 export const DEFAULT_FOV = 70;
@@ -44,9 +46,7 @@ export function lerp(a: number, b: number, t: number): number {
 
 /** Interpolate an angle the short way round, so 350° -> 10° goes forwards. */
 export function lerpAngle(a: number, b: number, t: number): number {
-  let delta = ((b - a) % 360 + 540) % 360 - 180;
-  if (delta === -180) delta = 180;
-  return a + delta * t;
+  return a + angleDelta(a, b) * t;
 }
 
 export function lerpVec3(
