@@ -53,6 +53,9 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Lint
+        run: pnpm --filter @walkthrough/web lint
+
       - name: Typecheck
         run: pnpm --filter @walkthrough/web typecheck
 

@@ -1,6 +1,6 @@
 /** Public viewer at /p/:projectId */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { Assistant, type AssistantAction } from '../components/Assistant';
 import { FloorPlan } from '../components/FloorPlan';
@@ -29,7 +29,6 @@ export function Viewer() {
   const [fps, setFps] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [layoutNote, setLayoutNote] = useState<string | null>(null);
-  const roomEnteredAt = useRef<number>(Date.now());
 
   // Load the manifest, catalog and any shared state.
   useEffect(() => {
@@ -65,7 +64,6 @@ export function Viewer() {
     if (!activeRoomId || !manifest) return;
     postEvent(projectId, { session_id: session, event: 'room_viewed', room_id: activeRoomId });
     const enteredAt = Date.now();
-    roomEnteredAt.current = enteredAt;
     return () => {
       postEvent(projectId, {
         session_id: session,
@@ -82,6 +80,18 @@ export function Viewer() {
     [viewer, manifest],
   );
   const activeRoom = manifest?.rooms.find((r) => r.id === activeRoomId) ?? null;
+
+  const centreOf = useCallback(
+    (roomId: string): [number, number, number] => {
+      const room = manifest?.rooms.find((r) => r.id === roomId);
+      if (!room || room.floorPolygon.length < 3) return [0, 0, 0];
+      // Centroid rather than the bounding-box centre: for an L-shaped room
+      // the box centre can fall outside the polygon entirely.
+      const [cx, cz] = polygonCentroid(room.floorPolygon);
+      return [cx, 0, cz];
+    },
+    [manifest],
+  );
 
   /**
    * Ask the server to lay the style out properly. The deterministic solver
@@ -167,17 +177,8 @@ export function Viewer() {
         }
       }
     },
-    [setFloor, addItem, recolorItem, reset, runAutoLayout, projectId, session],
+    [setFloor, addItem, recolorItem, reset, runAutoLayout, centreOf, projectId, session],
   );
-
-  function centreOf(roomId: string): [number, number, number] {
-    const room = manifest?.rooms.find((r) => r.id === roomId);
-    if (!room || room.floorPolygon.length < 3) return [0, 0, 0];
-    // Centroid rather than the bounding-box centre: for an L-shaped room the
-    // box centre can fall outside the polygon entirely.
-    const [cx, cz] = polygonCentroid(room.floorPolygon);
-    return [cx, 0, cz];
-  }
 
   async function share() {
     const url = shareUrl();

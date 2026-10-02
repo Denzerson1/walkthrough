@@ -76,7 +76,8 @@ test.describe('viewer', () => {
     await page.locator('[data-floor-id]').first().click();
 
     await expect(page.getByTestId('staged-badge')).toBeVisible();
-    await expect(page.getByTestId('staged-badge')).toContainText('Virtually staged');
+    // Phones show the compact "Staged" wording.
+    await expect(page.getByTestId('staged-badge')).toContainText(/Virtually staged|Staged/);
   });
 
   test('reset returns to the original', async ({ page }) => {

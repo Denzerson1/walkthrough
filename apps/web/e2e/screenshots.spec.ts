@@ -19,7 +19,11 @@ const OUT = path.resolve(HERE, '../../../docs/screenshots');
 async function waitForScene(page: import('@playwright/test').Page) {
   await expect(page.locator('canvas')).toBeVisible({ timeout: 60_000 });
   await expect(page.getByTestId('floor-plan')).toBeVisible({ timeout: 60_000 });
-  await page.waitForTimeout(6000);
+  // onLoad fires when the files are parsed, but Spark still has to build and
+  // sort the splat buffers for both meshes. At about one frame per second
+  // under software rendering that takes a while, and a screenshot taken too
+  // early catches a half-drawn scene.
+  await page.waitForTimeout(14_000);
 }
 
 /**

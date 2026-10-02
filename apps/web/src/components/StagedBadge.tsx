@@ -29,7 +29,7 @@ export function StagedBadge({
       data-testid="staged-badge"
     >
       <span
-        className="flex items-center gap-2 px-3 py-2 text-[12px] font-semibold tracking-tight text-[#14171C]"
+        className="flex items-center gap-1.5 whitespace-nowrap px-2.5 py-2 text-[12px] font-semibold tracking-tight text-[#14171C]"
         style={{ background: 'var(--staged)' }}
       >
         <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
@@ -37,7 +37,10 @@ export function StagedBadge({
           <path d="M6 4.6 v2.6" stroke="#14171C" strokeWidth="1.4" strokeLinecap="round" />
           <circle cx="6" cy="8.9" r="0.7" fill="#14171C" />
         </svg>
-        Virtually staged
+        {/* The full phrase is the point of this badge, but on a phone it
+            would wrap onto three lines and eat the top of the screen. */}
+        <span className="hidden sm:inline">Virtually staged</span>
+        <span className="sm:hidden">Staged</span>
       </span>
 
       <button
@@ -47,16 +50,19 @@ export function StagedBadge({
         onPointerLeave={onHoldEnd}
         onPointerCancel={onHoldEnd}
         aria-pressed={showingOriginal}
-        className="panel px-3 py-2 text-[12px] font-medium hover:bg-[rgba(42,47,56,0.95)]"
+        className="panel whitespace-nowrap px-2.5 py-2 text-[12px] font-medium hover:bg-[rgba(42,47,56,0.95)]"
         data-testid="hold-original"
       >
-        {showingOriginal ? 'Showing original' : 'Hold to compare'}
+        <span className="hidden sm:inline">
+          {showingOriginal ? 'Showing original' : 'Hold to compare'}
+        </span>
+        <span className="sm:hidden">{showingOriginal ? 'Original' : 'Compare'}</span>
       </button>
 
       <button
         type="button"
         onClick={onReset}
-        className="panel px-3 py-2 text-[12px] font-medium hover:bg-[rgba(42,47,56,0.95)]"
+        className="panel whitespace-nowrap px-2.5 py-2 text-[12px] font-medium hover:bg-[rgba(42,47,56,0.95)]"
         data-testid="reset-all"
       >
         Reset
