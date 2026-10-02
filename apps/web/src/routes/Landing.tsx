@@ -38,7 +38,7 @@ export function Landing() {
       {featured ? (
         <Link
           to={`/p/${featured.id}`}
-          className="mt-10 inline-flex items-baseline gap-4 bg-[var(--paper)] px-6 py-4 text-[#14171C] transition-transform hover:-translate-y-px"
+          className="btn-primary mt-10 inline-flex items-baseline gap-4 px-6 py-4"
         >
           <span className="text-[15px] font-semibold">Walk through {featured.name}</span>
           <span className="measure text-[12px] opacity-60">{featured.rooms} rooms</span>

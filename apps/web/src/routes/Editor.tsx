@@ -124,7 +124,7 @@ export function Editor() {
           )}
           <button
             type="submit"
-            className="mt-4 w-full bg-[var(--paper)] px-4 py-2.5 text-[14px] font-semibold text-[#14171C]"
+            className="btn-primary mt-4 w-full px-4 py-2.5 text-[14px]"
           >
             Open editor
           </button>
@@ -154,7 +154,7 @@ export function Editor() {
             type="button"
             onClick={save}
             disabled={!dirty}
-            className="bg-[var(--paper)] px-4 py-2 text-[13px] font-semibold text-[#14171C] disabled:opacity-35"
+            className="btn-primary px-4 py-2 text-[13px]"
           >
             Save manifest
           </button>
@@ -182,7 +182,7 @@ export function Editor() {
                 aria-pressed={r.id === selectedRoomId}
                 className={[
                   'shrink-0 px-3 py-1.5 text-[12px]',
-                  r.id === selectedRoomId ? 'bg-[var(--blueprint)]' : 'rule border opacity-70',
+                  r.id === selectedRoomId ? 'bg-[var(--accent)]' : 'rule border opacity-70',
                 ].join(' ')}
               >
                 {r.name}
@@ -207,7 +207,7 @@ export function Editor() {
                   className="rule w-full border bg-transparent px-2.5 py-1.5 text-[13px]"
                 >
                   {ROOM_TYPES.map((t) => (
-                    <option key={t} value={t} className="bg-[#14171C]">
+                    <option key={t} value={t} className="bg-[var(--paper-warm)]">
                       {t}
                     </option>
                   ))}

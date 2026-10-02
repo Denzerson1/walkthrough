@@ -105,8 +105,8 @@ export function Assistant({ projectId, sessionId, context, onActions }: Props) {
               className={[
                 'inline-block max-w-[46ch] px-3 py-2 text-[13px] leading-snug',
                 message.role === 'user'
-                  ? 'bg-[var(--blueprint)]'
-                  : 'rule border bg-[rgba(42,47,56,0.55)]',
+                  ? 'bg-[var(--accent)]'
+                  : 'rule border bg-[var(--paper-warm)]',
               ].join(' ')}
             >
               {message.content}
@@ -165,7 +165,7 @@ export function Assistant({ projectId, sessionId, context, onActions }: Props) {
         <button
           type="submit"
           disabled={busy || !input.trim()}
-          className="bg-[var(--paper)] px-4 py-2 text-[13px] font-semibold text-[#14171C] disabled:opacity-35"
+          className="btn-primary px-4 py-2 text-[13px]"
         >
           Send
         </button>

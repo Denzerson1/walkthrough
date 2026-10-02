@@ -5,26 +5,35 @@
 /*
   walkthrough — visual system.
 
-  The content is a photoreal capture of a real room, so the interface reads as
-  architectural instrumentation over the image rather than app chrome on top of
-  it. Amber is reserved for one thing only: the "Virtually staged" state, which
-  the brief requires to be unmistakable.
+  The content is a photoreal capture of someone's home, so the interface is
+  warm paper laid over the photograph rather than instrumentation on top of
+  it: bone-white panels, a soft serif for names, generous rounding, and no
+  technical readouts. Clay is reserved for one thing only — the "Virtually
+  staged" state, which the brief requires to be unmistakable.
 */
 
 :root {
-  --ink: #14171c;
-  --ink-soft: #2a2f38;
-  --paper: #faf9f6;
-  --paper-dim: #e8e6e0;
-  --blueprint: #2f5fd0;
-  --blueprint-dim: #8fa8e4;
-  --staged: #e8a33d;
-  --line: rgba(250, 249, 246, 0.22);
+  --ink: #2a2622;
+  --ink-soft: #6a625a;
+  --paper: #f7f3ec;
+  --paper-warm: #efe8dc;
+  --paper-edge: rgba(42, 38, 34, 0.1);
+  --accent: #46513f;
+  --accent-soft: #e4e7df;
+  --staged: #b4713c;
+  --line: rgba(42, 38, 34, 0.12);
+
+  --shadow-panel: 0 1px 2px rgba(42, 38, 34, 0.06), 0 8px 24px rgba(42, 38, 34, 0.1);
+  --shadow-raised: 0 1px 1px rgba(42, 38, 34, 0.05), 0 2px 6px rgba(42, 38, 34, 0.08);
+
+  /* Squared-off, not pill-shaped: estate agency, not messaging app. */
+  --radius: 7px;
+  --radius-sm: 5px;
 
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 html,
@@ -35,39 +44,100 @@ body,
 }
 
 body {
-  background: var(--ink);
-  color: var(--paper);
-  font-family: Archivo, "Helvetica Neue", Arial, sans-serif;
+  background: var(--paper-warm);
+  color: var(--ink);
+  font-family: Inter, "Helvetica Neue", Arial, sans-serif;
   font-size: 15px;
-  line-height: 1.45;
+  line-height: 1.5;
+  letter-spacing: -0.006em;
   -webkit-font-smoothing: antialiased;
   /* The viewer owns all gestures; never rubber-band the page behind it. */
   overscroll-behavior: none;
 }
 
-/* Measurements in metres are real data, so they get the technical face. */
-.measure {
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
+/* Property and room names carry the warmth; everything else stays neutral. */
+.display {
+  font-family: Fraunces, Georgia, "Times New Roman", serif;
+  font-optical-sizing: auto;
+  letter-spacing: -0.015em;
 }
 
-/* Hairline rules that survive on top of photography. */
+/*
+  Areas and dimensions. Tabular figures so a column of them lines up, but the
+  normal face — a monospace readout made the viewer feel like a tool rather
+  than a home.
+*/
+.measure {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
 .rule {
   border-color: var(--line);
 }
 
+/* Warm paper over photography. */
 .panel {
-  background: rgba(20, 23, 28, 0.92);
-  backdrop-filter: blur(16px) saturate(140%);
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  background: rgba(247, 243, 236, 0.93);
+  backdrop-filter: blur(20px) saturate(120%);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
+  box-shadow: var(--shadow-panel);
 }
 
 /* Focus must stay visible over arbitrary imagery. */
 :where(button, a, input, [tabindex]):focus-visible {
-  outline: 2px solid var(--paper);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/*
+  Buttons. One shape, two weights: `btn-primary` for the single action a view
+  is about, `btn` for everything else. Both sit on paper, so the quiet one is
+  defined by its hairline rather than by a fill.
+*/
+.btn {
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: rgba(247, 243, 236, 0.9);
+  color: var(--ink);
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  transition: background-color 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+.btn:hover {
+  background: var(--paper);
+  border-color: rgba(42, 38, 34, 0.22);
+}
+.btn:active {
+  transform: translateY(0.5px);
+}
+.btn[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--paper);
+}
+
+.btn-primary {
+  border-radius: var(--radius);
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--paper);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  box-shadow: var(--shadow-raised);
+  transition: background-color 120ms ease, transform 120ms ease;
+}
+.btn-primary:hover {
+  background: #3b4536;
+}
+.btn-primary:active {
+  transform: translateY(0.5px);
+}
+.btn-primary:disabled,
+.btn:disabled {
+  opacity: 0.4;
+  pointer-events: none;
 }
 
 .scroll-x {
@@ -99,5 +169,16 @@ canvas {
   }
   100% {
     transform: translateX(300%);
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

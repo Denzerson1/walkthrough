@@ -265,3 +265,111 @@ export function polygonBounds(poly: Vec2[]): { min: Vec2; max: Vec2 } {
     max: [Math.max(...xs), Math.max(...ys)],
   };
 }
+
+// ---------------------------------------------------------------------------
+// Walking
+// ---------------------------------------------------------------------------
+
+/**
+ * The parts of a Room that decide where a person may stand. Declared
+ * structurally rather than importing Room so this file stays dependency-free
+ * and the tests can build minimal fixtures.
+ */
+export interface WalkableRoom {
+  floorPolygon: Vec2[];
+  walls: WallSegment[];
+  openings: Array<{ type: 'door' | 'window'; wallIndex: number; offset: number; width: number }>;
+}
+
+/** Shoulder radius of the person being simulated, in metres. */
+export const BODY_RADIUS = 0.24;
+
+/**
+ * Distance from a wall's start to the point on it nearest `p`, clamped to the
+ * wall. This is the same parameter `offset` is measured in, so it can be
+ * compared against an opening's span directly.
+ */
+export function distanceAlongWall(p: Vec2, wall: WallSegment): number {
+  const dx = wall.end[0] - wall.start[0];
+  const dy = wall.end[1] - wall.start[1];
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq < 1e-12) return 0;
+  const t = ((p[0] - wall.start[0]) * dx + (p[1] - wall.start[1]) * dy) / lenSq;
+  return Math.max(0, Math.min(1, t)) * Math.sqrt(lenSq);
+}
+
+/**
+ * True when `p` lies within a doorway on this wall.
+ *
+ * Windows are deliberately excluded: you can see through one but not walk
+ * through it. The span is the full door width rather than the width less the
+ * body radius — a 0.9 m door would otherwise leave a 0.42 m gap to aim at,
+ * which feels like getting stuck on the frame rather than walking through it.
+ */
+export function inDoorway(p: Vec2, room: WalkableRoom, wallIndex: number): boolean {
+  const wall = room.walls[wallIndex];
+  if (!wall) return false;
+  const along = distanceAlongWall(p, wall);
+  return room.openings.some(
+    (o) =>
+      o.type === 'door' &&
+      o.wallIndex === wallIndex &&
+      Math.abs(along - o.offset) <= o.width / 2,
+  );
+}
+
+/**
+ * True when a person of `radius` may stand at `p`.
+ *
+ * Standing is allowed inside any room's floor polygon, provided the point is
+ * not within `radius` of a wall — unless that wall has a door there, which is
+ * what lets someone walk from one room into the next. Rooms are tested
+ * independently and the first that accepts wins, so a point in a shared
+ * doorway is reachable from both sides.
+ */
+export function canStand(p: Vec2, rooms: WalkableRoom[], radius = BODY_RADIUS): boolean {
+  for (const room of rooms) {
+    if (room.floorPolygon.length < 3) continue;
+    if (!pointInPolygon(p, room.floorPolygon)) continue;
+    let blocked = false;
+    for (let i = 0; i < room.walls.length; i++) {
+      const wall = room.walls[i];
+      if (distancePointToSegment(p, wall.start, wall.end) >= radius) continue;
+      if (inDoorway(p, room, i)) continue;
+      blocked = true;
+      break;
+    }
+    if (!blocked) return true;
+  }
+  return false;
+}
+
+/**
+ * Move from `from` towards `from + delta`, sliding along anything solid.
+ *
+ * Tries the full move, then each axis alone. Without the per-axis retry,
+ * walking into a wall at an angle stops dead instead of sliding along it,
+ * which is what makes a first-person tour feel stuck.
+ */
+export function moveWithCollision(
+  from: Vec2,
+  delta: Vec2,
+  rooms: WalkableRoom[],
+  radius = BODY_RADIUS,
+): Vec2 {
+  const full: Vec2 = [from[0] + delta[0], from[1] + delta[1]];
+  if (canStand(full, rooms, radius)) return full;
+
+  const alongX: Vec2 = [from[0] + delta[0], from[1]];
+  if (delta[0] !== 0 && canStand(alongX, rooms, radius)) return alongX;
+
+  const alongZ: Vec2 = [from[0], from[1] + delta[1]];
+  if (delta[1] !== 0 && canStand(alongZ, rooms, radius)) return alongZ;
+
+  return from;
+}
+
+/** The room whose floor polygon contains `p`, if any. */
+export function roomAt<T extends { floorPolygon: Vec2[] }>(p: Vec2, rooms: T[]): T | undefined {
+  return rooms.find((r) => r.floorPolygon.length >= 3 && pointInPolygon(p, r.floorPolygon));
+}

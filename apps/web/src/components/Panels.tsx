@@ -1,8 +1,9 @@
 /** Bottom-sheet panels: floors, furniture and the assistant. */
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { floorColor } from '../lib/floorColors';
 import type { CatalogItem } from '../lib/store';
+import { furnitureThumbnail } from '../lib/thumbnails';
 
 interface SheetProps {
   title: string;
@@ -76,7 +77,7 @@ export function FloorPanel({
             aria-pressed={category === c}
             className={[
               'shrink-0 px-2.5 py-1 text-[12px] capitalize',
-              category === c ? 'bg-[var(--blueprint)]' : 'opacity-65 hover:opacity-100',
+              category === c ? 'bg-[var(--accent)]' : 'opacity-65 hover:opacity-100',
             ].join(' ')}
           >
             {c}
@@ -102,7 +103,7 @@ export function FloorPanel({
                   background: floor.thumbnail
                     ? `center/cover url(${floor.thumbnail})`
                     : swatchFor(floor),
-                  borderColor: applied ? 'var(--blueprint)' : 'var(--line)',
+                  borderColor: applied ? 'var(--accent)' : 'var(--line)',
                   borderWidth: applied ? 2 : 1,
                 }}
               />
@@ -126,7 +127,7 @@ export function FloorPanel({
             type="checkbox"
             checked={allRooms}
             onChange={(e) => setAllRooms(e.target.checked)}
-            className="h-3.5 w-3.5 accent-[var(--blueprint)]"
+            className="h-3.5 w-3.5 accent-[var(--accent)]"
           />
           Apply to every room
         </label>
@@ -158,6 +159,49 @@ interface FurniturePanelProps {
   onAutoLayout: (styleId: string) => void;
 }
 
+/**
+ * One furniture tile: a render of the real mesh once it arrives, over the
+ * item's colour. The colour is the placeholder rather than a grey box, so a
+ * tile looks deliberate while its model loads and if the model never comes.
+ */
+function FurnitureTile({ item }: { item: CatalogItem }) {
+  const [src, setSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!item.glb) return;
+    let cancelled = false;
+    furnitureThumbnail(item.id, item.glb, item.colors?.[0])
+      .then((url) => !cancelled && setSrc(url))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [item.id, item.glb, item.colors]);
+
+  return (
+    <span
+      className="rule relative flex aspect-square w-full items-end justify-start overflow-hidden rounded-md border p-1.5"
+      style={{ background: src ? 'var(--paper-warm)' : (item.colors?.[0] ?? '#b3aa9c') }}
+    >
+      {src && (
+        <img
+          src={src}
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 h-full w-full object-contain"
+        />
+      )}
+      <span
+        className={`measure relative text-[9px] ${src ? 'text-[var(--ink)] opacity-55' : 'text-[var(--paper)] opacity-85'}`}
+      >
+        {item.dimensionsM
+          ? `${item.dimensionsM[0].toFixed(1)}×${item.dimensionsM[2].toFixed(1)}`
+          : ''}
+      </span>
+    </span>
+  );
+}
+
 export function FurniturePanel({
   furniture,
   styles,
@@ -165,22 +209,28 @@ export function FurniturePanel({
   onApplyStyle,
   onAutoLayout,
 }: FurniturePanelProps) {
-  // Three styles are prepared but not stocked (brief M6). Default to one that
-  // can actually furnish a room, and sort the stocked ones first, so the
-  // obvious first click is not the one that fails.
+  // Stocked styles first, so the obvious first click is not one that fails.
   const ordered = [...styles].sort(
     (a, b) => Number(b.complete ?? false) - Number(a.complete ?? false),
   );
   const [styleId, setStyleId] = useState<string>(
-    ordered.find((s) => s.complete)?.id ?? ordered[0]?.id ?? '',
+    ordered.find((s) => s.id === 'modern')?.id ?? ordered[0]?.id ?? '',
   );
   const selected = ordered.find((s) => s.id === styleId);
   const unstocked = selected ? selected.complete === false : false;
 
+  // Each piece belongs to exactly one theme, and the grid shows the chosen
+  // theme's pieces only. Listing all 47 together put a carved gothic cabinet
+  // next to a steel shelf and made the themes meaningless.
+  const shown = useMemo(
+    () => furniture.filter((item) => !styleId || item.styles?.includes(styleId)),
+    [furniture, styleId],
+  );
+
   if (!furniture.length && !styles.length) {
     return (
       <p className="px-4 py-6 text-[13px] opacity-70">
-        No furniture is seeded yet. Run <code className="measure">pnpm seed:furniture</code>.
+        No furniture is seeded yet. Run <code className="measure">pnpm seed:assets</code>.
       </p>
     );
   }
@@ -197,10 +247,7 @@ export function FurniturePanel({
                 onClick={() => setStyleId(style.id)}
                 aria-pressed={styleId === style.id}
                 className={[
-                  'shrink-0 px-3 py-1.5 text-[12px]',
-                  styleId === style.id
-                    ? 'bg-[var(--blueprint)]'
-                    : 'rule border opacity-70 hover:opacity-100',
+                  'btn shrink-0 px-3 py-1.5 text-[12px]',
                   style.complete === false ? 'italic' : '',
                 ].join(' ')}
               >
@@ -216,7 +263,7 @@ export function FurniturePanel({
               type="button"
               onClick={() => onApplyStyle(styleId)}
               disabled={!styleId}
-              className="flex-1 bg-[var(--paper)] px-3 py-2 text-[12px] font-semibold text-[#14171C] disabled:opacity-40"
+              className="btn-primary flex-1 px-3 py-2 text-[12px]"
             >
               Apply style
             </button>
@@ -224,7 +271,7 @@ export function FurniturePanel({
               type="button"
               onClick={() => onAutoLayout(styleId)}
               disabled={!styleId || unstocked}
-              className="rule flex-1 border px-3 py-2 text-[12px] font-medium disabled:opacity-40"
+              className="btn flex-1 px-3 py-2 text-[12px]"
             >
               Furnish automatically
             </button>
@@ -239,7 +286,7 @@ export function FurniturePanel({
       )}
 
       <div className="grid grid-cols-3 gap-2 p-3 sm:grid-cols-5 lg:grid-cols-8">
-        {furniture.map((item) => (
+        {shown.map((item) => (
           <button
             key={item.id}
             type="button"
@@ -247,16 +294,7 @@ export function FurniturePanel({
             data-furniture-id={item.id}
             className="text-left"
           >
-            <span
-              className="rule flex aspect-square w-full items-end justify-start rounded-sm border p-1.5"
-              style={{ background: item.colors?.[0] ?? '#3a3f49' }}
-            >
-              <span className="measure text-[9px] text-[#14171C] opacity-80">
-                {item.dimensionsM
-                  ? `${item.dimensionsM[0].toFixed(1)}×${item.dimensionsM[2].toFixed(1)}`
-                  : ''}
-              </span>
-            </span>
+            <FurnitureTile item={item} />
             <span className="mt-1 block text-[11px] leading-tight opacity-85">{item.name}</span>
           </button>
         ))}

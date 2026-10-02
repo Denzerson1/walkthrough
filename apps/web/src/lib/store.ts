@@ -1,7 +1,7 @@
 /** Zustand store: manifest, viewer state, UI state. */
 
 import { create } from 'zustand';
-import type { Manifest } from './manifest';
+import type { Manifest, Vec3 } from './manifest';
 import {
   EMPTY_VIEWER_STATE,
   type PlacedItem,
@@ -25,7 +25,11 @@ export interface CatalogItem {
   baseColor?: string;
   dimensionsM?: [number, number, number];
   maps?: Record<string, string>;
-  glb?: string;
+  /** Floors whose catalog colour tints a neutral scan (painted, stencilled). */
+  tintAlbedo?: boolean;
+  glb?: string | null;
+  /** Procedural shape drawn by the viewer when there is no mesh. */
+  shape?: string;
   thumbnail?: string;
   description?: string;
   palette?: string[];
@@ -66,7 +70,18 @@ interface AppState {
   /** `uid` is assigned here, so callers describe the item and nothing else. */
   addItems: (items: Array<Omit<PlacedItem, 'uid'>>) => void;
   recolorItem: (itemId: string, colorHex: string) => void;
+  /** Drag a placed item to a new spot on the floor. */
+  moveItem: (uid: string, position: Vec3, roomId?: string) => void;
+  /** Turn a placed item by `delta` degrees. */
+  rotateItem: (uid: string, delta: number) => void;
+  removeItem: (uid: string) => void;
+  /** Drop every placed item in a room, before furnishing it afresh. */
+  clearItems: (roomId: string) => void;
   reset: (roomId: string) => void;
+
+  /** Placed item the user has tapped, for the move/rotate controls. */
+  selectedUid: string | null;
+  selectItem: (uid: string | null) => void;
 
   loadStateFromUrl: (encoded: string) => void;
   shareUrl: () => string;
@@ -82,6 +97,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   catalog: { floors: [], furniture: [], styles: [] },
   showingOriginal: false,
+  selectedUid: null,
 
   setManifest: (manifest) =>
     set((s) => ({
@@ -120,9 +136,43 @@ export const useStore = create<AppState>((set, get) => ({
       viewer: { ...s.viewer, recolors: { ...s.viewer.recolors, [itemId]: colorHex } },
     })),
 
+  moveItem: (uid, position, roomId) =>
+    set((s) => ({
+      viewer: {
+        ...s.viewer,
+        items: s.viewer.items.map((i) =>
+          i.uid === uid ? { ...i, position, roomId: roomId ?? i.roomId } : i,
+        ),
+      },
+    })),
+
+  rotateItem: (uid, delta) =>
+    set((s) => ({
+      viewer: {
+        ...s.viewer,
+        items: s.viewer.items.map((i) =>
+          i.uid === uid ? { ...i, yaw: (((i.yaw + delta) % 360) + 360) % 360 } : i,
+        ),
+      },
+    })),
+
+  removeItem: (uid) =>
+    set((s) => ({
+      selectedUid: s.selectedUid === uid ? null : s.selectedUid,
+      viewer: { ...s.viewer, items: s.viewer.items.filter((i) => i.uid !== uid) },
+    })),
+
+  clearItems: (roomId) =>
+    set((s) => ({
+      selectedUid: null,
+      viewer: { ...s.viewer, items: s.viewer.items.filter((i) => i.roomId !== roomId) },
+    })),
+
+  selectItem: (selectedUid) => set({ selectedUid }),
+
   reset: (roomId) =>
     set((s) => {
-      if (roomId === 'all') return { viewer: { ...EMPTY_VIEWER_STATE } };
+      if (roomId === 'all') return { viewer: { ...EMPTY_VIEWER_STATE }, selectedUid: null };
       const floors = { ...s.viewer.floors };
       delete floors[roomId];
       // Recolours are keyed by manifest item id, so resetting one room has to
@@ -133,6 +183,7 @@ export const useStore = create<AppState>((set, get) => ({
         if (item.roomId === roomId) delete recolors[item.id];
       }
       return {
+        selectedUid: null,
         viewer: {
           ...s.viewer,
           floors,
@@ -142,7 +193,7 @@ export const useStore = create<AppState>((set, get) => ({
       };
     }),
 
-  loadStateFromUrl: (encoded) => set({ viewer: decodeViewerState(encoded) }),
+  loadStateFromUrl: (encoded) => set({ viewer: decodeViewerState(encoded), selectedUid: null }),
 
   shareUrl: () => {
     const { manifest, viewer } = get();

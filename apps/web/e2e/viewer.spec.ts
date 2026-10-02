@@ -43,17 +43,17 @@ test.describe('viewer', () => {
   test('shows both rooms with their areas', async ({ page }) => {
     await page.goto(`/p/${PROJECT}`);
     const strip = page.getByTestId('room-strip');
-    await expect(strip.getByRole('tab')).toHaveCount(2);
+    await expect(strip.getByRole('tab')).toHaveCount(7);
     await expect(strip).toContainText('Living room');
-    await expect(strip).toContainText('Bedroom');
+    await expect(strip).toContainText('Main bedroom');
     await expect(strip).toContainText('m²');
   });
 
   test('moves between rooms', async ({ page }) => {
     await page.goto(`/p/${PROJECT}`);
     const strip = page.getByTestId('room-strip');
-    await strip.getByRole('tab', { name: /Bedroom/ }).click();
-    await expect(strip.getByRole('tab', { name: /Bedroom/ })).toHaveAttribute(
+    await strip.getByRole('tab', { name: /Main bedroom/ }).click();
+    await expect(strip.getByRole('tab', { name: /Main bedroom/ })).toHaveAttribute(
       'aria-selected',
       'true',
     );
@@ -65,23 +65,30 @@ test.describe('viewer', () => {
     const plan = page.getByTestId('floor-plan');
     await expect(plan).toBeVisible({ timeout: 45_000 });
     // One polygon per room.
-    await expect(plan.locator('polygon')).toHaveCount(2);
+    await expect(plan.locator('polygon')).toHaveCount(7);
   });
 
-  test('applying a floor raises the Virtually staged badge', async ({ page }) => {
+  test('applying a floor raises the compare and reset controls', async ({ page }) => {
     await page.goto(`/p/${PROJECT}`);
+    // The viewer furnishes the flat on arrival, so it is staged from the
+    // first frame. Reset back to the bare capture to test the transition.
+    await expect(page.getByTestId('staged-badge')).toBeVisible({ timeout: 45_000 });
+    await page.getByTestId('reset-all').click();
     await expect(page.getByTestId('staged-badge')).toBeHidden();
 
     await page.getByTestId('tool-floors').click();
     await page.locator('[data-floor-id]').first().click();
 
     await expect(page.getByTestId('staged-badge')).toBeVisible();
-    // Phones show the compact "Staged" wording.
-    await expect(page.getByTestId('staged-badge')).toContainText(/Virtually staged|Staged/);
+    // The "Virtually staged" chip was removed by the owner; the controls that
+    // get you back to the real capture are what has to survive.
+    await expect(page.getByTestId('hold-original')).toBeVisible();
+    await expect(page.getByTestId('reset-all')).toBeVisible();
   });
 
   test('reset returns to the original', async ({ page }) => {
     await page.goto(`/p/${PROJECT}`);
+    await expect(page.getByTestId('staged-badge')).toBeVisible({ timeout: 45_000 });
     await page.getByTestId('tool-floors').click();
     await page.locator('[data-floor-id]').first().click();
     await expect(page.getByTestId('staged-badge')).toBeVisible();
@@ -112,7 +119,9 @@ test.describe('viewer', () => {
     await page.getByTestId('tool-floors').click();
     await page.locator('[data-floor-id]').first().click();
     await page.getByTestId('share').click();
-    await expect(page.getByTestId('share')).toContainText('Link copied');
+    // "Copied", not "Link copied": the bottom bar is a compact pill now and
+    // the longer label made it jump in width on press.
+    await expect(page.getByTestId('share')).toContainText('Copied');
     return page.evaluate(() => (window as unknown as { __copied: string }).__copied);
   }
 

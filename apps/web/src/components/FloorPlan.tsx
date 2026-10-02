@@ -17,6 +17,12 @@ interface Props {
   activeRoomId: string | null;
   stagedRoomIds: Set<string>;
   onSelectRoom: (roomId: string) => void;
+  /**
+   * Where the camera actually is, in metres, and which way it faces. Falls
+   * back to the active room's waypoint — the editor has no live camera, and
+   * the viewer has none until the scene is up.
+   */
+  pose?: { x: number; z: number; yaw: number } | null;
   /** Compact form for the viewer overlay; expanded for the editor. */
   size?: number;
 }
@@ -28,6 +34,7 @@ export function FloorPlan({
   activeRoomId,
   stagedRoomIds,
   onSelectRoom,
+  pose = null,
   size = 132,
 }: Props) {
   const { bounds, scale } = useMemo(() => computeBounds(manifest, size), [manifest, size]);
@@ -59,12 +66,12 @@ export function FloorPlan({
               points={points}
               fill={
                 isActive
-                  ? 'rgba(47, 95, 208, 0.28)'
+                  ? 'rgba(70, 81, 63, 0.30)'
                   : isStaged
-                    ? 'rgba(232, 163, 61, 0.14)'
-                    : 'rgba(250, 249, 246, 0.07)'
+                    ? 'rgba(180, 113, 60, 0.16)'
+                    : 'rgba(70, 81, 63, 0.10)'
               }
-              stroke={isActive ? '#8fa8e4' : 'rgba(250, 249, 246, 0.5)'}
+              stroke={isActive ? 'var(--accent)' : 'rgba(42, 38, 34, 0.45)'}
               strokeWidth={isActive ? 1.6 : 1}
               style={{ cursor: 'pointer' }}
               onClick={() => onSelectRoom(room.id)}
@@ -82,7 +89,7 @@ export function FloorPlan({
                   y1={toY(span[0][1])}
                   x2={toX(span[1][0])}
                   y2={toY(span[1][1])}
-                  stroke={opening.type === 'door' ? '#14171C' : '#8fa8e4'}
+                  stroke={opening.type === 'door' ? 'var(--paper)' : 'var(--accent)'}
                   strokeWidth={opening.type === 'door' ? 3 : 2}
                   strokeLinecap="butt"
                 />
@@ -92,11 +99,11 @@ export function FloorPlan({
         );
       })}
 
-      {active && (
+      {(pose || active) && (
         <ViewMarker
-          x={toX(active.waypoint.position[0])}
-          y={toY(active.waypoint.position[2])}
-          yaw={active.waypoint.yaw}
+          x={toX(pose ? pose.x : active!.waypoint.position[0])}
+          y={toY(pose ? pose.z : active!.waypoint.position[2])}
+          yaw={pose ? pose.yaw : active!.waypoint.yaw}
         />
       )}
     </svg>
@@ -109,8 +116,8 @@ function ViewMarker({ x, y, yaw }: { x: number; y: number; yaw: number }) {
   const rotation = -yaw;
   return (
     <g transform={`translate(${x} ${y}) rotate(${rotation})`}>
-      <path d="M 0 0 L -9 -16 A 18 18 0 0 1 9 -16 Z" fill="rgba(143, 168, 228, 0.45)" />
-      <circle r="3.4" fill="#FAF9F6" stroke="#2F5FD0" strokeWidth="1.6" />
+      <path d="M 0 0 L -9 -16 A 18 18 0 0 1 9 -16 Z" fill="rgba(70, 81, 63, 0.35)" />
+      <circle r="3.4" fill="var(--paper)" stroke="var(--accent)" strokeWidth="1.8" />
     </g>
   );
 }

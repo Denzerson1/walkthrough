@@ -45,7 +45,7 @@ export function RoomStrip({ manifest, activeRoomId, stagedRoomIds, onSelect }: P
       role="tablist"
       aria-label="Rooms"
       onKeyDown={onKeyDown}
-      className="scroll-x flex items-stretch gap-px"
+      className="scroll-x flex items-stretch gap-1.5 px-3 pb-1"
       data-testid="room-strip"
     >
       {manifest.rooms.map((room) => {
@@ -60,19 +60,22 @@ export function RoomStrip({ manifest, activeRoomId, stagedRoomIds, onSelect }: P
             data-room-id={room.id}
             onClick={() => onSelect(room.id)}
             className={[
-              'group relative shrink-0 px-4 py-3 text-left transition-colors',
-              isActive ? 'bg-[rgba(47,95,208,0.9)]' : 'bg-[rgba(20,23,28,0.78)] hover:bg-[rgba(42,47,56,0.9)]',
+              'group relative shrink-0 rounded-[var(--radius)] px-3.5 py-1.5 text-left transition-colors',
+              isActive
+                ? 'bg-[var(--accent)] text-[var(--paper)]'
+                : 'panel text-[var(--ink)] hover:bg-[var(--paper)]',
             ].join(' ')}
-            style={{ minWidth: 112 }}
           >
-            <span className="block text-[13px] font-medium leading-tight">{room.name}</span>
-            <span className="measure mt-0.5 block text-[11px] opacity-70">
-              {area > 0.01 ? `${area.toFixed(1)} m²` : '—'}
+            <span className="flex items-baseline gap-2 whitespace-nowrap">
+              <span className="text-[13px] font-medium leading-tight">{room.name}</span>
+              <span className={`measure text-[11px] ${isActive ? 'opacity-70' : 'opacity-55'}`}>
+                {area > 0.01 ? `${area.toFixed(1)} m²` : '—'}
+              </span>
             </span>
             {stagedRoomIds.has(room.id) && (
               <span
-                aria-label="Virtually staged"
-                className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full"
+                aria-label="Changed from the original"
+                className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full"
                 style={{ background: 'var(--staged)' }}
               />
             )}

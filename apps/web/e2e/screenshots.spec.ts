@@ -12,6 +12,16 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const PROJECT = 'demo-01';
+
+/**
+ * These are slow by nature and the default 180 s no longer fits.
+ *
+ * The demo scene went from 350 k splats to 1.4 M when the flat grew to seven
+ * rooms and the surfaces moved to a jittered grid. Under SwiftShader that is
+ * roughly one frame per second, and every `capture()` forces a render. The
+ * budget is about the renderer, not the app: a GPU runner does not need it.
+ */
+test.describe.configure({ timeout: 360_000 });
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const OUT = path.resolve(HERE, '../../../docs/screenshots');
 
@@ -22,8 +32,9 @@ async function waitForScene(page: import('@playwright/test').Page) {
   // onLoad fires when the files are parsed, but Spark still has to build and
   // sort the splat buffers for both meshes. At about one frame per second
   // under software rendering that takes a while, and a screenshot taken too
-  // early catches a half-drawn scene.
-  await page.waitForTimeout(14_000);
+  // early catches a half-drawn scene. Scaled with the scene: 14 s was set
+  // when it was a quarter the size.
+  await page.waitForTimeout(24_000);
 }
 
 /**
@@ -41,26 +52,44 @@ async function waitForScene(page: import('@playwright/test').Page) {
 async function sceneCoverage(page: import('@playwright/test').Page): Promise<number> {
   const box = await page.locator('canvas').boundingBox();
   if (!box) return -1;
-  // Centre crop: avoids the floor plan (top-left), fps (top-right),
-  // the header, and the room strip and toolbar along the bottom.
+  // Crop the lower middle: high enough to clear the toolbar, low enough to
+  // contain floor and furniture in every room. The old crop sat at eye level,
+  // where a correctly rendered room is mostly blank wall.
   const buffer = await page.screenshot({
     clip: {
       x: box.x + box.width * 0.3,
-      y: box.y + box.height * 0.3,
+      y: box.y + box.height * 0.45,
       width: box.width * 0.4,
-      height: box.height * 0.35,
+      height: box.height * 0.33,
     },
   });
   const { PNG } = await import('pngjs');
   const png = PNG.sync.read(buffer);
+
   let different = 0;
+  let sum = 0;
+  let sumSq = 0;
+  const pixels = png.width * png.height;
   for (let i = 0; i < png.data.length; i += 4) {
-    const dr = Math.abs(png.data[i] - 20);
-    const dg = Math.abs(png.data[i + 1] - 23);
-    const db = Math.abs(png.data[i + 2] - 28);
-    if (dr + dg + db > 24) different++;
+    const r = png.data[i];
+    const g = png.data[i + 1];
+    const b = png.data[i + 2];
+    // Distance from the renderer's clear colour — what an empty canvas is.
+    // Keep in step with setClearColor() in SplatScene.tsx.
+    if (Math.abs(r - 0xf3) + Math.abs(g - 0xf6) + Math.abs(b - 0xf8) > 24) different++;
+    const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    sum += luma;
+    sumSq += luma * luma;
   }
-  return different / (png.width * png.height);
+
+  // Second, colour-independent signal: an empty canvas is perfectly uniform.
+  // On its own the clear-colour test is fragile — when the background changed
+  // from near-black to near-white and this constant did not, every pixel
+  // counted as "different" and the check could no longer fail at all.
+  const variance = sumSq / pixels - (sum / pixels) ** 2;
+  if (Math.sqrt(variance) < 4) return 0;
+
+  return different / pixels;
 }
 
 test('the splat scene actually renders pixels', async ({ page }, testInfo) => {
@@ -113,7 +142,7 @@ test('capture the second room', async ({ page }, testInfo) => {
   const label = testInfo.project.name;
   await page.goto(`/p/${PROJECT}`);
   await waitForScene(page);
-  await page.getByTestId('room-strip').getByRole('tab', { name: /Bedroom/ }).click();
+  await page.getByTestId('room-strip').getByRole('tab', { name: /Main bedroom/ }).click();
   await page.waitForTimeout(2500);
   await capture(page, `m2-bedroom-${label}`);
 });
@@ -144,6 +173,9 @@ test('capture the furniture panel', async ({ page }, testInfo) => {
  */
 test('swapping the floor visibly changes the room', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', 'checked once, on desktop');
+  // Polls for up to 110 s on top of the scene load, and every screenshot in
+  // that loop costs about a frame at roughly 1 fps under SwiftShader.
+  test.setTimeout(420_000);
   await page.goto(`/p/${PROJECT}`);
   await waitForScene(page);
 
@@ -152,9 +184,10 @@ test('swapping the floor visibly changes the room', async ({ page }, testInfo) =
 
   // Pitch down with discrete key presses rather than a drag: at roughly one
   // frame per second under software rendering, pointermove delivery is
-  // unreliable and the resulting angle varies between runs.
+  // unreliable and the resulting angle varies between runs. 'f' looks down —
+  // the arrow keys walk now that the viewer is free-roam.
   await page.locator('body').click({ position: { x: 5, y: 5 } });
-  for (let i = 0; i < 12; i++) await page.keyboard.press('ArrowUp');
+  for (let i = 0; i < 12; i++) await page.keyboard.press('f');
   await page.waitForTimeout(5000);
 
   // Bottom centre-right: solid floor once the view is pitched down, clear of
@@ -167,27 +200,42 @@ test('swapping the floor visibly changes the room', async ({ page }, testInfo) =
   };
   const before = await page.screenshot({ clip: floorClip });
 
+  const { PNG } = await import('pngjs');
+  const a = PNG.sync.read(before);
+  const changedFraction = (shot: Buffer) => {
+    const b = PNG.sync.read(shot);
+    let changed = 0;
+    for (let i = 0; i < a.data.length; i += 4) {
+      const d =
+        Math.abs(a.data[i] - b.data[i]) +
+        Math.abs(a.data[i + 1] - b.data[i + 1]) +
+        Math.abs(a.data[i + 2] - b.data[i + 2]);
+      if (d > 24) changed++;
+    }
+    return changed / (a.width * a.height);
+  };
+
   await page.getByTestId('tool-floors').click();
   await page.locator('[data-floor-id="walnut-dark-plank"]').click();
   await page.getByTestId('tool-floors').click();
-  // Software rendering runs at about 1 fps here, so give it real time to
-  // produce a frame with the new floor in it.
-  await page.waitForTimeout(8000);
 
-  const after = await page.screenshot({ clip: floorClip });
-
-  const { PNG } = await import('pngjs');
-  const a = PNG.sync.read(before);
-  const b = PNG.sync.read(after);
-  let changed = 0;
-  for (let i = 0; i < a.data.length; i += 4) {
-    const d =
-      Math.abs(a.data[i] - b.data[i]) +
-      Math.abs(a.data[i + 1] - b.data[i + 1]) +
-      Math.abs(a.data[i + 2] - b.data[i + 2]);
-    if (d > 24) changed++;
+  // Poll rather than wait a fixed time. The replacement floor's colour,
+  // normal and roughness maps are real downloaded textures (~2.4 MB a set)
+  // and software rendering here is about one frame per second, so "long
+  // enough" is not a constant: a fixed 8 s wait passed on a warm HTTP cache
+  // and failed on a cold one.
+  //
+  // Polling the pixels, rather than waiting on the three map responses,
+  // because a cached texture may produce no network response at all — waiting
+  // for one hung until the test's own timeout.
+  let fraction = 0;
+  const deadline = Date.now() + 110_000;
+  while (Date.now() < deadline) {
+    fraction = changedFraction(await page.screenshot({ clip: floorClip }));
+    if (fraction > 0.4) break;
+    await page.waitForTimeout(1500);
   }
-  const fraction = changed / (a.width * a.height);
+
   console.log(`floor pixels changed: ${(fraction * 100).toFixed(1)}%`);
   expect(
     fraction,
