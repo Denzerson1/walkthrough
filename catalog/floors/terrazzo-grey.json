@@ -16,8 +16,13 @@
     0.6
   ],
   "glossy": true,
-  "license": "CC0",
+  "license": "CC0-1.0",
   "source": "https://ambientcg.com/view?id=Terrazzo009",
-  "maps": {},
-  "note": "Texture maps not downloaded yet. Fetch from `source` and place under data/textures/, then fill `maps`."
+  "maps": {
+    "albedo": "/files/assets/floors/terrazzo-grey/color.jpg",
+    "normal": "/files/assets/floors/terrazzo-grey/normal.jpg",
+    "roughness": "/files/assets/floors/terrazzo-grey/roughness.jpg"
+  },
+  "tintAlbedo": false,
+  "assetStatus": "ready"
 }

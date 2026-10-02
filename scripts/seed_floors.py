@@ -303,6 +303,30 @@ GENERATORS = {
 }
 
 
+#: Fields that `scripts/fetch_assets.py` owns once the textures are on disk.
+#:
+#: This script defines the catalog; the fetcher fills in what it downloaded.
+#: Re-seeding used to blank `maps` and restore a "not downloaded yet" note, so
+#: running `pnpm seed:floors` after `pnpm seed:assets` silently reverted every
+#: floor to a flat colour.
+_FETCHED_KEYS = ("maps", "tintAlbedo", "assetStatus", "license", "source")
+
+_NOT_FETCHED = {
+    "maps": {},
+    "note": "No texture maps yet. Run `pnpm seed:assets` to download them.",
+}
+
+
+def _downloaded_fields(floor_id: str) -> dict:
+    path = CATALOG / f"{floor_id}.json"
+    if not path.is_file():
+        return dict(_NOT_FETCHED)
+    existing = json.loads(path.read_text(encoding="utf-8"))
+    if not existing.get("maps"):
+        return dict(_NOT_FETCHED)
+    return {k: existing[k] for k in _FETCHED_KEYS if k in existing}
+
+
 def main() -> int:
     CATALOG.mkdir(parents=True, exist_ok=True)
     THUMBS.mkdir(parents=True, exist_ok=True)
@@ -310,11 +334,7 @@ def main() -> int:
     written = 0
     for entry in SOURCED:
         record = dict(entry)
-        record["maps"] = {}
-        record["note"] = (
-            "Texture maps not downloaded yet. Fetch from `source` and place under "
-            "data/textures/, then fill `maps`."
-        )
+        record.update(_downloaded_fields(entry["id"]))
         (CATALOG / f"{entry['id']}.json").write_text(
             json.dumps(record, indent=2) + "\n", encoding="utf-8"
         )

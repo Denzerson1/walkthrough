@@ -17,8 +17,13 @@
     0.3
   ],
   "glossy": false,
-  "license": "CC0",
+  "license": "CC0-1.0",
   "source": "https://ambientcg.com/view?id=Tiles074",
-  "maps": {},
-  "note": "Texture maps not downloaded yet. Fetch from `source` and place under data/textures/, then fill `maps`."
+  "maps": {
+    "albedo": "/files/assets/floors/terracotta-rustic/color.jpg",
+    "normal": "/files/assets/floors/terracotta-rustic/normal.jpg",
+    "roughness": "/files/assets/floors/terracotta-rustic/roughness.jpg"
+  },
+  "tintAlbedo": false,
+  "assetStatus": "ready"
 }

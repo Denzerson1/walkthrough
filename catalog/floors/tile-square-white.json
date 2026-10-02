@@ -16,8 +16,13 @@
     0.2
   ],
   "glossy": true,
-  "license": "CC0",
+  "license": "CC0-1.0",
   "source": "https://ambientcg.com/view?id=Tiles101",
-  "maps": {},
-  "note": "Texture maps not downloaded yet. Fetch from `source` and place under data/textures/, then fill `maps`."
+  "maps": {
+    "albedo": "/files/assets/floors/tile-square-white/color.jpg",
+    "normal": "/files/assets/floors/tile-square-white/normal.jpg",
+    "roughness": "/files/assets/floors/tile-square-white/roughness.jpg"
+  },
+  "tintAlbedo": false,
+  "assetStatus": "ready"
 }

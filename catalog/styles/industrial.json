@@ -1,0 +1,51 @@
+{
+  "id": "industrial",
+  "name": "Industrial",
+  "description": "Blackened steel, reclaimed timber and bare metal. Fewer, heavier pieces with space around them.",
+  "palette": [
+    "#e8e4dd",
+    "#6f6a62",
+    "#26282a",
+    "#9d7a52"
+  ],
+  "floorIds": [
+    "concrete-polished",
+    "slate-charcoal",
+    "walnut-dark-plank"
+  ],
+  "picks": {
+    "living": [
+      "industrial-sofa",
+      "industrial-armchair",
+      "industrial-coffee-table",
+      "industrial-shelves",
+      "industrial-plant"
+    ],
+    "bedroom": [
+      "industrial-bed",
+      "industrial-stool",
+      "industrial-shelves"
+    ],
+    "dining": [
+      "industrial-dining-table",
+      "industrial-stool",
+      "industrial-stool"
+    ],
+    "office": [
+      "industrial-desk",
+      "industrial-stool",
+      "industrial-shelves"
+    ],
+    "hallway": [
+      "industrial-shelves",
+      "industrial-plant"
+    ],
+    "kitchen": [
+      "industrial-dining-table",
+      "industrial-stool"
+    ]
+  },
+  "complete": true,
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com"
+}

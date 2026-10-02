@@ -21,7 +21,7 @@
     "lint:py": "uv run ruff check services pipeline scripts",
     "seed:testscene": "uv run python scripts/make_test_scene.py --project demo-01",
     "seed:floors": "uv run python scripts/seed_floors.py",
-    "seed:furniture": "uv run python scripts/seed_furniture.py",
+    "seed:assets": "uv run python scripts/fetch_assets.py",
     "evals:assistant": "uv run python scripts/run_assistant_evals.py",
     "pipeline": "uv run pipeline"
   },

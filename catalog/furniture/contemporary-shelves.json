@@ -1,0 +1,27 @@
+{
+  "id": "contemporary-shelves",
+  "name": "Oak shelving",
+  "category": "shelf",
+  "styles": [
+    "contemporary"
+  ],
+  "colors": [
+    "#eae6df",
+    "#9aa39b"
+  ],
+  "dimensionsM": [
+    0.418,
+    1.75,
+    1.212
+  ],
+  "glb": "/files/assets/furniture/contemporary-shelves/wooden_display_shelves_01_1k.gltf",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/wooden_display_shelves_01",
+  "measuredM": [
+    0.372,
+    1.556,
+    1.078
+  ]
+}

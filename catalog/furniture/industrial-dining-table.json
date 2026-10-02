@@ -1,0 +1,27 @@
+{
+  "id": "industrial-dining-table",
+  "name": "Workbench table",
+  "category": "dining_table",
+  "styles": [
+    "industrial"
+  ],
+  "colors": [
+    "#e8e4dd",
+    "#6f6a62"
+  ],
+  "dimensionsM": [
+    1.063,
+    0.75,
+    0.662
+  ],
+  "glb": "/files/assets/furniture/industrial-dining-table/wooden_table_02_1k.gltf",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/wooden_table_02",
+  "measuredM": [
+    1.134,
+    0.8,
+    0.706
+  ]
+}

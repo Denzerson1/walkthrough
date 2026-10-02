@@ -16,8 +16,13 @@
     0.2
   ],
   "glossy": false,
-  "license": "CC0",
-  "source": "https://ambientcg.com/view?id=WoodFloor043",
-  "maps": {},
-  "note": "Texture maps not downloaded yet. Fetch from `source` and place under data/textures/, then fill `maps`."
+  "license": "CC0-1.0",
+  "source": "https://ambientcg.com/view?id=WoodFloor040",
+  "maps": {
+    "albedo": "/files/assets/floors/oak-plank-natural/color.jpg",
+    "normal": "/files/assets/floors/oak-plank-natural/normal.jpg",
+    "roughness": "/files/assets/floors/oak-plank-natural/roughness.jpg"
+  },
+  "tintAlbedo": false,
+  "assetStatus": "ready"
 }

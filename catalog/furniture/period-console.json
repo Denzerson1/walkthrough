@@ -1,0 +1,27 @@
+{
+  "id": "period-console",
+  "name": "Hall console",
+  "category": "sideboard",
+  "styles": [
+    "period"
+  ],
+  "colors": [
+    "#ece4d6",
+    "#6b4f33"
+  ],
+  "dimensionsM": [
+    1.301,
+    0.8,
+    0.497
+  ],
+  "glb": "/files/assets/furniture/period-console/ClassicConsole_01_1k.gltf",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/ClassicConsole_01",
+  "measuredM": [
+    1.543,
+    0.949,
+    0.589
+  ]
+}

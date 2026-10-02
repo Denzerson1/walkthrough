@@ -1,44 +1,51 @@
 {
   "id": "mid-century",
-  "name": "Mid-Century Modern",
-  "description": "Teak and walnut, tapered legs, olive and burnt orange against warm neutrals.",
+  "name": "Mid-Century",
+  "description": "Tan leather, turned wood and tapered legs. Warmer than the contemporary set, with rounder shapes.",
   "palette": [
     "#e5dcc9",
     "#b8743f",
     "#7d8c7a",
     "#4a3a2a"
   ],
-  "materials": [
-    "teak",
-    "walnut",
-    "wool",
-    "moulded ply"
-  ],
   "floorIds": [
     "oak-herringbone-light",
     "vintage-parquet-chevron",
-    "terrazzo-grey"
+    "oak-plank-natural"
   ],
   "picks": {
     "living": [
-      "sofa-kjaer-2",
-      "armchair-shell",
-      "coffee-noguchi",
-      "sideboard-teak",
-      "lamp-arc-floor"
+      "mid-century-sofa",
+      "mid-century-lounge-chair",
+      "mid-century-coffee-table",
+      "mid-century-ottoman",
+      "mid-century-plant"
     ],
     "bedroom": [
-      "bed-double-oak",
-      "sideboard-teak"
+      "mid-century-bed",
+      "mid-century-lattice-table",
+      "mid-century-sideboard"
     ],
     "dining": [
-      "table-ercol-oval",
-      "armchair-shell"
+      "mid-century-dining-table",
+      "mid-century-dining-chair",
+      "mid-century-dining-chair"
     ],
     "office": [
-      "desk-simple-oak",
-      "shelf-string-wall"
+      "mid-century-dining-table",
+      "mid-century-dining-chair",
+      "mid-century-shelves"
+    ],
+    "hallway": [
+      "mid-century-sideboard",
+      "mid-century-plant"
+    ],
+    "kitchen": [
+      "mid-century-dining-table",
+      "mid-century-dining-chair"
     ]
   },
-  "complete": true
+  "complete": true,
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com"
 }

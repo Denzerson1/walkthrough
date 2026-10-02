@@ -1,0 +1,27 @@
+{
+  "id": "mid-century-lattice-table",
+  "name": "Lattice side table",
+  "category": "sideboard",
+  "styles": [
+    "mid-century"
+  ],
+  "colors": [
+    "#e5dcc9",
+    "#b8743f"
+  ],
+  "dimensionsM": [
+    1.365,
+    0.42,
+    1.366
+  ],
+  "glb": "/files/assets/furniture/mid-century-lattice-table/modern_coffee_table_02_1k.gltf",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/modern_coffee_table_02",
+  "measuredM": [
+    1.199,
+    0.369,
+    1.2
+  ]
+}

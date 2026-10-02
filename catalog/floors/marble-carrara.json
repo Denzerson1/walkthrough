@@ -17,8 +17,13 @@
     0.8
   ],
   "glossy": true,
-  "license": "CC0",
-  "source": "https://ambientcg.com/view?id=Marble016",
-  "maps": {},
-  "note": "Texture maps not downloaded yet. Fetch from `source` and place under data/textures/, then fill `maps`."
+  "license": "CC0-1.0",
+  "source": "https://ambientcg.com/view?id=Marble012",
+  "maps": {
+    "albedo": "/files/assets/floors/marble-carrara/color.jpg",
+    "normal": "/files/assets/floors/marble-carrara/normal.jpg",
+    "roughness": "/files/assets/floors/marble-carrara/roughness.jpg"
+  },
+  "tintAlbedo": false,
+  "assetStatus": "ready"
 }

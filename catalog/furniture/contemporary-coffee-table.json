@@ -1,0 +1,27 @@
+{
+  "id": "contemporary-coffee-table",
+  "name": "Coffee table",
+  "category": "coffee_table",
+  "styles": [
+    "contemporary"
+  ],
+  "colors": [
+    "#eae6df",
+    "#9aa39b"
+  ],
+  "dimensionsM": [
+    0.585,
+    0.38,
+    1.171
+  ],
+  "glb": "/files/assets/furniture/contemporary-coffee-table/modern_coffee_table_01_1k.gltf",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/modern_coffee_table_01",
+  "measuredM": [
+    0.6,
+    0.39,
+    1.202
+  ]
+}

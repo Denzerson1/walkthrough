@@ -1,0 +1,27 @@
+{
+  "id": "mid-century-shelves",
+  "name": "Open shelving",
+  "category": "shelf",
+  "styles": [
+    "mid-century"
+  ],
+  "colors": [
+    "#e5dcc9",
+    "#b8743f"
+  ],
+  "dimensionsM": [
+    0.923,
+    1.8,
+    0.422
+  ],
+  "glb": "/files/assets/furniture/mid-century-shelves/steel_frame_shelves_01_1k.gltf",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/steel_frame_shelves_01",
+  "measuredM": [
+    10.974,
+    21.405,
+    5.021
+  ]
+}

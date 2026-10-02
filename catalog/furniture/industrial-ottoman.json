@@ -1,0 +1,27 @@
+{
+  "id": "industrial-ottoman",
+  "name": "Leather ottoman",
+  "category": "chair",
+  "styles": [
+    "industrial"
+  ],
+  "colors": [
+    "#e8e4dd",
+    "#6f6a62"
+  ],
+  "dimensionsM": [
+    0.596,
+    0.42,
+    0.418
+  ],
+  "glb": "/files/assets/furniture/industrial-ottoman/Ottoman_01_1k.gltf",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/Ottoman_01",
+  "measuredM": [
+    0.885,
+    0.624,
+    0.621
+  ]
+}

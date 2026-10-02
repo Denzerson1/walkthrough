@@ -1,0 +1,27 @@
+{
+  "id": "contemporary-side-table",
+  "name": "Oak side table",
+  "category": "sideboard",
+  "styles": [
+    "contemporary"
+  ],
+  "colors": [
+    "#eae6df",
+    "#9aa39b"
+  ],
+  "dimensionsM": [
+    0.519,
+    0.52,
+    0.425
+  ],
+  "glb": "/files/assets/furniture/contemporary-side-table/side_table_01_1k.gltf",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/side_table_01",
+  "measuredM": [
+    0.55,
+    0.551,
+    0.45
+  ]
+}

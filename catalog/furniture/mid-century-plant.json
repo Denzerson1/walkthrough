@@ -1,0 +1,27 @@
+{
+  "id": "mid-century-plant",
+  "name": "Potted plant",
+  "category": "plant",
+  "styles": [
+    "mid-century"
+  ],
+  "colors": [
+    "#e5dcc9",
+    "#b8743f"
+  ],
+  "dimensionsM": [
+    0.667,
+    0.8,
+    0.625
+  ],
+  "glb": "/files/assets/furniture/mid-century-plant/potted_plant_02_1k.gltf",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/potted_plant_02",
+  "measuredM": [
+    0.701,
+    0.841,
+    0.657
+  ]
+}

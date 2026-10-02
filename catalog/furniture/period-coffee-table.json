@@ -1,0 +1,27 @@
+{
+  "id": "period-coffee-table",
+  "name": "Carved coffee table",
+  "category": "coffee_table",
+  "styles": [
+    "period"
+  ],
+  "colors": [
+    "#ece4d6",
+    "#6b4f33"
+  ],
+  "dimensionsM": [
+    1.162,
+    0.45,
+    1.162
+  ],
+  "glb": "/files/assets/furniture/period-coffee-table/gothic_coffee_table_1k.gltf",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/gothic_coffee_table",
+  "measuredM": [
+    1.443,
+    0.559,
+    1.443
+  ]
+}

@@ -90,14 +90,23 @@ jobs:
         run: pnpm --filter @walkthrough/web exec playwright install --with-deps chromium webkit
 
       - name: Generate the synthetic test scene
-        # Committing a 24 MB splat is forbidden (brief §2.2), so CI regenerates
+        # Committing a large splat is forbidden (brief §2.2), so CI regenerates
         # it from the committed generator.
-        run: pnpm seed:testscene
+        #
+        # Deliberately lighter than the demo scene's 1.4 M. CI renders through
+        # SwiftShader at roughly a frame per second, and these tests check
+        # behaviour — that the splat is on screen, that a floor swap changes
+        # pixels — not how good it looks. At full size they spend forty
+        # minutes and still time out on the first attempt.
+        run: pnpm seed:testscene -- --splats 400000
 
       - name: Seed catalogs
-        run: |
-          pnpm seed:floors
-          pnpm seed:furniture
+        # Only the floor catalog is generated. The furniture catalog is written
+        # by `pnpm seed:assets` from scripts/furniture_themes.py and committed,
+        # and re-running it here would download ~150 MB from two third-party
+        # hosts on every build. Without the binaries the viewer draws a
+        # correctly sized box, which is all these tests check.
+        run: pnpm seed:floors
 
       - name: Start API
         run: |

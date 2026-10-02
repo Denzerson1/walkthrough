@@ -16,8 +16,13 @@
     0.6
   ],
   "glossy": false,
-  "license": "CC0",
+  "license": "CC0-1.0",
   "source": "https://ambientcg.com/view?id=Rock030",
-  "maps": {},
-  "note": "Texture maps not downloaded yet. Fetch from `source` and place under data/textures/, then fill `maps`."
+  "maps": {
+    "albedo": "/files/assets/floors/limestone-sand/color.jpg",
+    "normal": "/files/assets/floors/limestone-sand/normal.jpg",
+    "roughness": "/files/assets/floors/limestone-sand/roughness.jpg"
+  },
+  "tintAlbedo": false,
+  "assetStatus": "ready"
 }

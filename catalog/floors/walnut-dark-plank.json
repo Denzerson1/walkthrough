@@ -16,8 +16,13 @@
     0.18
   ],
   "glossy": false,
-  "license": "CC0",
-  "source": "https://ambientcg.com/view?id=WoodFloor051",
-  "maps": {},
-  "note": "Texture maps not downloaded yet. Fetch from `source` and place under data/textures/, then fill `maps`."
+  "license": "CC0-1.0",
+  "source": "https://ambientcg.com/view?id=WoodFloor048",
+  "maps": {
+    "albedo": "/files/assets/floors/walnut-dark-plank/color.jpg",
+    "normal": "/files/assets/floors/walnut-dark-plank/normal.jpg",
+    "roughness": "/files/assets/floors/walnut-dark-plank/roughness.jpg"
+  },
+  "tintAlbedo": false,
+  "assetStatus": "ready"
 }

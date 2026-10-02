@@ -1,0 +1,22 @@
+{
+  "id": "mid-century-sofa",
+  "name": "Two-seat sofa",
+  "category": "sofa",
+  "styles": [
+    "mid-century"
+  ],
+  "colors": [
+    "#a8794f"
+  ],
+  "dimensionsM": [
+    2.15,
+    0.78,
+    0.92
+  ],
+  "glb": null,
+  "shape": "sofa",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "Built in the viewer (buildProceduralItem)"
+}

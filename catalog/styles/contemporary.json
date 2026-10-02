@@ -1,21 +1,51 @@
 {
   "id": "contemporary",
   "name": "Contemporary",
-  "description": "Current, gallery-like: large forms, matt finishes, restrained colour.",
+  "description": "Low slab seating, pale oak and matt black. Nothing carved, nothing skirted, one plant and clear surfaces.",
   "palette": [
-    "#f2f0ec",
-    "#a8a49c",
-    "#3a3f49"
-  ],
-  "materials": [
-    "concrete",
-    "boucle",
-    "blackened steel"
+    "#eae6df",
+    "#9aa39b",
+    "#2f332e",
+    "#c2a98c"
   ],
   "floorIds": [
-    "concrete-polished",
-    "limestone-sand"
+    "ash-pale-wide",
+    "oak-plank-natural",
+    "concrete-polished"
   ],
-  "picks": {},
-  "complete": false
+  "picks": {
+    "living": [
+      "contemporary-sofa",
+      "contemporary-armchair",
+      "contemporary-coffee-table",
+      "contemporary-sideboard",
+      "contemporary-plant"
+    ],
+    "bedroom": [
+      "contemporary-bed",
+      "contemporary-side-table",
+      "contemporary-sideboard"
+    ],
+    "dining": [
+      "contemporary-dining-table",
+      "contemporary-dining-chair",
+      "contemporary-dining-chair"
+    ],
+    "office": [
+      "contemporary-desk",
+      "contemporary-dining-chair",
+      "contemporary-shelves"
+    ],
+    "hallway": [
+      "contemporary-sideboard",
+      "contemporary-plant"
+    ],
+    "kitchen": [
+      "contemporary-dining-table",
+      "contemporary-dining-chair"
+    ]
+  },
+  "complete": true,
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com"
 }

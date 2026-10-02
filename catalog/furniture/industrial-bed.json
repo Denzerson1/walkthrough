@@ -1,0 +1,22 @@
+{
+  "id": "industrial-bed",
+  "name": "Platform bed",
+  "category": "bed",
+  "styles": [
+    "industrial"
+  ],
+  "colors": [
+    "#6d7174"
+  ],
+  "dimensionsM": [
+    1.62,
+    0.95,
+    2.08
+  ],
+  "glb": null,
+  "shape": "bed",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "Built in the viewer (buildProceduralItem)"
+}

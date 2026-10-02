@@ -1,0 +1,27 @@
+{
+  "id": "period-dining-table",
+  "name": "Pedestal table",
+  "category": "dining_table",
+  "styles": [
+    "period"
+  ],
+  "colors": [
+    "#ece4d6",
+    "#6b4f33"
+  ],
+  "dimensionsM": [
+    1.044,
+    0.75,
+    1.044
+  ],
+  "glb": "/files/assets/furniture/period-dining-table/round_wooden_table_01_1k.gltf",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/round_wooden_table_01",
+  "measuredM": [
+    1.399,
+    1.005,
+    1.399
+  ]
+}

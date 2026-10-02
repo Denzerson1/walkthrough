@@ -1,0 +1,27 @@
+{
+  "id": "period-plant",
+  "name": "Potted plant",
+  "category": "plant",
+  "styles": [
+    "period"
+  ],
+  "colors": [
+    "#ece4d6",
+    "#6b4f33"
+  ],
+  "dimensionsM": [
+    0.667,
+    0.8,
+    0.625
+  ],
+  "glb": "/files/assets/furniture/period-plant/potted_plant_02_1k.gltf",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/potted_plant_02",
+  "measuredM": [
+    0.701,
+    0.841,
+    0.657
+  ]
+}

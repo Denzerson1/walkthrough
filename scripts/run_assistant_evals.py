@@ -141,7 +141,7 @@ def main() -> int:
     )
 
     if not catalog.floors:
-        print("\nNo catalog on disk. Run `pnpm seed:floors` and `pnpm seed:furniture` first.")
+        print("\nNo catalog on disk. Run `pnpm seed:floors` and `pnpm seed:assets` first.")
         return 2
 
     if args.dry_run:

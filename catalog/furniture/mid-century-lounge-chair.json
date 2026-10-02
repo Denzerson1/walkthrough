@@ -1,0 +1,27 @@
+{
+  "id": "mid-century-lounge-chair",
+  "name": "Leather lounge chair",
+  "category": "chair",
+  "styles": [
+    "mid-century"
+  ],
+  "colors": [
+    "#e5dcc9",
+    "#b8743f"
+  ],
+  "dimensionsM": [
+    0.742,
+    0.86,
+    0.875
+  ],
+  "glb": "/files/assets/furniture/mid-century-lounge-chair/mid_century_lounge_chair_1k.gltf",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/mid_century_lounge_chair",
+  "measuredM": [
+    1.009,
+    1.169,
+    1.19
+  ]
+}

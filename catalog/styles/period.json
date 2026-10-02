@@ -1,0 +1,51 @@
+{
+  "id": "period",
+  "name": "Period",
+  "description": "Carved oak, buttoned leather and turned legs \u2014 for a flat being sold as a period property. Deliberately old.",
+  "palette": [
+    "#ece4d6",
+    "#6b4f33",
+    "#2f2318",
+    "#8a6b45"
+  ],
+  "floorIds": [
+    "walnut-dark-plank",
+    "vintage-parquet-chevron",
+    "marble-carrara"
+  ],
+  "picks": {
+    "living": [
+      "period-sofa",
+      "period-armchair",
+      "period-coffee-table",
+      "period-cabinet",
+      "period-plant"
+    ],
+    "bedroom": [
+      "period-bed",
+      "period-nightstand",
+      "period-cabinet"
+    ],
+    "dining": [
+      "period-dining-table",
+      "period-armchair",
+      "period-armchair"
+    ],
+    "office": [
+      "period-dining-table",
+      "period-rocking-chair",
+      "period-cabinet"
+    ],
+    "hallway": [
+      "period-console",
+      "period-plant"
+    ],
+    "kitchen": [
+      "period-dining-table",
+      "period-rocking-chair"
+    ]
+  },
+  "complete": true,
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com"
+}

@@ -1,0 +1,27 @@
+{
+  "id": "industrial-shelves",
+  "name": "Steel shelving",
+  "category": "shelf",
+  "styles": [
+    "industrial"
+  ],
+  "colors": [
+    "#e8e4dd",
+    "#6f6a62"
+  ],
+  "dimensionsM": [
+    0.512,
+    1.85,
+    0.434
+  ],
+  "glb": "/files/assets/furniture/industrial-shelves/steel_frame_shelves_02_1k.gltf",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/steel_frame_shelves_02",
+  "measuredM": [
+    0.593,
+    2.142,
+    0.502
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "id": "mid-century-sideboard",
+  "name": "Slatted sideboard",
+  "category": "sideboard",
+  "styles": [
+    "mid-century"
+  ],
+  "colors": [
+    "#e5dcc9",
+    "#b8743f"
+  ],
+  "dimensionsM": [
+    1.866,
+    0.52,
+    0.398
+  ],
+  "glb": "/files/assets/furniture/mid-century-sideboard/modern_wooden_cabinet_1k.gltf",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/modern_wooden_cabinet",
+  "measuredM": [
+    2.44,
+    0.68,
+    0.52
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "id": "period-nightstand",
+  "name": "Nightstand",
+  "category": "sideboard",
+  "styles": [
+    "period"
+  ],
+  "colors": [
+    "#ece4d6",
+    "#6b4f33"
+  ],
+  "dimensionsM": [
+    0.503,
+    0.62,
+    0.376
+  ],
+  "glb": "/files/assets/furniture/period-nightstand/ClassicNightstand_01_1k.gltf",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/ClassicNightstand_01",
+  "measuredM": [
+    0.568,
+    0.7,
+    0.424
+  ]
+}

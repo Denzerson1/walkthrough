@@ -1,0 +1,27 @@
+{
+  "id": "industrial-coffee-table",
+  "name": "Steel coffee table",
+  "category": "coffee_table",
+  "styles": [
+    "industrial"
+  ],
+  "colors": [
+    "#e8e4dd",
+    "#6f6a62"
+  ],
+  "dimensionsM": [
+    0.512,
+    0.42,
+    0.499
+  ],
+  "glb": "/files/assets/furniture/industrial-coffee-table/industrial_coffee_table_1k.gltf",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/industrial_coffee_table",
+  "measuredM": [
+    0.778,
+    0.638,
+    0.758
+  ]
+}

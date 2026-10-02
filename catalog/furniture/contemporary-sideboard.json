@@ -1,0 +1,27 @@
+{
+  "id": "contemporary-sideboard",
+  "name": "Slatted sideboard",
+  "category": "sideboard",
+  "styles": [
+    "contemporary"
+  ],
+  "colors": [
+    "#eae6df",
+    "#9aa39b"
+  ],
+  "dimensionsM": [
+    1.866,
+    0.52,
+    0.398
+  ],
+  "glb": "/files/assets/furniture/contemporary-sideboard/modern_wooden_cabinet_1k.gltf",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/modern_wooden_cabinet",
+  "measuredM": [
+    2.44,
+    0.68,
+    0.52
+  ]
+}

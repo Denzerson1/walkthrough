@@ -1,0 +1,27 @@
+{
+  "id": "industrial-stool",
+  "name": "Metal stool",
+  "category": "chair",
+  "styles": [
+    "industrial"
+  ],
+  "colors": [
+    "#e8e4dd",
+    "#6f6a62"
+  ],
+  "dimensionsM": [
+    0.606,
+    0.62,
+    0.64
+  ],
+  "glb": "/files/assets/furniture/industrial-stool/metal_stool_02_1k.gltf",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/metal_stool_02",
+  "measuredM": [
+    0.448,
+    0.458,
+    0.473
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "id": "contemporary-dining-chair",
+  "name": "Dining chair",
+  "category": "chair",
+  "styles": [
+    "contemporary"
+  ],
+  "colors": [
+    "#eae6df",
+    "#9aa39b"
+  ],
+  "dimensionsM": [
+    0.393,
+    0.88,
+    0.521
+  ],
+  "glb": "/files/assets/furniture/contemporary-dining-chair/dining_chair_02_1k.gltf",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/dining_chair_02",
+  "measuredM": [
+    0.434,
+    0.973,
+    0.576
+  ]
+}

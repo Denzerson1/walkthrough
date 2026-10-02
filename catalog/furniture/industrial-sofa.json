@@ -1,0 +1,22 @@
+{
+  "id": "industrial-sofa",
+  "name": "Slab sofa",
+  "category": "sofa",
+  "styles": [
+    "industrial"
+  ],
+  "colors": [
+    "#5f6468"
+  ],
+  "dimensionsM": [
+    2.15,
+    0.78,
+    0.92
+  ],
+  "glb": null,
+  "shape": "sofa",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "Built in the viewer (buildProceduralItem)"
+}

@@ -1,0 +1,27 @@
+{
+  "id": "industrial-plant",
+  "name": "Potted tree",
+  "category": "plant",
+  "styles": [
+    "industrial"
+  ],
+  "colors": [
+    "#e8e4dd",
+    "#6f6a62"
+  ],
+  "dimensionsM": [
+    0.522,
+    1.2,
+    0.564
+  ],
+  "glb": "/files/assets/furniture/industrial-plant/potted_plant_01_1k.gltf",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/potted_plant_01",
+  "measuredM": [
+    0.587,
+    1.35,
+    0.634
+  ]
+}

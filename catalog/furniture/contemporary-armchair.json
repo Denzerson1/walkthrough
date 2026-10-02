@@ -1,0 +1,27 @@
+{
+  "id": "contemporary-armchair",
+  "name": "Leather armchair",
+  "category": "chair",
+  "styles": [
+    "contemporary"
+  ],
+  "colors": [
+    "#eae6df",
+    "#9aa39b"
+  ],
+  "dimensionsM": [
+    0.625,
+    0.78,
+    0.753
+  ],
+  "glb": "/files/assets/furniture/contemporary-armchair/modern_arm_chair_01_1k.gltf",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/modern_arm_chair_01",
+  "measuredM": [
+    0.82,
+    1.023,
+    0.987
+  ]
+}

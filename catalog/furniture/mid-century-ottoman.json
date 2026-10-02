@@ -1,0 +1,27 @@
+{
+  "id": "mid-century-ottoman",
+  "name": "Leather ottoman",
+  "category": "chair",
+  "styles": [
+    "mid-century"
+  ],
+  "colors": [
+    "#e5dcc9",
+    "#b8743f"
+  ],
+  "dimensionsM": [
+    0.596,
+    0.42,
+    0.418
+  ],
+  "glb": "/files/assets/furniture/mid-century-ottoman/Ottoman_01_1k.gltf",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/Ottoman_01",
+  "measuredM": [
+    0.885,
+    0.624,
+    0.621
+  ]
+}

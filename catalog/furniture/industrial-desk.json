@@ -1,0 +1,27 @@
+{
+  "id": "industrial-desk",
+  "name": "Steel desk",
+  "category": "desk",
+  "styles": [
+    "industrial"
+  ],
+  "colors": [
+    "#e8e4dd",
+    "#6f6a62"
+  ],
+  "dimensionsM": [
+    1.904,
+    0.75,
+    0.901
+  ],
+  "glb": "/files/assets/furniture/industrial-desk/metal_office_desk_1k.gltf",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/metal_office_desk",
+  "measuredM": [
+    2.0,
+    0.788,
+    0.947
+  ]
+}

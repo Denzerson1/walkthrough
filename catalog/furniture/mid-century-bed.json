@@ -1,0 +1,22 @@
+{
+  "id": "mid-century-bed",
+  "name": "Low bed",
+  "category": "bed",
+  "styles": [
+    "mid-century"
+  ],
+  "colors": [
+    "#b9a98f"
+  ],
+  "dimensionsM": [
+    1.62,
+    0.95,
+    2.08
+  ],
+  "glb": null,
+  "shape": "bed",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "Built in the viewer (buildProceduralItem)"
+}

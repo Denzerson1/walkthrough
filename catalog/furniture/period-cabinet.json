@@ -1,0 +1,27 @@
+{
+  "id": "period-cabinet",
+  "name": "Glazed cabinet",
+  "category": "wardrobe",
+  "styles": [
+    "period"
+  ],
+  "colors": [
+    "#ece4d6",
+    "#6b4f33"
+  ],
+  "dimensionsM": [
+    1.674,
+    1.85,
+    0.555
+  ],
+  "glb": "/files/assets/furniture/period-cabinet/vintage_cabinet_01_1k.gltf",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/vintage_cabinet_01",
+  "measuredM": [
+    2.022,
+    2.235,
+    0.67
+  ]
+}

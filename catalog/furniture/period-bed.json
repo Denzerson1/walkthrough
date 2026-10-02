@@ -1,0 +1,27 @@
+{
+  "id": "period-bed",
+  "name": "Carved bed",
+  "category": "bed",
+  "styles": [
+    "period"
+  ],
+  "colors": [
+    "#ece4d6",
+    "#6b4f33"
+  ],
+  "dimensionsM": [
+    1.461,
+    1.5,
+    1.995
+  ],
+  "glb": "/files/assets/furniture/period-bed/GothicBed_01_1k.gltf",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/GothicBed_01",
+  "measuredM": [
+    1.494,
+    1.534,
+    2.04
+  ]
+}

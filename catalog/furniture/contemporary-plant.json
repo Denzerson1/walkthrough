@@ -1,0 +1,27 @@
+{
+  "id": "contemporary-plant",
+  "name": "Potted plant",
+  "category": "plant",
+  "styles": [
+    "contemporary"
+  ],
+  "colors": [
+    "#eae6df",
+    "#9aa39b"
+  ],
+  "dimensionsM": [
+    0.346,
+    0.55,
+    0.381
+  ],
+  "glb": "/files/assets/furniture/contemporary-plant/potted_plant_04_1k.gltf",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/potted_plant_04",
+  "measuredM": [
+    0.168,
+    0.267,
+    0.185
+  ]
+}

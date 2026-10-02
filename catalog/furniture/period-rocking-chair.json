@@ -1,0 +1,27 @@
+{
+  "id": "period-rocking-chair",
+  "name": "Rocking chair",
+  "category": "chair",
+  "styles": [
+    "period"
+  ],
+  "colors": [
+    "#ece4d6",
+    "#6b4f33"
+  ],
+  "dimensionsM": [
+    0.747,
+    1.05,
+    0.879
+  ],
+  "glb": "/files/assets/furniture/period-rocking-chair/Rockingchair_01_1k.gltf",
+  "thumbnail": null,
+  "assetStatus": "ready",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/Rockingchair_01",
+  "measuredM": [
+    0.708,
+    0.995,
+    0.833
+  ]
+}
