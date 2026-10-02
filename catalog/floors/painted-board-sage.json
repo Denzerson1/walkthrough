@@ -1,5 +1,6 @@
 {
   "id": "painted-board-sage",
+  "baseColor": "#a8b2a0",
   "name": "Sage painted boards",
   "category": "painted",
   "tags": [

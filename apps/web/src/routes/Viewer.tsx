@@ -8,10 +8,11 @@ import { FloorPanel, FurniturePanel, Sheet } from '../components/Panels';
 import { RoomStrip } from '../components/RoomStrip';
 import { SplatScene } from '../components/SplatScene';
 import { StagedBadge } from '../components/StagedBadge';
-import { fileUrl, getJson, postEvent, sessionId } from '../lib/api';
+import { apiUrl, fileUrl, getJson, postEvent, sessionId } from '../lib/api';
 import type { Manifest } from '../lib/manifest';
 import { type CatalogItem, stagedRoomIds, useStore } from '../lib/store';
 import { isStaged } from '../lib/viewerState';
+import { polygonCentroid } from '../lib/geometry';
 
 export function Viewer() {
   const { projectId = '' } = useParams();
@@ -27,6 +28,7 @@ export function Viewer() {
   const [ready, setReady] = useState(false);
   const [fps, setFps] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
+  const [layoutNote, setLayoutNote] = useState<string | null>(null);
   const roomEnteredAt = useRef<number>(Date.now());
 
   // Load the manifest, catalog and any shared state.
@@ -75,8 +77,60 @@ export function Viewer() {
   }, [activeRoomId, manifest, projectId, session]);
 
   const staged = isStaged(viewer);
-  const stagedRooms = useMemo(() => stagedRoomIds(viewer), [viewer]);
+  const stagedRooms = useMemo(
+    () => stagedRoomIds(viewer, manifest?.items ?? []),
+    [viewer, manifest],
+  );
   const activeRoom = manifest?.rooms.find((r) => r.id === activeRoomId) ?? null;
+
+  /**
+   * Ask the server to lay the style out properly. The deterministic solver
+   * lives server-side (walkthrough_pipeline.layout), so the viewer and the
+   * assistant both get real placements rather than a pile at the centre.
+   */
+  const runAutoLayout = useCallback(
+    async (roomId: string, styleId: string) => {
+      try {
+        const response = await fetch(apiUrl('/api/layout'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project_id: projectId, room_id: roomId, style_id: styleId }),
+        });
+        if (!response.ok) {
+          const detail = await response
+            .json()
+            .then((b) => b.detail as string)
+            .catch(() => 'Could not lay this room out.');
+          setLayoutNote(detail);
+          return;
+        }
+        const body = await response.json();
+        if (body.floor_id) setFloor([roomId], body.floor_id);
+        for (const placement of body.placements as Array<{
+          itemId: string;
+          position: [number, number, number];
+          yaw: number;
+        }>) {
+          addItem({
+            uid: Math.random().toString(36).slice(2, 9),
+            itemId: placement.itemId,
+            roomId,
+            position: placement.position,
+            yaw: placement.yaw,
+          });
+        }
+        setLayoutNote(
+          body.skipped?.length
+            ? `Placed ${body.placements.length}; ${body.skipped.length} did not fit.`
+            : null,
+        );
+        postEvent(projectId, { session_id: session, event: 'style_tried', value: styleId });
+      } catch {
+        setLayoutNote('Could not reach the layout service.');
+      }
+    },
+    [projectId, session, setFloor, addItem],
+  );
 
   const applyActions = useCallback(
     (actions: AssistantAction[]) => {
@@ -106,26 +160,23 @@ export function Viewer() {
         } else if (action.tool === 'reset') {
           reset((args.roomId as unknown as string) ?? 'all');
         } else if (action.tool === 'apply_style' || action.tool === 'auto_layout') {
-          const style = catalog.styles.find((s) => s.id === (args.styleId as unknown as string));
-          const roomId = args.roomId as unknown as string;
-          if (style?.floorIds?.[0]) setFloor([roomId], style.floorIds[0]);
-          postEvent(projectId, {
-            session_id: session,
-            event: 'style_tried',
-            value: args.styleId as unknown as string,
-          });
+          void runAutoLayout(
+            args.roomId as unknown as string,
+            args.styleId as unknown as string,
+          );
         }
       }
     },
-    [setFloor, addItem, recolorItem, reset, catalog.styles, projectId, session],
+    [setFloor, addItem, recolorItem, reset, runAutoLayout, projectId, session],
   );
 
   function centreOf(roomId: string): [number, number, number] {
     const room = manifest?.rooms.find((r) => r.id === roomId);
-    if (!room || !room.floorPolygon.length) return [0, 0, 0];
-    const xs = room.floorPolygon.map((p) => p[0]);
-    const zs = room.floorPolygon.map((p) => p[1]);
-    return [(Math.min(...xs) + Math.max(...xs)) / 2, 0, (Math.min(...zs) + Math.max(...zs)) / 2];
+    if (!room || room.floorPolygon.length < 3) return [0, 0, 0];
+    // Centroid rather than the bounding-box centre: for an L-shaped room the
+    // box centre can fall outside the polygon entirely.
+    const [cx, cz] = polygonCentroid(room.floorPolygon);
+    return [cx, 0, cz];
   }
 
   async function share() {
@@ -155,10 +206,20 @@ export function Viewer() {
       {manifest && (
         <SplatScene
           manifest={manifest}
-          sceneUrl={fileUrl(projectId, manifest.assets?.scene ?? 'scene.ply')}
+          sceneUrl={fileUrl(
+            projectId,
+            // Prefer the body-without-floor so floor replacement can work.
+            manifest.assets?.sceneNoFloor ?? manifest.assets?.scene ?? 'scene.ply',
+          )}
+          floorUrl={
+            manifest.assets?.sceneNoFloor && manifest.assets?.floor
+              ? fileUrl(projectId, manifest.assets.floor)
+              : undefined
+          }
           activeRoomId={activeRoomId}
           viewer={viewer}
           floorCatalog={catalog.floors}
+          furnitureCatalog={catalog.furniture}
           showingOriginal={showingOriginal}
           onProgress={() => undefined}
           onReady={() => setReady(true)}
@@ -221,6 +282,18 @@ export function Viewer() {
         </div>
       )}
 
+      {layoutNote && (
+        <p
+          className="panel absolute left-1/2 w-[min(32ch,80vw)] -translate-x-1/2 border-l-2 px-3 py-2 text-[12px]"
+          style={{ top: 'calc(5.5rem + var(--safe-top))', borderColor: 'var(--staged)' }}
+          role="status"
+          data-testid="layout-note"
+          onClick={() => setLayoutNote(null)}
+        >
+          {layoutNote}
+        </p>
+      )}
+
       {fps !== null && ready && (
         <p
           className="measure panel absolute right-3 rounded-sm px-2 py-1 text-[10px] opacity-60"
@@ -279,19 +352,7 @@ export function Viewer() {
                     value: styleId,
                   });
                 }}
-                onAutoLayout={(styleId) => {
-                  const style = catalog.styles.find((s) => s.id === styleId);
-                  if (style?.floorIds?.[0]) setFloor([activeRoom.id], style.floorIds[0]);
-                  for (const itemId of style?.picks?.[activeRoom.type] ?? []) {
-                    addItem({
-                      uid: Math.random().toString(36).slice(2, 9),
-                      itemId,
-                      roomId: activeRoom.id,
-                      position: centreOf(activeRoom.id),
-                      yaw: 0,
-                    });
-                  }
-                }}
+                onAutoLayout={(styleId) => void runAutoLayout(activeRoom.id, styleId)}
               />
             )}
             {panel === 'assistant' && (

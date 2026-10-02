@@ -55,6 +55,7 @@ Thumbs.db
 !catalog/**/thumbnails/*.jpg
 !catalog/**/thumbnails/*.png
 !docs/screenshots/*.png
+!docs/screenshots/*.jpg
 
 # Playwright local artefacts
 apps/web/test-results/

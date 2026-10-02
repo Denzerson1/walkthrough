@@ -42,6 +42,9 @@ class Wall(BaseModel):
 
 
 class Opening(BaseModel):
+    """An opening in a wall. `offset` is the distance from the wall's start to
+    the opening's CENTRE, so it spans offset +/- width/2."""
+
     type: Literal["door", "window"]
     wallIndex: int
     offset: float
@@ -57,6 +60,10 @@ class Room(BaseModel):
     floorPolygon: list[Vec2] = Field(default_factory=list)
     walls: list[Wall] = Field(default_factory=list)
     openings: list[Opening] = Field(default_factory=list)
+    #: Average colour of this room's original floor splats, as #rrggbb.
+    #: Used to draw the room once floor splats are hidden for a replacement
+    #: elsewhere in the flat. See docs/SPEC.md §4.
+    originalFloorColor: str | None = None
 
     @field_validator("floorPolygon")
     @classmethod

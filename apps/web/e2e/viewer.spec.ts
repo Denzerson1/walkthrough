@@ -156,3 +156,17 @@ test.describe('editor', () => {
     await expect(page.getByRole('alert')).toBeVisible();
   });
 });
+
+test.describe('automatic layout', () => {
+  test('furnishing a room places items and stages it', async ({ page }) => {
+    await page.goto(`/p/${PROJECT}`);
+    await expect(page.getByTestId('room-strip')).toBeVisible();
+
+    await page.getByTestId('tool-furniture').click();
+    await page.getByRole('button', { name: 'Furnish automatically' }).click();
+
+    // The solver runs server-side, so this proves the round trip as well as
+    // the staging rule.
+    await expect(page.getByTestId('staged-badge')).toBeVisible({ timeout: 20_000 });
+  });
+});

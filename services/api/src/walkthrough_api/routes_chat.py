@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from collections import defaultdict
 from typing import Any
@@ -14,6 +15,8 @@ from .catalog import Catalog, load_catalog
 from .config import Settings, get_settings
 
 router = APIRouter(prefix="/api", tags=["assistant"])
+
+logger = logging.getLogger("walkthrough.assistant")
 
 # Cost guard: request timestamps per session (brief §M5).
 _CALLS: dict[str, list[float]] = defaultdict(list)
@@ -94,6 +97,10 @@ def run_conversation(
     """
     Drive the tool loop. Read-only tools are executed here; mutating tools are
     collected for the client and acknowledged so the model can finish talking.
+
+    Note on cost: assistant_max_tokens caps each turn, and the loop runs at
+    most MAX_TURNS times, so the worst case for one request is
+    assistant_max_tokens * MAX_TURNS output tokens.
     """
     import anthropic
 
@@ -224,4 +231,16 @@ def chat(
         manifest_item_ids=body.context.manifestItemIds,
     )
     messages = asst.build_messages(body.history, body.message)
-    return run_conversation(client, settings, catalog, ctx, messages)
+    reply = run_conversation(client, settings, catalog, ctx, messages)
+    # The brief's cost guard requires token usage to be logged, not just
+    # returned to the browser.
+    logger.info(
+        "assistant session=%s project=%s model=%s in=%d out=%d actions=%d",
+        body.session_id[:16],
+        body.project_id,
+        reply.model,
+        reply.usage["input_tokens"],
+        reply.usage["output_tokens"],
+        len(reply.actions),
+    )
+    return reply

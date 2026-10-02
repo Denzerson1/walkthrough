@@ -16,10 +16,15 @@ Design, per docs/BRIEF.md §M5:
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
 from .catalog import Catalog, CatalogKind, search, summarise
+
+#: A length check alone let "#zzzzzz" through to three.js, which warns and
+#: silently falls back to white.
+_HEX_COLOUR = re.compile(r"#[0-9a-fA-F]{6}")
 
 # Mutating tools the client applies to the viewer state.
 ACTION_TOOLS = {
@@ -243,7 +248,7 @@ def validate_action(name: str, args: dict[str, Any], catalog: Catalog, ctx: Chat
         if ctx.manifest_item_ids and item_id not in ctx.manifest_item_ids:
             raise ValidationFailure(f"There is no existing item {item_id!r} to recolor.")
         colour = str(args.get("colorHex", ""))
-        if not (colour.startswith("#") and len(colour) == 7):
+        if not _HEX_COLOUR.fullmatch(colour):
             raise ValidationFailure(f"{colour!r} is not a #rrggbb colour.")
     elif name == "reset":
         check_room(args.get("roomId", "all"))

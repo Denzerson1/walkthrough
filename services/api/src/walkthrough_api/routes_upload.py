@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlmodel import Session
 
-from . import textures
+from . import projects, textures
 from .config import Settings, get_settings
 from .db import UploadRecord, get_session
 from .storage import build_storage
@@ -39,17 +39,30 @@ async def upload_floor_photo(
     session: Session = Depends(db_dep),
 ) -> ProposeReply:
     """Step 1-2: accept a photo and propose the tile region."""
+    try:
+        projects.validate_project_id(project_id)
+    except projects.InvalidProjectId as exc:
+        raise HTTPException(status_code=400, detail="Invalid project id") from exc
     if file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(
             status_code=415,
             detail=f"Unsupported type {file.content_type!r}. Use JPEG, PNG or WebP.",
         )
-    data = await file.read()
-    if len(data) > settings.max_upload_bytes:
-        raise HTTPException(
-            status_code=413,
-            detail=f"Image is larger than {settings.max_upload_bytes // 1024 // 1024} MB.",
-        )
+
+    # Read in chunks and stop at the limit, rather than buffering a 1 GB body
+    # into memory before rejecting it.
+    limit = settings.max_upload_bytes
+    chunks: list[bytes] = []
+    total = 0
+    while chunk := await file.read(256 * 1024):
+        total += len(chunk)
+        if total > limit:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Image is larger than {limit // 1024 // 1024} MB.",
+            )
+        chunks.append(chunk)
+    data = b"".join(chunks)
     try:
         image = textures.strip_exif_and_decode(data)
     except ValueError as exc:
@@ -101,6 +114,10 @@ def rectify_floor_photo(
     session: Session = Depends(db_dep),
 ) -> RectifyReply:
     """Steps 3-6: rectify, make seamless, derive normal and roughness."""
+    try:
+        projects.validate_project_id(body.project_id)
+    except projects.InvalidProjectId as exc:
+        raise HTTPException(status_code=400, detail="Invalid project id") from exc
     if len(body.corners) != 4:
         raise HTTPException(status_code=400, detail="Exactly 4 corners are required.")
     if not 1.0 <= body.tile_size_cm <= 500.0:
@@ -118,6 +135,9 @@ def rectify_floor_photo(
     image = textures.strip_exif_and_decode(raw)
     corners = [(float(c[0]), float(c[1])) for c in body.corners]
     tile = textures.rectify(image, corners)
+    # Judge the photo on the rectified tile: after blending, the measurement
+    # is meaningless (see tiling_seam_error).
+    seam = textures.tiling_seam_error(tile)
     seamless = textures.make_seamless(tile)
     normal = textures.normal_from_luminance(seamless)
     roughness = textures.default_roughness(seamless)
@@ -145,9 +165,8 @@ def rectify_floor_photo(
         session.add(record)
         session.commit()
 
-    seam = textures.tiling_seam_error(seamless)
     warning: str | None = None
-    if seam > 18.0:
+    if seam > 30.0:
         warning = (
             "This photo tiles with a visible seam. A flatter, evenly lit shot of a "
             "single tile works better."

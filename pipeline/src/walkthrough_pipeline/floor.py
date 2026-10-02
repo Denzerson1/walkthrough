@@ -138,8 +138,11 @@ def concave_hull_2d(points: np.ndarray, alpha: float = 0.6) -> np.ndarray:
     if len(pts) < 3:
         raise ValueError("need at least 3 points for a hull")
 
+    # convexHull(returnPoints=False) returns indices already ordered around
+    # the hull. Sorting them puts the vertices back into arbitrary input order,
+    # which turns the polygon into a self-intersecting bowtie of zero area.
     hull_idx = cv2.convexHull(pts.astype(np.float32), returnPoints=False).ravel()
-    hull = pts[np.sort(hull_idx).astype(np.intp)]
+    hull = pts[hull_idx.astype(np.intp)]
 
     if alpha >= 1.0 or len(hull) < 4:
         return hull
@@ -189,8 +192,10 @@ def render_floor_topdown(
     acc = np.zeros((resolution, resolution, 3), dtype=np.float64)
     count = np.zeros((resolution, resolution), dtype=np.int32)
 
-    xs = ((centres[:, 0] - min_x) / (max_x - min_x) * (resolution - 1)).astype(int)
-    zs = ((centres[:, 2] - min_z) / (max_z - min_z) * (resolution - 1)).astype(int)
+    # floor(), not astype(int): the latter truncates toward zero, so a point
+    # just outside the lower bound would map to index 0 and be counted.
+    xs = np.floor((centres[:, 0] - min_x) / (max_x - min_x) * (resolution - 1)).astype(int)
+    zs = np.floor((centres[:, 2] - min_z) / (max_z - min_z) * (resolution - 1)).astype(int)
     inside = (xs >= 0) & (xs < resolution) & (zs >= 0) & (zs < resolution)
 
     np.add.at(acc, (zs[inside], xs[inside]), colours[inside])
@@ -235,10 +240,13 @@ def shading_map(
 
 def encode_shading_png(shading: np.ndarray, scale: float = 2.0) -> np.ndarray:
     """
-    Pack a shading map into 8-bit. 1.0 maps to mid-grey (128) so the viewer
-    decodes with `value / 128 * scale/2`. Documented in docs/SPEC.md.
+    Pack a shading map into 8-bit.
+
+    `scale` is the full range, so a neutral 1.0 lands at 255/scale (128 at the
+    default scale of 2.0) and decode_shading_png inverts it exactly. Rounded,
+    not truncated, so a round trip of 1.0 does not drift down to 0.996.
     """
-    encoded = np.clip(shading / scale * 255.0, 0, 255)
+    encoded = np.clip(np.round(shading / scale * 255.0), 0, 255)
     return encoded.astype(np.uint8)
 
 

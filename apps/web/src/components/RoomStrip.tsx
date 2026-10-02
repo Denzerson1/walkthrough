@@ -27,11 +27,16 @@ export function RoomStrip({ manifest, activeRoomId, stagedRoomIds, onSelect }: P
     const index = manifest.rooms.findIndex((r) => r.id === activeRoomId);
     if (e.key === 'ArrowRight' && index < manifest.rooms.length - 1) {
       onSelect(manifest.rooms[index + 1].id);
-      e.preventDefault();
     } else if (e.key === 'ArrowLeft' && index > 0) {
       onSelect(manifest.rooms[index - 1].id);
-      e.preventDefault();
+    } else {
+      return;
     }
+    e.preventDefault();
+    // The scene listens for arrow keys on window to turn the camera. Without
+    // this, one press would both change room and rotate the view.
+    e.stopPropagation();
+    e.nativeEvent.stopImmediatePropagation();
   };
 
   return (

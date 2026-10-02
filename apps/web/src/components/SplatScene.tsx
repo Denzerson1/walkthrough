@@ -28,9 +28,12 @@ import type { ViewerState } from '../lib/viewerState';
 interface Props {
   manifest: Manifest;
   sceneUrl: string;
+  /** Floor splats as a separate mesh, when the pipeline has split the scene. */
+  floorUrl?: string;
   activeRoomId: string | null;
   viewer: ViewerState;
   floorCatalog: CatalogItem[];
+  furnitureCatalog: CatalogItem[];
   showingOriginal: boolean;
   onProgress: (fraction: number) => void;
   onReady: () => void;
@@ -46,9 +49,11 @@ interface CameraTarget {
 export function SplatScene({
   manifest,
   sceneUrl,
+  floorUrl,
   activeRoomId,
   viewer,
   floorCatalog,
+  furnitureCatalog,
   showingOriginal,
   onProgress,
   onReady,
@@ -74,6 +79,7 @@ export function SplatScene({
     floorGroup: THREE.Group;
     furnitureGroup: THREE.Group;
     splat?: SplatMesh;
+    floorSplat?: SplatMesh;
   } | null>(null);
 
   // ---- one-time scene setup -------------------------------------------
@@ -129,21 +135,36 @@ export function SplatScene({
     sceneRef.current = { scene, camera, renderer, floorGroup, furnitureGroup };
 
     let disposed = false;
-    const splat = new SplatMesh({
-      url: sceneUrl,
-      onLoad: () => {
-        if (disposed) return;
+    // No orientation flip anywhere below. Scenes reaching the viewer are
+    // already Y-up with the floor at y=0 — the pipeline's `align` stage
+    // guarantees it and docs/SPEC.md §4 states it. The 180°-about-X flip that
+    // Spark examples use is for raw 3DGS exports in the Y-down convention,
+    // which never reach here.
+    //
+    // When the pipeline has split the scene we load the body and the floor as
+    // two meshes, so the floor can be hidden for a replacement. Otherwise we
+    // load the single combined scene and floor replacement is unavailable.
+    let pending = floorUrl ? 2 : 1;
+    const settle = () => {
+      if (disposed) return;
+      pending -= 1;
+      if (pending === 0) {
         onProgress(1);
         onReady();
-      },
-    });
-    // No orientation flip. Scenes reaching the viewer are already Y-up with the
-    // floor at y=0 — the pipeline's `align` stage guarantees it and
-    // docs/SPEC.md §4 states it. The 180°-about-X flip that Spark examples use
-    // is for raw 3DGS exports in the Y-down convention, which never reach here.
+      }
+    };
+
+    const splat = new SplatMesh({ url: sceneUrl, onLoad: settle });
     splat.quaternion.identity();
     scene.add(splat);
     sceneRef.current.splat = splat;
+
+    if (floorUrl) {
+      const floorSplat = new SplatMesh({ url: floorUrl, onLoad: settle });
+      floorSplat.quaternion.identity();
+      scene.add(floorSplat);
+      sceneRef.current.floorSplat = floorSplat;
+    }
 
     const onResize = () => {
       if (!mount) return;
@@ -200,6 +221,7 @@ export function SplatScene({
       disposeChildren(floorGroup);
       disposeChildren(furnitureGroup);
       splat.dispose?.();
+      sceneRef.current?.floorSplat?.dispose?.();
       scene.clear();
       renderer.dispose();
       // dispose() alone leaves the GL context alive. Browsers cap concurrent
@@ -214,7 +236,7 @@ export function SplatScene({
     };
     // sceneUrl identifies the scene; the callbacks are stable in practice.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sceneUrl]);
+  }, [sceneUrl, floorUrl]);
 
   // ---- pointer, wheel and keyboard interaction -------------------------
   useEffect(() => {
@@ -265,6 +287,15 @@ export function SplatScene({
       pinchDistance = 0;
     };
     const onKeyDown = (e: KeyboardEvent) => {
+      // Let the room strip, panels and form fields have their keys first.
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        target !== document.body &&
+        target.closest('button, input, select, textarea, [role="tablist"], [role="dialog"]')
+      ) {
+        return;
+      }
       const st = stateRef.current;
       const step = 4;
       if (e.key === 'ArrowLeft') st.yaw += step;
@@ -311,18 +342,38 @@ export function SplatScene({
   }, [activeRoomId, manifest]);
 
   // ---- replacement floors ----------------------------------------------
+  //
+  // The brief's M3 rule is "hide floor.spz and render the room's floor
+  // polygon as a mesh". floor.spz covers the whole flat, so as soon as ANY
+  // room has a replacement the original floor splats come off everywhere and
+  // every room is drawn as a mesh: the replacement material where one was
+  // chosen, and the room's recorded original floor colour everywhere else.
+  //
+  // That fallback is an approximation — a flat colour times the shading map,
+  // rather than the real floor's texture. Hiding only one room's splats needs
+  // per-splat masking, which is noted in docs/ROADMAP.md.
   useEffect(() => {
     const ctx = sceneRef.current;
     if (!ctx) return;
     const group = ctx.floorGroup;
     disposeChildren(group);
 
-    if (showingOriginal) return;
+    const anyReplaced = Object.keys(viewer.floors).length > 0;
+    const hideFloorSplats = anyReplaced && !showingOriginal;
 
-    for (const [roomId, floorId] of Object.entries(viewer.floors)) {
-      const room = manifest.rooms.find((r) => r.id === roomId);
-      const floor = floorCatalog.find((f) => f.id === floorId);
-      if (!room || !floor || room.floorPolygon.length < 3) continue;
+    // Add/remove rather than toggling .visible: SparkRenderer collects splat
+    // meshes itself, so taking it out of the scene graph is the reliable way
+    // to stop it drawing.
+    if (ctx.floorSplat) {
+      if (hideFloorSplats) ctx.scene.remove(ctx.floorSplat);
+      else if (ctx.floorSplat.parent !== ctx.scene) ctx.scene.add(ctx.floorSplat);
+    }
+    if (!hideFloorSplats) return;
+
+    for (const room of manifest.rooms) {
+      if (room.floorPolygon.length < 3) continue;
+      const floorId = viewer.floors[room.id];
+      const floor = floorId ? floorCatalog.find((f) => f.id === floorId) : undefined;
       group.add(buildFloorMesh(room, floor));
     }
   }, [viewer.floors, manifest, floorCatalog, showingOriginal]);
@@ -336,9 +387,11 @@ export function SplatScene({
     if (showingOriginal) return;
 
     for (const item of viewer.items) {
-      group.add(buildPlaceholderItem(item.position, item.yaw, item.colorHex));
+      const entry = furnitureCatalog.find((f) => f.id === item.itemId);
+      const size = (entry?.dimensionsM ?? [0.8, 0.8, 0.8]) as [number, number, number];
+      group.add(buildPlaceholderItem(item.position, item.yaw, size, item.colorHex));
     }
-  }, [viewer.items, showingOriginal]);
+  }, [viewer.items, furnitureCatalog, showingOriginal]);
 
   return <div ref={mountRef} className="absolute inset-0" data-testid="splat-canvas" />;
 }
@@ -359,9 +412,16 @@ function disposeChildren(group: THREE.Group): void {
     group.remove(child);
     if (child instanceof THREE.Mesh) {
       child.geometry.dispose();
-      const material = child.material;
-      if (Array.isArray(material)) material.forEach((m) => m.dispose());
-      else material.dispose();
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      for (const material of materials) {
+        // material.dispose() does NOT release its textures, so clicking
+        // through the floor grid would leak three GPU textures per swap.
+        const standard = material as THREE.MeshStandardMaterial;
+        standard.map?.dispose();
+        standard.normalMap?.dispose();
+        standard.roughnessMap?.dispose();
+        material.dispose();
+      }
     }
   }
 }
@@ -370,18 +430,23 @@ function disposeChildren(group: THREE.Group): void {
  * A replacement floor is the room polygon triangulated on the y=0 plane with
  * UVs in metres, so a tile of tileSizeM repeats at its true physical size.
  */
-function buildFloorMesh(room: Room, floor: CatalogItem): THREE.Mesh {
+function buildFloorMesh(room: Room, floor: CatalogItem | undefined): THREE.Mesh {
+  // ShapeGeometry lays the shape in the XY plane with its normal along +Z, so
+  // it has to be rotated onto the floor. rotateX(-90) is the one that leaves
+  // the normal pointing UP: rotateX(+90) sends it to (0,-1,0), which
+  // MeshStandardMaterial back-face culls, making the new floor invisible from
+  // every waypoint. That rotation also maps shape-y to +z, so the polygon is
+  // built with z negated to land back in the right place.
   const shape = new THREE.Shape();
   const poly = room.floorPolygon;
-  shape.moveTo(poly[0][0], poly[0][1]);
-  for (let i = 1; i < poly.length; i++) shape.lineTo(poly[i][0], poly[i][1]);
+  shape.moveTo(poly[0][0], -poly[0][1]);
+  for (let i = 1; i < poly.length; i++) shape.lineTo(poly[i][0], -poly[i][1]);
   shape.closePath();
 
   const geometry = new THREE.ShapeGeometry(shape);
-  // ShapeGeometry lays the shape in XY; rotate it onto the XZ floor plane.
-  geometry.rotateX(Math.PI / 2);
+  geometry.rotateX(-Math.PI / 2);
 
-  const tile = floor.tileSizeM ?? [0.6, 0.6];
+  const tile = floor?.tileSizeM ?? [0.6, 0.6];
   const position = geometry.attributes.position;
   const uv = new Float32Array(position.count * 2);
   for (let i = 0; i < position.count; i++) {
@@ -391,8 +456,10 @@ function buildFloorMesh(room: Room, floor: CatalogItem): THREE.Mesh {
   geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
 
   const material = new THREE.MeshStandardMaterial({
-    color: fallbackColourFor(floor),
-    roughness: floor.glb ? 0.7 : 0.75,
+    color: floor
+      ? fallbackColourFor(floor)
+      : new THREE.Color(room.originalFloorColor ?? '#9a8a74').getHex(),
+    roughness: 0.78,
     metalness: 0.0,
     // Sit a hair above y=0 so it never z-fights with floor splats.
     polygonOffset: true,
@@ -402,17 +469,20 @@ function buildFloorMesh(room: Room, floor: CatalogItem): THREE.Mesh {
   const mesh = new THREE.Mesh(geometry, material);
   mesh.position.y = 0.001;
   mesh.renderOrder = 1;
-  loadFloorMaps(material, floor, tile);
+  if (floor) loadFloorMaps(material, floor, mesh);
   return mesh;
 }
 
 function loadFloorMaps(
   material: THREE.MeshStandardMaterial,
   floor: CatalogItem,
-  tile: [number, number],
+  mesh: THREE.Mesh,
 ): void {
   const maps = floor.maps;
   if (!maps) return;
+  // Switching floors mid-download would otherwise assign a texture to a
+  // material that has already been disposed and removed from the scene.
+  const stillInScene = () => mesh.parent !== null;
   const loader = new THREE.TextureLoader();
   const configure = (texture: THREE.Texture) => {
     texture.wrapS = THREE.RepeatWrapping;
@@ -423,6 +493,10 @@ function loadFloorMaps(
   };
   if (maps.albedo) {
     loader.load(maps.albedo, (t) => {
+      if (!stillInScene()) {
+        t.dispose();
+        return;
+      }
       t.colorSpace = THREE.SRGBColorSpace;
       material.map = configure(t);
       material.color.set(0xffffff);
@@ -431,20 +505,35 @@ function loadFloorMaps(
   }
   if (maps.normal) {
     loader.load(maps.normal, (t) => {
+      if (!stillInScene()) {
+        t.dispose();
+        return;
+      }
       material.normalMap = configure(t);
       material.needsUpdate = true;
     });
   }
   if (maps.roughness) {
     loader.load(maps.roughness, (t) => {
+      if (!stillInScene()) {
+        t.dispose();
+        return;
+      }
       material.roughnessMap = configure(t);
       material.needsUpdate = true;
     });
   }
-  void tile;
 }
 
+/**
+ * Colour to draw a floor with before its texture maps exist.
+ *
+ * The catalog entry's own baseColor comes first: a per-category fallback made
+ * every wood floor the same brown, so picking "Dark walnut" over "Pale ash"
+ * changed nothing on screen.
+ */
 function fallbackColourFor(floor: CatalogItem): number {
+  if (floor.baseColor) return new THREE.Color(floor.baseColor).getHex();
   const byCategory: Record<string, number> = {
     wood: 0x9a7247,
     tile: 0xb9b2a6,
@@ -464,15 +553,21 @@ function fallbackColourFor(floor: CatalogItem): number {
 function buildPlaceholderItem(
   position: [number, number, number],
   yaw: number,
+  size: [number, number, number],
   colorHex?: string,
 ): THREE.Mesh {
-  const geometry = new THREE.BoxGeometry(1, 0.8, 1);
+  const [w, h, d] = size;
+  const geometry = new THREE.BoxGeometry(w, h, d);
   const material = new THREE.MeshStandardMaterial({
     color: new THREE.Color(colorHex ?? '#8d8578'),
     roughness: 0.8,
   });
   const mesh = new THREE.Mesh(geometry, material);
-  mesh.position.set(position[0], 0.4, position[2]);
-  mesh.rotation.y = (yaw * Math.PI) / 180;
+  mesh.position.set(position[0], h / 2, position[2]);
+  // Yaw is negated here on purpose. Our 2D geometry (geometry.ts, layout.py)
+  // rotates (x, z) counter-clockwise, while a three.js rotation about +Y turns
+  // the opposite way in that plane. Without the negation the rendered
+  // footprint is mirrored against the one the collision solver validated.
+  mesh.rotation.y = (-yaw * Math.PI) / 180;
   return mesh;
 }

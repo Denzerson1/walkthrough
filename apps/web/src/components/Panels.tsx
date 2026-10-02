@@ -144,6 +144,7 @@ export function FloorPanel({
 }
 
 function swatchFor(floor: CatalogItem): string {
+  if (floor.baseColor) return floor.baseColor;
   const palette: Record<string, string> = {
     wood: 'linear-gradient(100deg,#9a7247,#b58a57)',
     tile: 'linear-gradient(100deg,#b9b2a6,#cfc9bd)',
@@ -172,7 +173,17 @@ export function FurniturePanel({
   onApplyStyle,
   onAutoLayout,
 }: FurniturePanelProps) {
-  const [styleId, setStyleId] = useState<string>(styles[0]?.id ?? '');
+  // Three styles are prepared but not stocked (brief M6). Default to one that
+  // can actually furnish a room, and sort the stocked ones first, so the
+  // obvious first click is not the one that fails.
+  const ordered = [...styles].sort(
+    (a, b) => Number(b.complete ?? false) - Number(a.complete ?? false),
+  );
+  const [styleId, setStyleId] = useState<string>(
+    ordered.find((s) => s.complete)?.id ?? ordered[0]?.id ?? '',
+  );
+  const selected = ordered.find((s) => s.id === styleId);
+  const unstocked = selected ? selected.complete === false : false;
 
   if (!furniture.length && !styles.length) {
     return (
@@ -187,7 +198,7 @@ export function FurniturePanel({
       {styles.length > 0 && (
         <div className="rule border-b px-3 py-3">
           <div className="scroll-x flex gap-1.5">
-            {styles.map((style) => (
+            {ordered.map((style) => (
               <button
                 key={style.id}
                 type="button"
@@ -198,9 +209,13 @@ export function FurniturePanel({
                   styleId === style.id
                     ? 'bg-[var(--blueprint)]'
                     : 'rule border opacity-70 hover:opacity-100',
+                  style.complete === false ? 'italic' : '',
                 ].join(' ')}
               >
                 {style.name}
+                {style.complete === false && (
+                  <span className="ml-1.5 opacity-55">· no items yet</span>
+                )}
               </button>
             ))}
           </div>
@@ -216,12 +231,18 @@ export function FurniturePanel({
             <button
               type="button"
               onClick={() => onAutoLayout(styleId)}
-              disabled={!styleId}
+              disabled={!styleId || unstocked}
               className="rule flex-1 border px-3 py-2 text-[12px] font-medium disabled:opacity-40"
             >
               Furnish automatically
             </button>
           </div>
+          {unstocked && (
+            <p className="mt-2 text-[12px] opacity-60">
+              {selected?.name} has a floor and a palette but no furniture yet. Its
+              floor still applies.
+            </p>
+          )}
         </div>
       )}
 

@@ -55,21 +55,96 @@ class SplatCloud:
         )
 
     def transformed(self, matrix: np.ndarray) -> SplatCloud:
-        """Apply a 4x4 transform to positions and scale lengths accordingly."""
+        """
+        Apply a 4x4 transform to positions, scales and orientations.
+
+        The orientations matter: a Gaussian is an oriented ellipsoid fitted to
+        a surface. Rotating only the centres and leaving the quaternions alone
+        leaves every splat tilted away from the surface it belongs to, which
+        shows up as streaking after gravity alignment.
+        """
         homo = np.hstack([self.positions, np.ones((len(self), 1), dtype=np.float64)])
         positions = (homo @ matrix.T)[:, :3].astype(np.float32)
+
+        linear = np.asarray(matrix, dtype=np.float64)[:3, :3]
         # Uniform scale factor from the determinant of the linear part.
-        scale_factor = float(abs(np.linalg.det(matrix[:3, :3])) ** (1 / 3))
+        scale_factor = float(abs(np.linalg.det(linear)) ** (1 / 3))
+        rotation = linear / scale_factor if scale_factor > 1e-12 else linear
+
         return SplatCloud(
             positions=positions,
             colours=self.colours,
             opacities=self.opacities,
             scales=(self.scales * scale_factor).astype(np.float32),
-            rotations=self.rotations,
+            rotations=rotate_quaternions(self.rotations, rotation),
         )
 
     def bounds(self) -> tuple[np.ndarray, np.ndarray]:
         return self.positions.min(axis=0), self.positions.max(axis=0)
+
+
+def matrix_to_quaternion(m: np.ndarray) -> np.ndarray:
+    """Rotation matrix to a wxyz quaternion, via the numerically stable branch."""
+    trace = float(m[0, 0] + m[1, 1] + m[2, 2])
+    if trace > 0:
+        s_ = np.sqrt(trace + 1.0) * 2
+        w = 0.25 * s_
+        x = (m[2, 1] - m[1, 2]) / s_
+        y = (m[0, 2] - m[2, 0]) / s_
+        z = (m[1, 0] - m[0, 1]) / s_
+    elif m[0, 0] > m[1, 1] and m[0, 0] > m[2, 2]:
+        s_ = np.sqrt(1.0 + m[0, 0] - m[1, 1] - m[2, 2]) * 2
+        w = (m[2, 1] - m[1, 2]) / s_
+        x = 0.25 * s_
+        y = (m[0, 1] + m[1, 0]) / s_
+        z = (m[0, 2] + m[2, 0]) / s_
+    elif m[1, 1] > m[2, 2]:
+        s_ = np.sqrt(1.0 + m[1, 1] - m[0, 0] - m[2, 2]) * 2
+        w = (m[0, 2] - m[2, 0]) / s_
+        x = (m[0, 1] + m[1, 0]) / s_
+        y = 0.25 * s_
+        z = (m[1, 2] + m[2, 1]) / s_
+    else:
+        s_ = np.sqrt(1.0 + m[2, 2] - m[0, 0] - m[1, 1]) * 2
+        w = (m[1, 0] - m[0, 1]) / s_
+        x = (m[0, 2] + m[2, 0]) / s_
+        y = (m[1, 2] + m[2, 1]) / s_
+        z = 0.25 * s_
+    q = np.array([w, x, y, z], dtype=np.float64)
+    return q / np.linalg.norm(q)
+
+
+def quaternion_multiply(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """
+    Hamilton product of wxyz quaternions.
+
+    `a` is a single quaternion (4,), `b` is an array of them (N, 4), and the
+    result is a[i] applied after b[i] — i.e. the world rotation composed on
+    top of each splat's own orientation.
+    """
+    aw, ax, ay, az = (float(v) for v in a)
+    bw, bx, by, bz = b[:, 0], b[:, 1], b[:, 2], b[:, 3]
+    return np.stack(
+        [
+            aw * bw - ax * bx - ay * by - az * bz,
+            aw * bx + ax * bw + ay * bz - az * by,
+            aw * by - ax * bz + ay * bw + az * bx,
+            aw * bz + ax * by - ay * bx + az * bw,
+        ],
+        axis=1,
+    )
+
+
+def rotate_quaternions(rotations: np.ndarray, rotation_matrix: np.ndarray) -> np.ndarray:
+    """Compose a world rotation onto every splat orientation."""
+    rotations = np.asarray(rotations, dtype=np.float64)
+    if len(rotations) == 0:
+        return rotations.astype(np.float32)
+    q = matrix_to_quaternion(np.asarray(rotation_matrix, dtype=np.float64))
+    out = quaternion_multiply(q, rotations)
+    norms = np.linalg.norm(out, axis=1, keepdims=True)
+    norms[norms < 1e-12] = 1.0
+    return (out / norms).astype(np.float32)
 
 
 def colour_to_sh(colour: np.ndarray) -> np.ndarray:

@@ -12,6 +12,12 @@ export default defineConfig({
   expect: { timeout: 20_000 },
   fullyParallel: false,
   workers: 1,
+  // One retry everywhere. Headless WebGL here is SwiftShader at roughly one
+  // frame per second, and it degrades further across a long run, so a
+  // pixel-comparison test can time out waiting for a frame that a fresh run
+  // produces fine. The flake is the renderer, not the app; a GPU runner does
+  // not need this. See docs/PROGRESS.md.
+  retries: 1,
   reporter: [['list']],
   use: {
     baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:5173',
@@ -38,12 +44,10 @@ export default defineConfig({
       // iPhone 13 maps to WebKit, so this exercises the engine iOS Safari
       // actually uses rather than Chromium at a narrow width.
       //
-      // One retry: headless WebKit reclaims WebGL contexts slowly, so a run
-      // that mounts the scene many times in sequence can transiently fail to
-      // create one. This does not reproduce on a fresh page or on real iOS;
-      // see docs/PROGRESS.md for what remains unverified on device.
+      // WebKit additionally reclaims WebGL contexts slowly, so a long run can
+      // transiently fail to create one. Not reproducible on a fresh page or,
+      // as far as we know, on real iOS — which remains unverified on device.
       name: 'iphone',
-      retries: 1,
       use: { ...devices['iPhone 13'] },
     },
   ],

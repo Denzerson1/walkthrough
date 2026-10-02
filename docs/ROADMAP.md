@@ -106,3 +106,22 @@ easy case because it is planar and its lighting can be recovered.
   tested in `walkthrough_pipeline.layout`, but is not wired to the API yet.
 - iOS device-orientation look-around (with the permission prompt) is not
   implemented; drag and pinch are.
+
+## Per-splat floor masking
+
+The brief's M3 rule is "hide `floor.spz` and render the room's floor polygon
+as a mesh". `floor.spz` covers the whole flat, so replacing one room's floor
+currently removes the original floor splats everywhere, and rooms without a
+replacement fall back to a flat average colour recorded per room in the
+manifest (`Room.originalFloorColor`).
+
+That fallback is honest but lossy: an unreplaced room loses its real floor
+texture the moment a neighbour's floor is swapped.
+
+The fix is to hide only the floor splats inside the replaced room's polygon,
+by setting their opacity to zero. That is the same per-splat editing
+mechanism M8 needs for recolouring existing furniture, so the two should be
+built together: implement per-splat selection and attribute editing once, use
+it for masking and for tinting.
+
+Until then, demo one room at a time, or replace every room's floor.

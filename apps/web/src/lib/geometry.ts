@@ -11,6 +11,9 @@ import type { Vec2 } from './manifest';
 
 export const DEG = Math.PI / 180;
 
+/** Boundary tolerance, shared with EDGE_TOLERANCE in layout.py. */
+export const POLYGON_EDGE_TOLERANCE = 1e-9;
+
 export function toRad(deg: number): number {
   return deg * DEG;
 }
@@ -46,12 +49,16 @@ export function polygonCentroid(poly: Vec2[]): Vec2 {
 }
 
 /** Ray casting. Points exactly on an edge count as inside. */
-export function pointInPolygon(p: Vec2, poly: Vec2[]): boolean {
+export function pointInPolygon(
+  p: Vec2,
+  poly: Vec2[],
+  tolerance: number = POLYGON_EDGE_TOLERANCE,
+): boolean {
   const [px, py] = p;
   for (let i = 0; i < poly.length; i++) {
     const a = poly[i];
     const b = poly[(i + 1) % poly.length];
-    if (distancePointToSegment(p, a, b) < 1e-9) return true;
+    if (distancePointToSegment(p, a, b) <= tolerance) return true;
   }
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {

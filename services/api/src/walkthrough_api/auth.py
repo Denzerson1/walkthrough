@@ -17,6 +17,30 @@ from .config import Settings, get_settings
 COOKIE_NAME = "wt_editor"
 SESSION_MAX_AGE_SECONDS = 12 * 60 * 60
 
+#: Shipped in .env.example. Anyone could mint their own editor cookie with it.
+INSECURE_DEFAULTS = {"change-me", "", "changeme"}
+
+
+def assert_configured(settings: Settings) -> None:
+    """
+    Refuse to issue or accept a session signed with the published default
+    secret. Failing loudly beats quietly leaving the editor wide open.
+    """
+    if settings.session_secret.strip() in INSECURE_DEFAULTS:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "SESSION_SECRET is still the example value, so editor sessions "
+                "cannot be trusted. Generate one with: python -c \"import "
+                "secrets; print(secrets.token_urlsafe(32))\""
+            ),
+        )
+    if settings.editor_password.strip() in INSECURE_DEFAULTS:
+        raise HTTPException(
+            status_code=503,
+            detail="EDITOR_PASSWORD is still the example value. Set a real one in .env.",
+        )
+
 # Login attempts per client key, as (timestamp, ...) within the window.
 _ATTEMPTS: dict[str, list[float]] = defaultdict(list)
 _MAX_ATTEMPTS = 8
@@ -45,11 +69,13 @@ def reset_rate_limit() -> None:
 
 
 def verify_password(settings: Settings, password: str) -> bool:
+    assert_configured(settings)
     # Constant-time compare so the password cannot be guessed by timing.
     return hmac.compare_digest(password.encode("utf-8"), settings.editor_password.encode("utf-8"))
 
 
 def issue_session(response: Response, settings: Settings) -> None:
+    assert_configured(settings)
     token = _serializer(settings).dumps({"role": "editor"})
     response.set_cookie(
         COOKIE_NAME,
@@ -71,6 +97,7 @@ def require_editor(
     wt_editor: str | None = Cookie(default=None, alias=COOKIE_NAME),
     settings: Settings = Depends(get_settings),
 ) -> None:
+    assert_configured(settings)
     if not wt_editor:
         raise HTTPException(status_code=401, detail="Editor login required")
     try:

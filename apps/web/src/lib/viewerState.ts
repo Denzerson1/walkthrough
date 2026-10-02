@@ -47,10 +47,21 @@ export function isStaged(state: ViewerState): boolean {
   );
 }
 
-/** True when this specific room has been modified. */
-export function isRoomStaged(state: ViewerState, roomId: string): boolean {
+/**
+ * True when this specific room has been modified.
+ *
+ * `recoloredItemIds` maps manifest items to rooms; without it a room whose
+ * only change is a recolour would show no staged marker, even though the
+ * global badge is up.
+ */
+export function isRoomStaged(
+  state: ViewerState,
+  roomId: string,
+  recoloredItemIds: string[] = [],
+): boolean {
   if (state.floors[roomId]) return true;
   if (state.items.some((i) => i.roomId === roomId)) return true;
+  if (recoloredItemIds.some((id) => state.recolors[id])) return true;
   return false;
 }
 

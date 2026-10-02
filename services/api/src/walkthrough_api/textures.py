@@ -136,8 +136,10 @@ def tiling_seam_error(tile: np.ndarray) -> float:
     """
     Mean absolute difference between opposite edges, 0-255.
 
-    A seamless tile scores low. Used as the quality check in tests and
-    surfaced to the user as a warning when a photo tiles badly.
+    Measure this on the RECTIFIED tile, before make_seamless. Measuring it
+    afterwards tells you nothing: the roll puts two formerly adjacent rows at
+    the edges, so even a photo with a huge brightness gradient scores near
+    zero while still producing a visibly smeared tile.
     """
     arr = tile.astype(np.float32)
     top_bottom = np.abs(arr[0] - arr[-1]).mean()

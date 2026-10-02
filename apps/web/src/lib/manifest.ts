@@ -39,7 +39,11 @@ export interface Opening {
   type: 'door' | 'window';
   /** Index into the room's walls array. */
   wallIndex: number;
-  /** Distance in metres along the wall from its start point. */
+  /**
+   * Distance in metres from the wall's start point to the opening's CENTRE.
+   * The opening spans offset +/- width/2. Both the layout solver
+   * (layout.py Wall.free_spans) and the floor plan read it this way.
+   */
   offset: number;
   width: number;
   height: number;
@@ -54,6 +58,12 @@ export interface Room {
   floorPolygon: Vec2[];
   walls: Wall[];
   openings: Opening[];
+  /**
+   * Average colour of this room's original floor splats, as #rrggbb. Used to
+   * draw an unreplaced room once the floor splats are hidden because another
+   * room has a replacement floor.
+   */
+  originalFloorColor?: string;
 }
 
 export interface ItemBox {

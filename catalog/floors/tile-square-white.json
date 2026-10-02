@@ -1,5 +1,6 @@
 {
   "id": "tile-square-white",
+  "baseColor": "#eceae4",
   "name": "White square tile",
   "category": "tile",
   "tags": [

@@ -255,13 +255,30 @@ def align(
     cloud = read_ply(ply)
     console.print(f"Loaded {len(cloud):,} splats")
 
-    # The floor is the dominant near-horizontal plane in the lower part of the scene.
+    # The floor is the dominant near-horizontal plane in the lower part of the
+    # scene. "Lower" and "horizontal" both assume the scene is already roughly
+    # Y-up, which is true for our synthetic scenes but NOT for a raw COLMAP
+    # world frame — so try the Y-up assumption first and fall back to an
+    # unconstrained fit rather than silently returning the identity.
     low = cloud.positions[:, 1] < np.percentile(cloud.positions[:, 1], 35)
     fit = fit_plane_ransac(
         cloud.positions[low].astype(np.float64),
         threshold=0.02,
         up_hint=np.array([0.0, 1.0, 0.0]),
     )
+    if fit.inlier_ratio < 0.05:
+        console.print(
+            "[yellow]No near-horizontal plane found. The reconstruction is probably "
+            "not Y-up; refitting without an up hint.[/yellow]"
+        )
+        fit = fit_plane_ransac(cloud.positions.astype(np.float64), threshold=0.02)
+
+    if fit.inlier_ratio < 0.05 or not fit.inliers.any():
+        raise ToolMissing(
+            "Could not find a floor plane in this scene. Alignment would have "
+            "silently written an unaligned scene, so nothing was changed. Check "
+            "that the reconstruction succeeded and that the floor was filmed."
+        )
     console.print(f"Floor plane {fit.plane} with {fit.inlier_ratio:.0%} inliers")
 
     transform = gravity_alignment(fit.plane, cloud.positions)
@@ -278,7 +295,12 @@ def align(
     manifest.floor = {"plane": [0.0, 1.0, 0.0, 0.0]}
     manifest.write(paths.manifest)
 
-    residual = float(np.abs(apply_transform(cloud.positions[fit.inliers], transform)[:, 1]).mean())
+    inlier_points = (
+        cloud.positions[low][fit.inliers]
+        if fit.inliers.shape[0] == int(low.sum())
+        else cloud.positions[fit.inliers]
+    )
+    residual = float(np.abs(apply_transform(inlier_points, transform)[:, 1]).mean())
     console.print(f"[green]Aligned.[/green] Mean floor residual {residual * 1000:.1f} mm")
 
 

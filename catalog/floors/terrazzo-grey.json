@@ -1,5 +1,6 @@
 {
   "id": "terrazzo-grey",
+  "baseColor": "#a9a79f",
   "name": "Grey terrazzo",
   "category": "tile",
   "tags": [

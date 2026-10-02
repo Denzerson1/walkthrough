@@ -52,8 +52,10 @@ def get_engine(settings: Settings):
         if url.startswith("sqlite:///./"):
             # Resolve a relative sqlite path against the data root rather than the
             # cwd, so `uv run` from any directory reaches the same database file.
+            # Deliberately NOT inside data_root: that directory is served by
+            # /files, and the analytics database must not be downloadable.
             rel = Path(url.removeprefix("sqlite:///./"))
-            target = settings.data_root / rel.name
+            target = settings.data_root.parent / "var" / rel.name
             target.parent.mkdir(parents=True, exist_ok=True)
             url = f"sqlite:///{target.as_posix()}"
         _engine = create_engine(url, connect_args={"check_same_thread": False})

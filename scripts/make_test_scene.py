@@ -107,7 +107,7 @@ def _fabric_colour(rng: np.random.Generator, n: int, rgb: tuple[float, float, fl
     return np.clip(np.array(rgb) + rng.normal(0, 0.03, (n, 1)), 0, 1)
 
 
-def build_cloud(total_splats: int) -> SplatCloud:
+def build_cloud(total_splats: int) -> tuple[SplatCloud, np.ndarray]:
     rng = np.random.default_rng(RNG_SEED)
 
     # Budget split: floors and walls dominate, furniture adds landmarks.
@@ -117,6 +117,8 @@ def build_cloud(total_splats: int) -> SplatCloud:
     n_furniture = total_splats - n_floor - n_wall - n_ceiling
 
     chunks: list[tuple[np.ndarray, np.ndarray]] = []
+    # Parallel list marking which chunks are floor, so we can split the cloud.
+    is_floor: list[bool] = []
 
     # Floors
     living_floor = int(n_floor * 0.6)
@@ -127,6 +129,7 @@ def build_cloud(total_splats: int) -> SplatCloud:
             _wood_colour(rng, living_floor),
         )
     )
+    is_floor.append(True)
     bed_floor = n_floor - living_floor
     chunks.append(
         (
@@ -135,6 +138,7 @@ def build_cloud(total_splats: int) -> SplatCloud:
             _wood_colour(rng, bed_floor),
         )
     )
+    is_floor.append(True)
 
     # Walls — six segments forming the two rooms with a doorway between them.
     per_wall = n_wall // 6
@@ -149,6 +153,7 @@ def build_cloud(total_splats: int) -> SplatCloud:
     for axis, fixed, span in wall_specs:
         pts = _scatter_wall(rng, per_wall, axis, fixed, span, LIVING["height"])
         chunks.append((pts, _wall_colour(rng, per_wall)))
+        is_floor.append(False)
 
     # Ceiling
     chunks.append(
@@ -158,6 +163,7 @@ def build_cloud(total_splats: int) -> SplatCloud:
             _wall_colour(rng, n_ceiling),
         )
     )
+    is_floor.append(False)
 
     # Furniture: sofa, coffee table, bed.
     furniture = [
@@ -169,9 +175,13 @@ def build_cloud(total_splats: int) -> SplatCloud:
     for centre, size, rgb in furniture:
         pts = _box(rng, per_item, centre, size)
         chunks.append((pts, _fabric_colour(rng, per_item, rgb)))
+        is_floor.append(False)
 
     positions = np.vstack([c[0] for c in chunks]).astype(np.float32)
     colours = np.vstack([c[1] for c in chunks]).astype(np.float32)
+    floor_mask = np.concatenate(
+        [np.full(len(c[0]), flag, dtype=bool) for c, flag in zip(chunks, is_floor, strict=True)]
+    )
     n = len(positions)
 
     # Add soft vertical shading so the shading-map work in M3 has something real.
@@ -190,16 +200,23 @@ def build_cloud(total_splats: int) -> SplatCloud:
 
     opacities = np.clip(rng.normal(0.9, 0.06, n), 0.3, 1.0).astype(np.float32)
 
-    return SplatCloud(
-        positions=positions,
-        colours=colours,
-        opacities=opacities,
-        scales=scales,
-        rotations=rotations,
+    return (
+        SplatCloud(
+            positions=positions,
+            colours=colours,
+            opacities=opacities,
+            scales=scales,
+            rotations=rotations,
+        ),
+        floor_mask,
     )
 
 
-def build_manifest(project_id: str, scene_asset: str) -> Manifest:
+def build_manifest(
+    project_id: str,
+    scene_asset: str,
+    floor_colours: dict[str, str],
+) -> Manifest:
     living = Room(
         id="living",
         name="Living room",
@@ -221,6 +238,7 @@ def build_manifest(project_id: str, scene_asset: str) -> Manifest:
             Opening(type="door", wallIndex=1, offset=2.0, width=0.9, height=2.0),
             Opening(type="window", wallIndex=3, offset=1.9, width=1.4, height=1.3),
         ],
+        originalFloorColor=floor_colours.get("living"),
     )
     bedroom = Room(
         id="bedroom",
@@ -247,6 +265,7 @@ def build_manifest(project_id: str, scene_asset: str) -> Manifest:
             Opening(type="door", wallIndex=3, offset=1.6, width=0.9, height=2.0),
             Opening(type="window", wallIndex=1, offset=1.7, width=1.2, height=1.3),
         ],
+        originalFloorColor=floor_colours.get("bedroom"),
     )
 
     manifest = Manifest(
@@ -275,6 +294,11 @@ def build_manifest(project_id: str, scene_asset: str) -> Manifest:
     return manifest
 
 
+def _average_colour(colours: np.ndarray) -> str:
+    rgb = np.clip(colours.mean(axis=0) * 255, 0, 255).astype(int)
+    return "#{:02x}{:02x}{:02x}".format(*rgb)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project", default="demo-01")
@@ -285,24 +309,56 @@ def main() -> int:
     paths.ensure()
 
     print(f"Generating {args.splats:,} splats ...")
-    cloud = build_cloud(args.splats)
+    cloud, floor_mask = build_cloud(args.splats)
 
-    ply = paths.scene / "scene.ply"
-    write_ply(cloud, ply)
-    print(f"  wrote {ply.relative_to(repo_root())} ({ply.stat().st_size / 1e6:.1f} MB)")
+    def write(cloud_part: SplatCloud, name: str) -> str:
+        ply = paths.scene / f"{name}.ply"
+        write_ply(cloud_part, ply)
+        size = ply.stat().st_size / 1e6
+        asset = f"{name}.ply"
+        try:
+            spz = paths.scene / f"{name}.spz"
+            write_spz(ply, spz)
+            asset = f"{name}.spz"
+            size = spz.stat().st_size / 1e6
+        except SpzUnavailable:
+            pass
+        print(f"  {asset:<22} {len(cloud_part):>8,} splats  {size:5.1f} MB")
+        return asset
 
-    scene_asset = "scene.ply"
-    spz = paths.scene / "scene.spz"
-    try:
-        write_spz(ply, spz)
-        scene_asset = "scene.spz"
-        print(f"  wrote {spz.relative_to(repo_root())} ({spz.stat().st_size / 1e6:.1f} MB)")
-    except SpzUnavailable as exc:
-        print(f"  note: {exc}")
+    # The real pipeline produces this split in `pipeline floor` (M3). The
+    # generator knows which splats are floor, so it can emit the same three
+    # assets and let the viewer's floor-replacement path be exercised without
+    # the segmentation model.
+    scene_asset = write(cloud, "scene")
+    nofloor_asset = write(cloud.select(~floor_mask), "scene_nofloor")
+    floor_asset = write(cloud.select(floor_mask), "floor")
 
-    manifest = build_manifest(args.project, scene_asset)
+    # Average floor colour per room, so a room whose floor was not replaced can
+    # still be drawn once the floor splats are hidden.
+    floor_points = cloud.positions[floor_mask]
+    floor_colours = cloud.colours[floor_mask]
+    rooms = {
+        "living": (LIVING["x0"], LIVING["x1"], LIVING["z0"], LIVING["z1"]),
+        "bedroom": (BEDROOM["x0"], BEDROOM["x1"], BEDROOM["z0"], BEDROOM["z1"]),
+    }
+    averages: dict[str, str] = {}
+    for room_id, (x0, x1, z0, z1) in rooms.items():
+        inside = (
+            (floor_points[:, 0] >= x0)
+            & (floor_points[:, 0] <= x1)
+            & (floor_points[:, 2] >= z0)
+            & (floor_points[:, 2] <= z1)
+        )
+        if inside.any():
+            averages[room_id] = _average_colour(floor_colours[inside])
+
+    manifest = build_manifest(args.project, scene_asset, averages)
+    manifest.assets.sceneNoFloor = nofloor_asset
+    manifest.assets.floor = floor_asset
     manifest.write(paths.manifest)
-    print(f"  wrote {paths.manifest.relative_to(repo_root())}")
+    print(f"  manifest               {paths.manifest.relative_to(repo_root())}")
+    print(f"  floor colours          {averages}")
     print(f"Done. Open http://localhost:5173/p/{args.project}")
     return 0
 

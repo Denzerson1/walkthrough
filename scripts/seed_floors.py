@@ -29,6 +29,10 @@ THUMBS = CATALOG / "thumbnails"
 # ---------------------------------------------------------------------------
 # Catalogue entries sourced from CC0 libraries.
 #
+# Each carries a `baseColor`: the representative colour the viewer draws until
+# the texture maps are downloaded. Without it every wood floor rendered as the
+# same generic brown and the picker looked broken.
+#
 # maps are left empty: the viewer falls back to a per-category colour until
 # the texture files are fetched. Fetching is a separate, explicit step so we
 # never pull hundreds of MB without being asked.
@@ -37,6 +41,7 @@ THUMBS = CATALOG / "thumbnails"
 SOURCED: list[dict] = [
     {
         "id": "oak-herringbone-light",
+        "baseColor": "#c49a63",
         "name": "Light oak herringbone",
         "category": "wood",
         "tags": ["warm", "scandinavian", "classic", "oak", "pale", "parquet"],
@@ -48,6 +53,7 @@ SOURCED: list[dict] = [
     },
     {
         "id": "oak-plank-natural",
+        "baseColor": "#b68a52",
         "name": "Natural oak plank",
         "category": "wood",
         "tags": ["warm", "neutral", "oak", "plank", "modern"],
@@ -59,6 +65,7 @@ SOURCED: list[dict] = [
     },
     {
         "id": "walnut-dark-plank",
+        "baseColor": "#4a3324",
         "name": "Dark walnut plank",
         "category": "wood",
         "tags": ["dark", "warm", "walnut", "traditional", "rich"],
@@ -70,6 +77,7 @@ SOURCED: list[dict] = [
     },
     {
         "id": "ash-pale-wide",
+        "baseColor": "#ded3c0",
         "name": "Pale ash",
         "category": "wood",
         "tags": ["pale", "cool", "minimalist", "nordic", "ash"],
@@ -81,6 +89,7 @@ SOURCED: list[dict] = [
     },
     {
         "id": "terracotta-rustic",
+        "baseColor": "#b35a3a",
         "name": "Rustic terracotta",
         "category": "tile",
         "tags": ["warm", "tuscan", "rustic", "earthy", "terracotta", "mediterranean"],
@@ -92,6 +101,7 @@ SOURCED: list[dict] = [
     },
     {
         "id": "terrazzo-grey",
+        "baseColor": "#a9a79f",
         "name": "Grey terrazzo",
         "category": "tile",
         "tags": ["cool", "speckled", "mid-century", "contemporary", "terrazzo"],
@@ -103,6 +113,7 @@ SOURCED: list[dict] = [
     },
     {
         "id": "tile-square-white",
+        "baseColor": "#eceae4",
         "name": "White square tile",
         "category": "tile",
         "tags": ["bright", "clean", "bathroom", "kitchen", "white"],
@@ -114,6 +125,7 @@ SOURCED: list[dict] = [
     },
     {
         "id": "marble-carrara",
+        "baseColor": "#e4e3df",
         "name": "Carrara marble",
         "category": "stone",
         "tags": ["cool", "luxury", "veined", "white", "classic", "marble"],
@@ -125,6 +137,7 @@ SOURCED: list[dict] = [
     },
     {
         "id": "concrete-polished",
+        "baseColor": "#8d8c88",
         "name": "Polished concrete",
         "category": "stone",
         "tags": ["cool", "industrial", "minimalist", "grey", "loft", "concrete"],
@@ -136,6 +149,7 @@ SOURCED: list[dict] = [
     },
     {
         "id": "limestone-sand",
+        "baseColor": "#cdbfa5",
         "name": "Sand limestone",
         "category": "stone",
         "tags": ["warm", "neutral", "soft", "limestone", "coastal"],
@@ -147,6 +161,7 @@ SOURCED: list[dict] = [
     },
     {
         "id": "slate-charcoal",
+        "baseColor": "#3f4247",
         "name": "Charcoal slate",
         "category": "stone",
         "tags": ["dark", "cool", "textured", "slate", "contemporary"],
@@ -165,6 +180,7 @@ SOURCED: list[dict] = [
 PROCEDURAL = [
     {
         "id": "painted-board-white",
+        "baseColor": "#eeece7",
         "name": "White painted boards",
         "category": "painted",
         "tags": ["bright", "cottage", "painted", "white", "nordic"],
@@ -175,6 +191,7 @@ PROCEDURAL = [
     },
     {
         "id": "painted-board-sage",
+        "baseColor": "#a8b2a0",
         "name": "Sage painted boards",
         "category": "painted",
         "tags": ["muted", "green", "cottage", "painted", "calm"],
@@ -185,6 +202,7 @@ PROCEDURAL = [
     },
     {
         "id": "stencil-victorian-geometric",
+        "baseColor": "#8a8273",
         "name": "Victorian geometric stencil",
         "category": "stencilled",
         "tags": ["pattern", "victorian", "geometric", "classic", "monochrome"],
@@ -195,6 +213,7 @@ PROCEDURAL = [
     },
     {
         "id": "stencil-moroccan-blue",
+        "baseColor": "#5d7fb5",
         "name": "Moroccan blue stencil",
         "category": "stencilled",
         "tags": ["pattern", "moroccan", "blue", "eclectic", "bold"],
@@ -205,6 +224,7 @@ PROCEDURAL = [
     },
     {
         "id": "vintage-parquet-chevron",
+        "baseColor": "#a47646",
         "name": "Vintage chevron parquet",
         "category": "vintage",
         "tags": ["warm", "chevron", "parquet", "period", "golden"],

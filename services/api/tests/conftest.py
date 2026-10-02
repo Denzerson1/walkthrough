@@ -110,7 +110,11 @@ def settings(data_root: Path, catalog_root: Path, monkeypatch: pytest.MonkeyPatc
     monkeypatch.setenv("STORAGE_LOCAL_ROOT", str(data_root))
     monkeypatch.setenv("EDITOR_PASSWORD", "test-password")
     monkeypatch.setenv("SESSION_SECRET", "test-secret-value")
-    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{(data_root / 'test.db').as_posix()}")
+    # Outside data_root, matching production: that directory is served by
+    # /files and must not contain the analytics database.
+    var = data_root.parent / "var"
+    var.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{(var / 'test.db').as_posix()}")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")
 
     config.get_settings.cache_clear()

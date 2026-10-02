@@ -20,6 +20,8 @@ export interface CatalogItem {
   styles?: string[];
   colors?: string[];
   tileSizeM?: [number, number];
+  /** Representative colour used until the texture maps are downloaded. */
+  baseColor?: string;
   dimensionsM?: [number, number, number];
   maps?: Record<string, string>;
   glb?: string;
@@ -30,6 +32,8 @@ export interface CatalogItem {
   picks?: Record<string, string[]>;
   license?: string;
   source?: string;
+  /** Styles marked false are prepared but have no furniture picks yet. */
+  complete?: boolean;
 }
 
 interface AppState {
@@ -139,10 +143,18 @@ export const useStore = create<AppState>((set, get) => ({
       if (roomId === 'all') return { viewer: { ...EMPTY_VIEWER_STATE } };
       const floors = { ...s.viewer.floors };
       delete floors[roomId];
+      // Recolours are keyed by manifest item id, so resetting one room has to
+      // drop the recolours of the items that live in it. Leaving them behind
+      // meant "restore this room" silently kept a change applied.
+      const recolors = { ...s.viewer.recolors };
+      for (const item of s.manifest?.items ?? []) {
+        if (item.roomId === roomId) delete recolors[item.id];
+      }
       return {
         viewer: {
           ...s.viewer,
           floors,
+          recolors,
           items: s.viewer.items.filter((i) => i.roomId !== roomId),
         },
       };
@@ -158,9 +170,20 @@ export const useStore = create<AppState>((set, get) => ({
   },
 }));
 
-/** Rooms the viewer has changed, for the "Virtually staged" badge. */
-export function stagedRoomIds(state: ViewerState): Set<string> {
+/**
+ * Rooms the viewer has changed, for the per-room staged markers.
+ *
+ * Takes the manifest items so a recoloured piece of existing furniture marks
+ * the room it stands in.
+ */
+export function stagedRoomIds(
+  state: ViewerState,
+  manifestItems: Array<{ id: string; roomId: string }> = [],
+): Set<string> {
   const ids = new Set<string>(Object.keys(state.floors));
   for (const item of state.items) ids.add(item.roomId);
+  for (const item of manifestItems) {
+    if (state.recolors[item.id]) ids.add(item.roomId);
+  }
   return ids;
 }

@@ -47,7 +47,7 @@ class Placement:
         return {
             "itemId": self.item_id,
             "position": [round(self.position[0], 3), 0.0, round(self.position[1], 3)],
-            "yaw": round(self.yaw, 1),
+            "yaw": round(self.yaw, 4),
         }
 
 
@@ -151,7 +151,11 @@ def distance_point_to_segment(p: Vec2, a: Vec2, b: Vec2) -> float:
     return math.dist(p, (a[0] + t * dx, a[1] + t * dy))
 
 
-def point_in_polygon(p: Vec2, poly: list[Vec2], tolerance: float = 1e-6) -> bool:
+#: Boundary tolerance, shared with POLYGON_EDGE_TOLERANCE in geometry.ts.
+EDGE_TOLERANCE = 1e-9
+
+
+def point_in_polygon(p: Vec2, poly: list[Vec2], tolerance: float = EDGE_TOLERANCE) -> bool:
     """
     Ray casting, with points on an edge counted as inside.
 
@@ -263,11 +267,28 @@ def _candidate_walls(room: Room, strategy: str) -> list[int]:
     return order
 
 
+def facing_yaw(wall: Wall, inward: Vec2) -> float:
+    """
+    Yaw that puts the item's back against the wall and its front into the room.
+
+    In the 2D convention a yaw of `w` points the item's front along
+    (-sin w, cos w). That equals the wall's left normal only when the room
+    interior happens to lie on that side; for the other half of the cases —
+    any clockwise-wound polygon, or a wall emitted in the reverse direction —
+    it must be turned around, or beds and sofas face into the wall.
+    """
+    dx, dy = wall.end[0] - wall.start[0], wall.end[1] - wall.start[1]
+    length = math.hypot(dx, dy) or 1.0
+    left_normal = (-dy / length, dx / length)
+    aligned = inward[0] * left_normal[0] + inward[1] * left_normal[1] > 0
+    return wall.yaw if aligned else wall.yaw + 180.0
+
+
 def _wall_positions(wall: Wall, item: Item, inward: Vec2) -> list[tuple[Vec2, float]]:
     """Candidate centre positions along a wall, centred in each free span."""
     out: list[tuple[Vec2, float]] = []
     half_depth = item.size[1] / 2
-    yaw = wall.yaw
+    yaw = facing_yaw(wall, inward)
     for start, end in wall.free_spans(margin=DOOR_SWING_M / 2):
         span = end - start
         if span < item.size[0]:

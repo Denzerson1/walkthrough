@@ -92,12 +92,40 @@ def put_manifest(
 # --------------------------------------------------------------------------
 
 
+#: Only these prefixes are publicly readable. Everything else under the data
+#: root — raw captures in input/, intermediate frames in work/, and the
+#: analytics database — stays private. The brief's privacy rule (§2.5) is
+#: about masking before publication, which is meaningless if the unmasked
+#: source is downloadable from the same host.
+PUBLIC_FILE_PREFIXES = ("projects/", "uploads/")
+PUBLIC_PROJECT_SUBDIRS = ("scene/",)
+
+
+def _is_public_key(key: str) -> bool:
+    cleaned = key.replace("\\", "/").strip("/")
+    if not cleaned.startswith(PUBLIC_FILE_PREFIXES):
+        return False
+    if cleaned.startswith("projects/"):
+        parts = cleaned.split("/")
+        # projects/<id>/<subdir>/...
+        if len(parts) < 4:
+            return False
+        try:
+            projects.validate_project_id(parts[1])
+        except projects.InvalidProjectId:
+            return False
+        return f"{parts[2]}/".startswith(PUBLIC_PROJECT_SUBDIRS)
+    return True
+
+
 @app.get("/files/{key:path}")
 def get_file(key: str, settings: Settings = Depends(settings_dep)) -> FileResponse:
     """
-    Serve project assets (splats, shading maps, GLBs) from storage.
-    In production these are served from R2 instead; this keeps dev simple.
+    Serve published project assets (splats, shading maps) and upload results.
+    In production these come from R2 instead; this keeps dev simple.
     """
+    if not _is_public_key(key):
+        raise HTTPException(status_code=404, detail="Not found")
     storage = build_storage(settings)
     try:
         path: Path | None = storage.local_path(key)
@@ -256,9 +284,11 @@ def project_summary(
 # --------------------------------------------------------------------------
 
 from .routes_chat import router as chat_router  # noqa: E402
+from .routes_layout import router as layout_router  # noqa: E402
 from .routes_upload import router as upload_router  # noqa: E402
 
 app.include_router(chat_router)
+app.include_router(layout_router)
 app.include_router(upload_router)
 
 

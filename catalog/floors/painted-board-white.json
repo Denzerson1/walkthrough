@@ -1,5 +1,6 @@
 {
   "id": "painted-board-white",
+  "baseColor": "#eeece7",
   "name": "White painted boards",
   "category": "painted",
   "tags": [
