@@ -24,7 +24,16 @@ test.describe('viewer', () => {
   test('renders the splat scene with no console errors', async ({ page }) => {
     const errors: string[] = [];
     page.on('console', (m) => {
-      if (m.type() === 'error') errors.push(m.text());
+      if (m.type() !== 'error') return;
+      // CI does not download the catalog meshes and floor textures (~150 MB
+      // from third-party hosts, `pnpm seed:assets`), and the viewer draws a
+      // correctly sized box or flat colour in their place. The browser still
+      // logs each missing file. Only those are excused: any other 404, and
+      // every script error, still fails the test.
+      const missingAsset =
+        m.text().startsWith('Failed to load resource') &&
+        m.location().url.includes('/files/assets/');
+      if (!missingAsset) errors.push(m.text());
     });
     page.on('pageerror', (e) => errors.push(e.message));
 
