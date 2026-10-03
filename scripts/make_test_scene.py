@@ -39,7 +39,6 @@ from walkthrough_pipeline.manifest import (  # noqa: E402
 from walkthrough_pipeline.paths import ProjectPaths, repo_root  # noqa: E402
 from walkthrough_pipeline.splat import (  # noqa: E402
     SplatCloud,
-    SpzUnavailable,
     write_ply,
     write_spz,
 )
@@ -595,19 +594,13 @@ def main() -> int:
     cloud, floor_mask = build_cloud(args.splats)
 
     def write(cloud_part: SplatCloud, name: str) -> str:
-        ply = paths.scene / f"{name}.ply"
-        write_ply(cloud_part, ply)
-        size = ply.stat().st_size / 1e6
-        asset = f"{name}.ply"
-        try:
-            spz = paths.scene / f"{name}.spz"
-            write_spz(ply, spz)
-            asset = f"{name}.spz"
-            size = spz.stat().st_size / 1e6
-        except SpzUnavailable:
-            pass
-        print(f"  {asset:<22} {len(cloud_part):>9,} splats  {size:6.1f} MB")
-        return asset
+        # The PLY is kept for tools; the viewer loads the SPZ.
+        write_ply(cloud_part, paths.scene / f"{name}.ply")
+        spz = paths.scene / f"{name}.spz"
+        write_spz(cloud_part, spz)
+        size = spz.stat().st_size / 1e6
+        print(f"  {spz.name:<22} {len(cloud_part):>9,} splats  {size:6.1f} MB")
+        return spz.name
 
     # The real pipeline produces this split in `pipeline floor` (M3). The
     # generator knows which splats are floor, so it can emit the same three

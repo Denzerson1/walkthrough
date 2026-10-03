@@ -22,8 +22,17 @@ dependencies = [
     "httpx>=0.27",
 ]
 
+[project.optional-dependencies]
+# The capture pipeline, installed only on the Linux/CUDA machine that runs it
+# (`uv sync --extra pipeline`), so the API and CI never pull a CUDA wheel.
+# gsplat training lives in its own venv; see docs/PIPELINE.md.
+pipeline = [
+    "pycolmap-cuda12==4.2.1; sys_platform == 'linux'",
+    "usd-core>=25.5",
+]
+
 [project.scripts]
-pipeline = "walkthrough_pipeline.cli:app"
+pipeline = "walkthrough_pipeline.cli:main"
 
 [dependency-groups]
 dev = [

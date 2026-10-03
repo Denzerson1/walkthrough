@@ -3,7 +3,7 @@
 Working name: `walkthrough` (brand name TBD).
 Scope source of truth: `docs/BRIEF.md`. This document records the brief **plus the decisions taken in the kickoff interview**, and is kept up to date as milestones land.
 
-Last updated: 2026-10-01
+Last updated: 2026-10-03
 
 ---
 
@@ -46,7 +46,7 @@ These answer the open questions in the brief. Where a decision narrows the brief
 |---|---|
 | Default model | `ASSISTANT_MODEL=claude-haiku-4-5-20251001` (as in the brief). Picking floor/furniture/style presets from a small catalog through constrained tool use is a narrow task well suited to Haiku. |
 | Escalation | If the M5 eval pass rate is below 85% after prompt and tool-schema work, switch `ASSISTANT_MODEL` to `claude-opus-5`. Pass rate is reported per model so the choice is made on evidence. |
-| Model note | "Opus 5.5" does not exist. Current lineup: Opus 5 (`claude-opus-5`), Sonnet 5, Haiku 4.5 (`claude-haiku-4-5-20251001`), Fable 5.1. |
+| Model note | Current lineup (2026-10): Opus 5.5 (`claude-opus-5-5`), Sonnet 5.5 (`claude-sonnet-5-5`), Haiku 4.5 (`claude-haiku-4-5-20251001`), Fable 5.1 (`claude-fable-5-1`). An earlier note here said Opus 5.5 did not exist; it does. The escalation target above should be re-checked against this list when M5 is measured. |
 | Cost guard | Per-session rate limit, `max_tokens` cap, token usage logged per request. Required before any live key is used. |
 
 ### Legal and assets
@@ -56,7 +56,7 @@ These answer the open questions in the brief. Where a decision narrows the brief
 | Posture | **Investor demo, pragmatic.** Anything on the shipping path must be CC0 / MIT / Apache-2.0 / BSD, or a paid licence permitting commercial use. |
 | Furniture GLBs | **CC0 core plus flagged demo-only extras.** Where a style has a visible gap, a clearly tagged `DEMO-ONLY` asset may be used, provided it is listed in `docs/LICENSES.md` with a must-replace note and a `docs/ROADMAP.md` entry naming the replacement and its cost. |
 | Hard stop | Original Inria/GraphDeco `gaussian-splatting` is forbidden (non-commercial licence). Approved stack: gsplat (Apache-2.0), COLMAP/GLOMAP, Spark `@sparkjsdev/spark` (MIT) with three.js. |
-| Gate | The `/licence-check` skill runs before adding any dependency, model, dataset, texture or 3D asset. Every item lands in `docs/LICENSES.md`. |
+| Gate | *Stood down by the owner on 2026-10-02* (see `CLAUDE.md`): no licence check per addition, `docs/LICENSES.md` kept only on request. Still in force: no Inria/GraphDeco `gaussian-splatting`, and any asset that forbids commercial use is called out. |
 
 ### Delivery
 
@@ -118,8 +118,8 @@ Viewer state (floor per room, placed furniture, recolors) is a **separate JSON o
 
 ## 5. Non-negotiable product rules
 
-1. **Honest staging.** Every modified view — floor, furniture, recolor, AI preview — shows a visible **"Virtually staged"** badge, with one-tap return to the original.
-2. **Zoom is FOV only**, clamped roughly 30–90°. The camera never leaves the waypoint.
+1. **Honest staging** — *badge removed by the owner on 2026-10-02* (see `CLAUDE.md`). "Hold to compare" and "Reset" stay, so every modified view is one press from the real capture. Virtually staged imagery is regulated advertising in several markets; revisit before publishing to buyers.
+2. **Zoom is FOV only**, clamped roughly 30–90°. The camera is moved by walking, never by zooming. *Free-roam replaced waypoint-only navigation on the owner's instruction (2026-10-02)*: the camera walks at eye height with collision, entering rooms through doors only.
 3. **Privacy.** The editor can blur or delete regions before a project is published.
 4. **No faked results.** If something cannot run or be verified (no GPU, missing asset, no API key), say so plainly and use the documented fallback. An unrun step is never reported as passing.
 5. **Secrets only in `.env`** (git-ignored), with `.env.example` committed.
@@ -170,5 +170,5 @@ From the brief §7, in force for every milestone:
 - [ ] Furniture in ≥ 3 complete styles, manual placement and automatic layout
 - [ ] Recolor of existing furniture in the furnished apartment
 - [ ] One AI assistant driving floors, furniture and recolor from the catalog (eval ≥ 85%)
-- [ ] "Virtually staged" badge and one-tap reset
+- [ ] One-tap compare and reset to the original (badge removed by the owner)
 - [ ] `docs/LICENSES.md` complete; no secrets or large binaries in git

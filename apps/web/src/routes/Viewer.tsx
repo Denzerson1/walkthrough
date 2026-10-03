@@ -187,13 +187,16 @@ export function Viewer() {
    * and "Hold to compare" shows the real empty capture underneath.
    *
    * Only on a fresh visit: a share link carries its own arrangement, and
-   * re-furnishing over it would throw away what was shared.
+   * re-furnishing over it would throw away what was shared. And only in an
+   * empty flat: a capture whose scan found furniture already has some, and
+   * staging on top of it would stand virtual sofas inside the real ones.
    */
   const furnishedRef = useRef(false);
   useEffect(() => {
     if (furnishedRef.current) return;
     if (!manifest || !catalog.styles.length) return;
     if (searchParams.get('s')) return;
+    if (manifest.items.length) return;
     if (viewer.items.length || Object.keys(viewer.floors).length) return;
 
     // Modern by default — the least committal of the five, and the one whose

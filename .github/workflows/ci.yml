@@ -28,7 +28,7 @@ jobs:
         run: uv python install 3.11
 
       - name: Sync dependencies
-        run: uv sync --all-extras --dev
+        run: uv sync --dev
 
       - name: Lint
         run: uv run ruff check services pipeline scripts
@@ -83,7 +83,7 @@ jobs:
           enable-cache: true
 
       - run: uv python install 3.11
-      - run: uv sync --all-extras --dev
+      - run: uv sync --dev
       - run: pnpm install --frozen-lockfile
 
       - name: Install browsers
@@ -98,7 +98,10 @@ jobs:
         # behaviour — that the splat is on screen, that a floor swap changes
         # pixels — not how good it looks. At full size they spend forty
         # minutes and still time out on the first attempt.
-        run: pnpm seed:testscene -- --splats 400000
+        #
+        # Called directly, not through `pnpm seed:testscene -- ...`: pnpm 10
+        # forwards the `--` itself and argparse rejects it.
+        run: uv run python scripts/make_test_scene.py --project demo-01 --splats 400000
 
       - name: Seed catalogs
         # Only the floor catalog is generated. The furniture catalog is written

@@ -59,3 +59,11 @@ Thumbs.db
 
 # Playwright local artefacts
 apps/web/test-results/
+
+# MemPalace per-project files (issue #185)
+mempalace.yaml
+entities.json
+
+# Local tool state (Serena, headroom)
+.serena/
+.claude/.headroom_*

@@ -80,8 +80,8 @@ export function Landing() {
 
       <footer className="rule mt-20 border-t pt-5">
         <p className="max-w-[62ch] text-[12px] leading-relaxed opacity-50">
-          Floors and furniture shown in a walkthrough are virtual. Any modified view is
-          marked and can be returned to the original capture at any time.
+          Floors and furniture shown in a walkthrough are virtual. Any modified view can be
+          compared with, or returned to, the original capture at any time.
         </p>
       </footer>
     </main>

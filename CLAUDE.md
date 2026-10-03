@@ -34,14 +34,11 @@ pnpm seed:assets     # downloads the real textures and meshes, and writes
                      # catalog/furniture + catalog/styles from
                      # scripts/furniture_themes.py
 
-# capture pipeline (needs WSL2 + CUDA; see docs/PIPELINE.md)
-pnpm pipeline -- ingest video.mov --project flat-01
-pnpm pipeline -- frames --project flat-01
-pnpm pipeline -- poses --project flat-01
-pnpm pipeline -- train --project flat-01
-pnpm pipeline -- align --project flat-01
-pnpm pipeline -- export --project flat-01
-pnpm pipeline -- run-all video.mov --project flat-01
+# capture pipeline — runs inside WSL2 Ubuntu on the GPU; see docs/PIPELINE.md.
+# `pnpm run` (not `pnpm pipeline`) so every argument reaches the CLI.
+pnpm run setup:pipeline        # once: CUDA, torch, gsplat, pycolmap in WSL
+pnpm run pipeline run-all "C:\captures\room.mov" --project flat-01 --roomplan "C:\captures\room.json"
+pnpm run pipeline ingest|frames|poses|train|align|export|info --project flat-01
 
 # assistant evals (needs ANTHROPIC_API_KEY)
 pnpm evals:assistant

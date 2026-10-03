@@ -28,6 +28,7 @@ inconsistency the reconstruction has to average away.
 | White balance | Manual, matched to the lights (~4000–5000 K), then **locked** | Auto WB shifts colour between rooms and the splat inherits the inconsistency |
 | Focus | Autofocus **off**, set once at about 1.5 m | Focus hunting ruins frames |
 | Stabilisation | **Off** | Stabilisation warps the image, so the camera model no longer matches reality |
+| Lens correction | Leave iOS's default on | The pipeline assumes the ultra-wide is mostly rectified, as iOS records it (camera model `OPENCV`). If frames look fisheye, rerun `poses --camera-model OPENCV_FISHEYE` |
 | Colour | **Rec. 709 SDR** — no HDR, no Apple Log | The pipeline expects standard-range sRGB-ish input |
 
 ## Preparing the flat
@@ -57,16 +58,30 @@ inconsistency the reconstruction has to average away.
   detection and replacement to work.
 - Shoot each room for roughly 60–90 seconds.
 
-## RoomPlan (recommended)
+## RoomPlan scan (strongly recommended)
 
-Capture a RoomPlan scan of the same flat, in the same visit. It gives us
-walls, doors, windows and furniture bounding boxes directly, which makes
-floor polygons, automatic layout and furniture recolouring far more reliable
-than deriving them from the splat.
+Capture a RoomPlan (LiDAR) scan of the same room, in the same visit, with the
+room exactly as filmed. It is what makes the result right rather than
+approximately right:
 
-Export USDZ or JSON and keep it alongside the video. The pipeline prefers
-RoomPlan data when it is present and falls back to its own estimates when it
-is not.
+- **Real-world scale.** The video alone has no idea of metres. `align` fits
+  the splat's walls onto the scan's walls and takes scale from that — within
+  millimetres. Without a scan, scale is guessed from a typical phone height
+  and can be 10–20% off.
+- **Walls, doors and windows**, so the viewer knows where you can walk and
+  the layout solver knows where furniture can go.
+- **Furniture boxes** for recolouring existing pieces.
+
+Use any app built on Apple RoomPlan. **Export JSON if the app offers it**
+(sometimes labelled "CapturedRoom" or "raw data"); USDZ also works. Some
+apps export a full LiDAR mesh (OBJ/PLY/GLB) instead of RoomPlan walls — that
+is not the same thing and the pipeline cannot use it.
+
+Scan tips: walk the room slowly, point at every wall, door and window until
+the app outlines it, and finish the scan before moving anything.
+
+A rectangular room with doors and windows placed symmetrically can fit the
+scan either way round; `align` warns when that happens.
 
 ## Consent and privacy
 
@@ -87,13 +102,19 @@ data under GDPR. Treat it that way.
 
 ## Handing the capture over
 
+One command, from the repo in a Windows terminal (Windows paths are fine):
+
 ```bash
-pnpm pipeline -- ingest /path/to/video.mov --project flat-01 \
-  --roomplan /path/to/roomplan-export
+pnpm run pipeline run-all "C:\captures\living.mov" --project flat-01 --roomplan "C:\captures\living.json"
 ```
 
-Then tell us the reference distance you measured and what it was (for example
-"front door width, 0.82 m"), so the scene can be scaled to metres.
+`ingest` checks the clip against this guide (HDR, resolution, frame rate,
+length) and parses the scan before anything slow starts, so a wrong export
+fails in seconds, not after an hour of training.
+
+With a RoomPlan scan, the measured reference distance is a cross-check only.
+Without one, write it down anyway: marking it in the editor is the planned way
+to fix scale, and is not built yet.
 
 ## Checklist before leaving the flat
 
@@ -104,5 +125,5 @@ Then tell us the reference distance you measured and what it was (for example
 - [ ] Reference distance measured and written down
 - [ ] Every room filmed, including a 1 m circle at three heights per waypoint
 - [ ] Walked through every doorway
-- [ ] RoomPlan scan captured
+- [ ] RoomPlan scan captured and exported (JSON if the app offers it)
 - [ ] Watched the footage back once for blur or a lens switch

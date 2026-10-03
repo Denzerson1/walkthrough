@@ -2,15 +2,15 @@
 Gaussian splat I/O.
 
 PLY is the interchange format from gsplat. SPZ is the compressed form Spark
-loads in the browser. We write PLY ourselves and shell out for SPZ, because
-no permissively licensed Python SPZ writer was available at the time of
-writing — see docs/LICENSES.md and docs/PIPELINE.md.
+loads in the browser, roughly 10x smaller. Both are written here in numpy;
+the SPZ writer follows Niantic's reference implementation (MIT,
+github.com/nianticlabs/spz, src/cc/load-spz.cc).
 """
 
 from __future__ import annotations
 
-import shutil
-import subprocess
+import gzip
+import struct
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -25,10 +25,15 @@ class SplatCloud:
     """A Gaussian splat cloud, in the fields gsplat's PLY uses."""
 
     positions: np.ndarray  # (N, 3) float32
-    colours: np.ndarray  # (N, 3) float32, 0-1 linear
+    colours: np.ndarray  # (N, 3) float32, 0-1 linear (may stray outside 0-1)
     opacities: np.ndarray  # (N,) float32, 0-1
     scales: np.ndarray  # (N, 3) float32, metres
     rotations: np.ndarray  # (N, 4) float32, wxyz quaternion
+    #: Higher-order SH, (N, K, 3) with K = 3, 8 or 15 for degree 1-3. None for
+    #: a cloud with colour only. This is the view-dependent shading a trained
+    #: scene has and a generated one does not; dropping it flattens every
+    #: highlight and reflection.
+    sh_rest: np.ndarray | None = None
 
     def __post_init__(self) -> None:
         n = len(self.positions)
@@ -41,9 +46,22 @@ class SplatCloud:
                 raise ValueError(f"{name} must be ({n}, {width}), got {arr.shape}")
         if self.opacities.shape != (n,):
             raise ValueError(f"opacities must be ({n},), got {self.opacities.shape}")
+        if self.sh_rest is not None and (
+            self.sh_rest.ndim != 3
+            or self.sh_rest.shape[0] != n
+            or self.sh_rest.shape[2] != 3
+            or self.sh_rest.shape[1] not in SH_REST_COUNTS.values()
+        ):
+            raise ValueError(f"sh_rest must be (N, 3|8|15, 3), got {self.sh_rest.shape}")
 
     def __len__(self) -> int:
         return len(self.positions)
+
+    @property
+    def sh_degree(self) -> int:
+        if self.sh_rest is None:
+            return 0
+        return next(d for d, k in SH_REST_COUNTS.items() if k == self.sh_rest.shape[1])
 
     def select(self, mask: np.ndarray) -> SplatCloud:
         return SplatCloud(
@@ -52,16 +70,20 @@ class SplatCloud:
             opacities=self.opacities[mask],
             scales=self.scales[mask],
             rotations=self.rotations[mask],
+            sh_rest=None if self.sh_rest is None else self.sh_rest[mask],
         )
 
     def transformed(self, matrix: np.ndarray) -> SplatCloud:
         """
-        Apply a 4x4 transform to positions, scales and orientations.
+        Apply a 4x4 similarity transform to positions, scales, orientations
+        and spherical harmonics.
 
         The orientations matter: a Gaussian is an oriented ellipsoid fitted to
         a surface. Rotating only the centres and leaving the quaternions alone
         leaves every splat tilted away from the surface it belongs to, which
-        shows up as streaking after gravity alignment.
+        shows up as streaking after gravity alignment. The SH matter for the
+        same reason: they are defined over view directions, so an unrotated
+        set puts every highlight on the wrong side.
         """
         homo = np.hstack([self.positions, np.ones((len(self), 1), dtype=np.float64)])
         positions = (homo @ matrix.T)[:, :3].astype(np.float32)
@@ -77,10 +99,79 @@ class SplatCloud:
             opacities=self.opacities,
             scales=(self.scales * scale_factor).astype(np.float32),
             rotations=rotate_quaternions(self.rotations, rotation),
+            sh_rest=None if self.sh_rest is None else rotate_sh(self.sh_rest, rotation),
         )
 
     def bounds(self) -> tuple[np.ndarray, np.ndarray]:
         return self.positions.min(axis=0), self.positions.max(axis=0)
+
+
+#: Higher-order SH coefficients per channel, by degree.
+SH_REST_COUNTS = {1: 3, 2: 8, 3: 15}
+
+
+def sh_basis(directions: np.ndarray, degree: int) -> np.ndarray:
+    """
+    Real SH basis functions of bands 1..degree at unit `directions`, (M, K).
+
+    Constants and ordering are the ones gsplat and the original 3DGS renderer
+    evaluate, so coefficients expressed in this basis are the ones in the PLY.
+    """
+    x, y, z = directions[:, 0], directions[:, 1], directions[:, 2]
+    c1 = 0.4886025119029199
+    cols = [-c1 * y, c1 * z, -c1 * x]
+    if degree >= 2:
+        xx, yy, zz = x * x, y * y, z * z
+        cols += [
+            1.0925484305920792 * x * y,
+            -1.0925484305920792 * y * z,
+            0.31539156525252005 * (2 * zz - xx - yy),
+            -1.0925484305920792 * x * z,
+            0.5462742152960396 * (xx - yy),
+        ]
+    if degree >= 3:
+        cols += [
+            -0.5900435899266435 * y * (3 * xx - yy),
+            2.890611442640554 * x * y * z,
+            -0.4570457994644658 * y * (4 * zz - xx - yy),
+            0.3731763325901154 * z * (2 * zz - 3 * xx - 3 * yy),
+            -0.4570457994644658 * x * (4 * zz - xx - yy),
+            1.445305721320277 * z * (xx - yy),
+            -0.5900435899266435 * x * (xx - 3 * yy),
+        ]
+    return np.stack(cols, axis=1)
+
+
+def sh_rotation_matrix(rotation: np.ndarray, degree: int) -> np.ndarray:
+    """
+    (K, K) matrix taking SH coefficients of a scene to those of the scene
+    rotated by `rotation`.
+
+    Solved numerically rather than from Wigner-D formulas: each SH band is
+    closed under rotation, so requiring f'(R d) = f(d) at enough sample
+    directions determines the matrix exactly, and it is expressed in exactly
+    the basis `sh_basis` evaluates — no sign-convention bookkeeping.
+    """
+    rng = np.random.default_rng(0)
+    dirs = rng.normal(size=(64, 3))
+    dirs /= np.linalg.norm(dirs, axis=1, keepdims=True)
+    before = sh_basis(dirs, degree)  # Y(d)
+    after = sh_basis(dirs @ np.asarray(rotation, dtype=np.float64).T, degree)  # Y(R d)
+    # c' = M c with Y(R d) c' = Y(d) c for every c, so Y(R d) M = Y(d).
+    m, *_ = np.linalg.lstsq(after, before, rcond=None)
+    return m
+
+
+def rotate_sh(sh_rest: np.ndarray, rotation: np.ndarray) -> np.ndarray:
+    degree = next(d for d, k in SH_REST_COUNTS.items() if k == sh_rest.shape[1])
+    m = sh_rotation_matrix(rotation, degree)
+    return np.einsum("kj,njc->nkc", m, sh_rest.astype(np.float64)).astype(np.float32)
+
+
+def crop_to_box(cloud: SplatCloud, lo: np.ndarray, hi: np.ndarray) -> SplatCloud:
+    """Keep only splats whose centres lie inside the axis-aligned box."""
+    inside = np.all((cloud.positions >= lo) & (cloud.positions <= hi), axis=1)
+    return cloud.select(inside)
 
 
 def matrix_to_quaternion(m: np.ndarray) -> np.ndarray:
@@ -153,7 +244,9 @@ def colour_to_sh(colour: np.ndarray) -> np.ndarray:
 
 
 def sh_to_colour(dc: np.ndarray) -> np.ndarray:
-    return np.clip(dc * SH_C0 + 0.5, 0.0, 1.0)
+    # Not clipped: a trained DC term may sit outside 0-1 and the higher bands
+    # pull it back, so clipping here would shift colours on a round trip.
+    return dc * SH_C0 + 0.5
 
 
 def _logit(p: np.ndarray) -> np.ndarray:
@@ -165,36 +258,46 @@ def _sigmoid(x: np.ndarray) -> np.ndarray:
     return 1.0 / (1.0 + np.exp(-x))
 
 
-PLY_FIELDS = [
-    "x", "y", "z",
-    "nx", "ny", "nz",
-    "f_dc_0", "f_dc_1", "f_dc_2",
-    "opacity",
-    "scale_0", "scale_1", "scale_2",
-    "rot_0", "rot_1", "rot_2", "rot_3",
-]
+def _ply_fields(sh_rest_count: int) -> list[str]:
+    # f_rest is channel-major — all red coefficients, then green, then blue —
+    # which is how gsplat's exporter and the original 3DGS lay it out.
+    return [
+        "x", "y", "z",
+        "nx", "ny", "nz",
+        "f_dc_0", "f_dc_1", "f_dc_2",
+        *(f"f_rest_{i}" for i in range(3 * sh_rest_count)),
+        "opacity",
+        "scale_0", "scale_1", "scale_2",
+        "rot_0", "rot_1", "rot_2", "rot_3",
+    ]
 
 
 def write_ply(cloud: SplatCloud, path: Path) -> None:
     """Write the binary little-endian PLY that gsplat and Spark both read."""
     path.parent.mkdir(parents=True, exist_ok=True)
     n = len(cloud)
+    k = 0 if cloud.sh_rest is None else cloud.sh_rest.shape[1]
+    fields = _ply_fields(k)
 
     dc = colour_to_sh(cloud.colours).astype(np.float32)
     # PLY stores log scale and logit opacity, matching gsplat's convention.
     log_scales = np.log(np.maximum(cloud.scales, 1e-8)).astype(np.float32)
     logit_opacity = _logit(cloud.opacities).astype(np.float32)
 
-    data = np.zeros(n, dtype=[(f, "<f4") for f in PLY_FIELDS])
+    data = np.zeros(n, dtype=[(f, "<f4") for f in fields])
     data["x"], data["y"], data["z"] = cloud.positions.T
     data["f_dc_0"], data["f_dc_1"], data["f_dc_2"] = dc.T
+    if cloud.sh_rest is not None:
+        channel_major = cloud.sh_rest.transpose(0, 2, 1).reshape(n, 3 * k)
+        for i in range(3 * k):
+            data[f"f_rest_{i}"] = channel_major[:, i]
     data["opacity"] = logit_opacity
     data["scale_0"], data["scale_1"], data["scale_2"] = log_scales.T
     data["rot_0"], data["rot_1"], data["rot_2"], data["rot_3"] = cloud.rotations.T
 
     header = "ply\nformat binary_little_endian 1.0\n"
     header += f"element vertex {n}\n"
-    header += "".join(f"property float {f}\n" for f in PLY_FIELDS)
+    header += "".join(f"property float {f}\n" for f in fields)
     header += "end_header\n"
 
     with path.open("wb") as fh:
@@ -233,35 +336,109 @@ def read_ply(path: Path) -> SplatCloud:
     rotations = np.stack(
         [data["rot_0"], data["rot_1"], data["rot_2"], data["rot_3"]], axis=1
     ).astype(np.float32)
+    rest = [f for f in fields if f.startswith("f_rest_")]
+    sh_rest = None
+    if rest:
+        k = len(rest) // 3
+        channel_major = np.stack([data[f"f_rest_{i}"] for i in range(3 * k)], axis=1)
+        sh_rest = channel_major.reshape(count, 3, k).transpose(0, 2, 1).astype(np.float32)
     return SplatCloud(
         positions=positions,
         colours=sh_to_colour(dc).astype(np.float32),
         opacities=_sigmoid(np.asarray(data["opacity"])).astype(np.float32),
         scales=scales,
         rotations=rotations,
+        sh_rest=sh_rest,
     )
 
 
-class SpzUnavailable(RuntimeError):
-    pass
+#: "NGSP", little-endian.
+SPZ_MAGIC = 0x5053474E
+#: Version 3 is the newest gzip-framed version; v4 moved to ZSTD streams.
+#: Every SPZ reader, Spark's included, reads v3.
+SPZ_VERSION = 3
+SPZ_FRACTIONAL_BITS = 12
+SPZ_COLOR_SCALE = 0.15
 
 
-def write_spz(ply_path: Path, spz_path: Path) -> None:
+def write_spz(cloud: SplatCloud, path: Path) -> None:
     """
-    Compress a PLY to SPZ.
+    Write a cloud as SPZ v3, quantised exactly as the reference encoder does.
 
-    Requires the `spz` CLI on PATH. We keep the PLY either way, as the brief
-    requires, so a missing SPZ encoder degrades the download size but never
-    loses data.
+    Coordinates are stored as-is: SPZ's native frame is RUB (three.js), which
+    is already ours — Y up, metres — so no axis flip is applied.
     """
-    exe = shutil.which("spz")
-    if not exe:
-        raise SpzUnavailable(
-            "The `spz` CLI is not on PATH, so the scene cannot be compressed. "
-            "The PLY is still written. See docs/PIPELINE.md for install steps."
-        )
-    spz_path.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run([exe, "encode", str(ply_path), "-o", str(spz_path)], check=True)
+    n = len(cloud)
+    degree = cloud.sh_degree
+
+    fixed = np.round(cloud.positions.astype(np.float64) * (1 << SPZ_FRACTIONAL_BITS))
+    fixed = fixed.astype(np.int64).reshape(-1)
+    positions = np.stack([fixed & 0xFF, (fixed >> 8) & 0xFF, (fixed >> 16) & 0xFF], axis=1)
+
+    log_scales = np.log(np.maximum(cloud.scales.astype(np.float64), 1e-30))
+    scales = _to_u8((log_scales + 10.0) * 16.0)
+    alphas = _to_u8(cloud.opacities.astype(np.float64) * 255.0)
+    dc = colour_to_sh(cloud.colours.astype(np.float64))
+    colours = _to_u8(dc * (SPZ_COLOR_SCALE * 255.0) + 0.5 * 255.0)
+    rotations = _pack_smallest_three(cloud.rotations)
+
+    if cloud.sh_rest is None:
+        sh = np.zeros(0, dtype=np.uint8)
+    else:
+        # Coefficient-major with RGB interleaved, as the format stores it.
+        # Degree 1 keeps 5 bits, higher bands 4: the reference defaults.
+        sh_vals = cloud.sh_rest.astype(np.float64)
+        bucket = np.full(sh_vals.shape[1], 1 << (8 - 4))
+        bucket[:3] = 1 << (8 - 5)
+        sh = _quantize_sh(sh_vals, bucket[None, :, None]).reshape(-1)
+
+    header = struct.pack(
+        "<IIIBBBB", SPZ_MAGIC, SPZ_VERSION, n, degree, SPZ_FRACTIONAL_BITS, 0, 0
+    )
+    body = b"".join(
+        [
+            header,
+            positions.astype(np.uint8).tobytes(),
+            alphas.tobytes(),
+            colours.tobytes(),
+            scales.tobytes(),
+            rotations.tobytes(),
+            sh.tobytes(),
+        ]
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(gzip.compress(body, compresslevel=6))
+
+
+def _to_u8(x: np.ndarray) -> np.ndarray:
+    return np.clip(np.round(x), 0, 255).astype(np.uint8)
+
+
+def _quantize_sh(x: np.ndarray, bucket: np.ndarray) -> np.ndarray:
+    # Quantise to 8 bits, then snap to the bucket centre; 0 stays exact.
+    q = np.round(x * 128.0) + 128.0
+    q = np.floor((q + bucket // 2) / bucket) * bucket
+    return np.clip(q, 0, 255).astype(np.uint8)
+
+
+def _pack_smallest_three(rotations_wxyz: np.ndarray) -> np.ndarray:
+    """
+    SPZ v3 rotation: drop the largest quaternion component (its index goes in
+    the top two bits), store the other three as sign + 9-bit magnitude.
+    """
+    q = rotations_wxyz.astype(np.float64)[:, [1, 2, 3, 0]]  # xyzw, as SPZ stores
+    q /= np.maximum(np.linalg.norm(q, axis=1, keepdims=True), 1e-12)
+    largest = np.argmax(np.abs(q), axis=1)
+    negate = q[np.arange(len(q)), largest] < 0
+
+    comp = largest.astype(np.uint32)
+    for i in range(4):
+        use = largest != i
+        neg = ((q[:, i] < 0) ^ negate).astype(np.uint32)
+        mag = (511.0 * (np.abs(q[:, i]) / np.sqrt(0.5)) + 0.5).astype(np.uint32)
+        packed = (comp << 10) | (neg << 9) | mag
+        comp = np.where(use, packed, comp)
+    return comp.astype("<u4").view(np.uint8).reshape(-1, 4)
 
 
 def cap_splat_count(cloud: SplatCloud, max_splats: int, seed: int = 0) -> SplatCloud:

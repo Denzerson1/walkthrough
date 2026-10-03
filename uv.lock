@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11, <3.13"
 resolution-markers = [
     "python_full_version >= '3.12'",
@@ -80,6 +80,22 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697, upload-time = "2022-10-25T02:36:22.414Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335, upload-time = "2022-10-25T02:36:20.889Z" },
+]
+
+[[package]]
+name = "cuda-toolkit"
+version = "12.9.2.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/51/7e/f61db087382a2114a93abc0b38f7872f86f2c7c36839da7f9403c9044b47/cuda_toolkit-12.9.2.0-py2.py3-none-any.whl", hash = "sha256:b54b8f2fd4200090b44843d48fc5411198e8b3e47a3db56e2518ab588c0ef1e0", size = 2431, upload-time = "2026-04-14T00:40:05.972Z" },
+]
+
+[package.optional-dependencies]
+cudart = [
+    { name = "nvidia-cuda-runtime-cu12", marker = "platform_machine == 'aarch64' or platform_machine == 'x86_64'" },
+]
+curand = [
+    { name = "nvidia-curand-cu12", marker = "platform_machine == 'aarch64' or platform_machine == 'x86_64'" },
 ]
 
 [[package]]
@@ -385,6 +401,24 @@ wheels = [
 ]
 
 [[package]]
+name = "nvidia-cuda-runtime-cu12"
+version = "12.9.79"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bc/e0/0279bd94539fda525e0c8538db29b72a5a8495b0c12173113471d28bce78/nvidia_cuda_runtime_cu12-12.9.79-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:83469a846206f2a733db0c42e223589ab62fd2fabac4432d2f8802de4bded0a4", size = 3515012, upload-time = "2025-06-05T20:00:35.519Z" },
+    { url = "https://files.pythonhosted.org/packages/bc/46/a92db19b8309581092a3add7e6fceb4c301a3fd233969856a8cbf042cd3c/nvidia_cuda_runtime_cu12-12.9.79-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:25bba2dfb01d48a9b59ca474a1ac43c6ebf7011f1b0b8cc44f54eb6ac48a96c3", size = 3493179, upload-time = "2025-06-05T20:00:53.735Z" },
+]
+
+[[package]]
+name = "nvidia-curand-cu12"
+version = "10.3.10.19"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/14/1c/2a45afc614d99558d4a773fa740d8bb5471c8398eeed925fc0fcba020173/nvidia_curand_cu12-10.3.10.19-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:de663377feb1697e1d30ed587b07d5721fdd6d2015c738d7528a6002a6134d37", size = 68292066, upload-time = "2025-05-01T19:39:13.595Z" },
+    { url = "https://files.pythonhosted.org/packages/31/44/193a0e171750ca9f8320626e8a1f2381e4077a65e69e2fb9708bd479e34a/nvidia_curand_cu12-10.3.10.19-py3-none-manylinux_2_27_x86_64.whl", hash = "sha256:49b274db4780d421bd2ccd362e1415c13887c53c214f0d4b761752b8f9f6aa1e", size = 68295626, upload-time = "2025-05-01T19:39:38.885Z" },
+]
+
+[[package]]
 name = "opencv-python-headless"
 version = "5.0.0.93"
 source = { registry = "https://pypi.org/simple" }
@@ -476,6 +510,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/de/6b/986844e4b160718f0175a0f6650f9e0039e0bfbf4ad250b0903616af34d5/plyfile-1.1.5.tar.gz", hash = "sha256:c62b505062076d72ba67845066579301553baaa93c7d23d9ac1f43495158339c", size = 36237, upload-time = "2026-07-28T08:23:13.181Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/99/69/3452dd12683d722bc33758c8875fb8a812df21f3ee339293aebf97bc2340/plyfile-1.1.5-py3-none-any.whl", hash = "sha256:675c0fc22b949c49398f5ed6725a1d781f6a9f7625b42232c02198f6509c4ae3", size = 36463, upload-time = "2026-07-28T08:23:12.14Z" },
+]
+
+[[package]]
+name = "pycolmap-cuda12"
+version = "4.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cuda-toolkit", extra = ["cudart", "curand"] },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8c/8f/315f4c158caaf32d407f20bba5147c668dd0d28859183c699356642c7b43/pycolmap_cuda12-4.2.1-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:babc54a7d738a0f8daaf4cb33508052acd3f40e02529dee7647a613d9e74ab78", size = 72945341, upload-time = "2026-09-29T17:05:26.411Z" },
+    { url = "https://files.pythonhosted.org/packages/98/20/3adf3bb7ba0172d0957d588e2223b4f5d17ce5e9839e51c064b074cc2381/pycolmap_cuda12-4.2.1-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:5d9b4ecd575481a03827586b4829fff1857dc6fd3aa63b2d60be590d84ac77dc", size = 72891756, upload-time = "2026-09-29T17:05:34.394Z" },
 ]
 
 [[package]]
@@ -861,6 +909,19 @@ wheels = [
 ]
 
 [[package]]
+name = "usd-core"
+version = "26.8"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5d/7b/fd674dc4c3273e18cede49c50be75d90649d38dbec6180bda83b4047a8f0/usd_core-26.8-cp311-none-macosx_10_15_universal2.whl", hash = "sha256:781ddef732e3a6d300a5fa2d0c5b8af103aa8589a88c4af77ac6608f39293880", size = 40653076, upload-time = "2026-07-20T14:32:11.676Z" },
+    { url = "https://files.pythonhosted.org/packages/c4/d7/491a3dd0f62424f92f59240c5aa5c64c03588c1b4920b00f5df2ac4f4087/usd_core-26.8-cp311-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:53ebbc130108c7e0e7b4af9a4fe3bdac2ae084a12db13496a50f895db527382e", size = 29611915, upload-time = "2026-07-20T14:32:14.833Z" },
+    { url = "https://files.pythonhosted.org/packages/66/18/7ccfb5c69366fa0d7590697e0f62adb4b5c20f02a3c3a674331b4bf40d43/usd_core-26.8-cp311-none-win_amd64.whl", hash = "sha256:d39cef20efdfc29473e92887487bb8c10c45e966c492b5356d32a52724c3578f", size = 13848082, upload-time = "2026-07-20T14:32:17.701Z" },
+    { url = "https://files.pythonhosted.org/packages/97/44/fb780d02b04bbebc410bfb6decccc66aec07fb0322172ad019c4579ad80a/usd_core-26.8-cp312-none-macosx_10_15_universal2.whl", hash = "sha256:aaf1a68bf4c7ab959b9f4d3a6e0ef9347ff6135a1452676bb40916060146c53e", size = 40698020, upload-time = "2026-07-20T14:32:20.788Z" },
+    { url = "https://files.pythonhosted.org/packages/19/0b/efe5c0d7c273149ac94083831e5b36649925a621a73cd2ddf9616e160c8c/usd_core-26.8-cp312-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:204fb1ef1fc977b827c491f4e9fa39b57518504ed0cacfe12e026e95123cacf1", size = 29530957, upload-time = "2026-07-20T14:32:24.255Z" },
+    { url = "https://files.pythonhosted.org/packages/79/d3/749edc4d2eea3ffb94aa0526d5da6f4a3f185ef7004ceeb6b5ecdb6a0c68/usd_core-26.8-cp312-none-win_amd64.whl", hash = "sha256:6db0031224b718cae53e4b19ecd80aea0a7ed4348e330fd82ccfbdc9b8b311ed", size = 13887898, upload-time = "2026-07-20T14:32:27.452Z" },
+]
+
+[[package]]
 name = "uvicorn"
 version = "0.54.0"
 source = { registry = "https://pypi.org/simple" }
@@ -928,6 +989,12 @@ dependencies = [
     { name = "uvicorn", extra = ["standard"] },
 ]
 
+[package.optional-dependencies]
+pipeline = [
+    { name = "pycolmap-cuda12", marker = "sys_platform == 'linux'" },
+    { name = "usd-core" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "httpx" },
@@ -946,6 +1013,7 @@ requires-dist = [
     { name = "opencv-python-headless", specifier = ">=4.10" },
     { name = "pillow", specifier = ">=11.0" },
     { name = "plyfile", specifier = ">=1.1" },
+    { name = "pycolmap-cuda12", marker = "sys_platform == 'linux' and extra == 'pipeline'", specifier = "==4.2.1" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "python-multipart", specifier = ">=0.0.12" },
@@ -953,8 +1021,10 @@ requires-dist = [
     { name = "scipy", specifier = ">=1.14" },
     { name = "sqlmodel", specifier = ">=0.0.22" },
     { name = "typer", specifier = ">=0.15" },
+    { name = "usd-core", marker = "extra == 'pipeline'", specifier = ">=25.5" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
 ]
+provides-extras = ["pipeline"]
 
 [package.metadata.requires-dev]
 dev = [

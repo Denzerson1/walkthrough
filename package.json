@@ -23,7 +23,8 @@
     "seed:floors": "uv run python scripts/seed_floors.py",
     "seed:assets": "uv run python scripts/fetch_assets.py",
     "evals:assistant": "uv run python scripts/run_assistant_evals.py",
-    "pipeline": "uv run pipeline"
+    "pipeline": "wsl -d Ubuntu -u root -- /root/.venvs/walkthrough/bin/pipeline",
+    "setup:pipeline": "wsl -d Ubuntu -u root -- bash scripts/setup_pipeline_wsl.sh"
   },
   "devDependencies": {
     "concurrently": "9.1.2"

@@ -7,6 +7,90 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-10-03 — The capture pipeline runs, on the GPU, end to end
+
+The owner asked for everything needed to take real captures: an iPhone video
+of one room plus a RoomPlan (LiDAR) scan. Before this, `train` raised
+unconditionally, RoomPlan files were copied and never read, scale could not
+be set, and SPZ needed a CLI nobody had.
+
+### The GPU was there all along
+
+The 2080 Super is visible to Windows now (`nvidia-smi`: 8 GB, driver 610.88);
+the "no NVIDIA GPU" finding of 2026-10-02 no longer holds. WSL2 Ubuntu 26.04
+was installed and `scripts/setup_pipeline_wsl.sh` (`pnpm run setup:pipeline`)
+builds the toolchain in it. Five environment problems were solved on the way
+and are recorded in `docs/PIPELINE.md` so nobody re-solves them: WSL 2.3
+could not start the image, WSL's networking crawled for apt, Ubuntu's
+`colmap` package is broken, the CUDA metapackage will not install, and CUDA
+12's headers clash with glibc 2.43.
+
+### What was built
+
+| Piece | What it does |
+|---|---|
+| `train` | Runs gsplat 1.5.3's reference trainer (MCMC, capped count, every 8th frame held out) in its own venv, and reports PSNR/SSIM/LPIPS on frames it never saw |
+| `poses` | pycolmap with GPU SIFT replaces the broken COLMAP binary; exhaustive matching for a room; undistorts for the trainer |
+| `roomplan.py` | Reads RoomPlan JSON (`CapturedRoom`) and USDZ into manifest rooms: outline, walls, doors, windows, furniture boxes, room type |
+| `register.py` | Fits the splat's walls onto the scan's: yaw, position and **metric scale**. Openings are cut out of the walls, which is what tells a rectangle from itself turned 180°. Refuses to write a scene that does not fit |
+| `align` | Gravity from the cameras' right vectors, floor by RANSAC, then the scan fit (or a labelled scale estimate without one). Never overwrites the trainer's output, so it can be rerun |
+| `export` | Crops beyond the walls, splits the floor geometrically (no segmentation model needed for a scanned room), writes SPZ |
+| SPZ writer | Our own, in numpy, following Niantic's MIT reference. The demo scene went from 60 MB of PLY to 4.8 MB, and Spark renders it pixel-identical (mean difference 1/255) |
+| SH | Higher-order spherical harmonics survive read, write, rotation and SPZ. Rotations rotate them, solved numerically in gsplat's own basis |
+| `ingest` | Checks the clip against the capture guide (HDR, resolution, fps, length) and parses the scan before anything slow starts |
+| `pnpm run pipeline ...` | Calls into WSL from Windows and accepts Windows paths |
+
+### Verified by running it on real images
+
+No iPhone capture exists yet, so the Mip-NeRF 360 "room" photos (311, CC-BY,
+fetched by range request — 150 MB instead of the 12 GB archive) were turned
+into a 3 fps video and pushed through every stage on the 2080 Super:
+
+| Stage | Result |
+|---|---|
+| poses | 276/276 frames registered, 22 min |
+| train | **Held-out PSNR 33.86 dB, SSIM 0.955, LPIPS 0.096**, 1.5 M splats, 35 min, 3.8 GB VRAM |
+| export | 36 MB viewer download at SH degree 3 |
+| viewer | Photoreal toward the filmed side; smeared where nothing was filmed (`docs/screenshots/m1-real-room-*.jpg`) |
+
+### Found by running it, not by the tests
+
+1. **gsplat's MCMC leaves most splats faint** (median opacity 0.035). A fixed
+   0.3 opacity cut kept 4% of them and the floor fit landed on a 19° tilt;
+   `align` refused to continue, correctly. Solid splats are now the more
+   opaque 40%, and a regression test fails under the old cut.
+2. **A hull over floor-height splats outlined 740 m² for one room**, because
+   strays sit metres outside it. The outline is now the largest connected
+   region of a 10 cm density grid.
+3. **The viewer opened among floaters**, at the outline's centroid. It now
+   starts where the camera actually stood, facing the side that was filmed.
+4. My first guess at (1) blamed gravity. Measuring showed the camera-up
+   estimate within 2° of the robust one — the wrong diagnosis, caught before
+   it shipped. The right-vector estimate was kept anyway, because pitch
+   cannot bias it, which a test now proves.
+
+### Not verified
+
+| What | Why |
+|---|---|
+| An iPhone 16 Pro capture | None exists yet. The test video is photos, not walking footage, and was not shot with the guide's settings |
+| RoomPlan on a real scan | No public sample exists. JSON and USDZ readers follow Apple's documented `CapturedRoom` layout, accept both encodings Swift produces, and are tested on synthetic scans; the registration is tested with known transforms. The first real scan is the real test |
+| USDZ reading | Written to RoomPlan's prim naming; never run on a real file |
+| Camera model choice | `OPENCV` assumes iOS's lens correction is on, as it is by default; if real frames look fisheye, `--camera-model OPENCV_FISHEYE` |
+| Viewer frame rate with a 1.4 M-splat SH-3 real scene on a phone | Not measured |
+
+### Also
+
+- The viewer no longer auto-furnishes a capture whose scan found furniture —
+  staging over a real sofa would stand a virtual one inside it.
+- `SPEC.md` and the landing page caught up with the owner's 2026-10-02
+  decisions (badge, licences, free-roam) and the current model list.
+- The trainer and pipeline venvs live in WSL (`~/.venvs`), never touching the
+  Windows `.venv`. `pyproject.toml` gains a `pipeline` extra; the API and CI
+  install exactly what they did before.
+
+---
+
 ## 2026-10-02 (fifth pass) — Walls that read as a room, and two owner overrides
 
 ### The walls were weird because the positions were random

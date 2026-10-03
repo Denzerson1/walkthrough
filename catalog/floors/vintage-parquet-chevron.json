@@ -16,10 +16,14 @@
     0.5
   ],
   "glossy": false,
-  "license": "CC0",
-  "source": "Generated procedurally by scripts/seed_floors.py",
+  "license": "CC0-1.0",
+  "source": "https://ambientcg.com/view?id=WoodFloor037",
   "maps": {
-    "albedo": "/catalog/floors/thumbnails/vintage-parquet-chevron.png"
+    "albedo": "/files/assets/floors/vintage-parquet-chevron/color.jpg",
+    "normal": "/files/assets/floors/vintage-parquet-chevron/normal.jpg",
+    "roughness": "/files/assets/floors/vintage-parquet-chevron/roughness.jpg"
   },
-  "thumbnail": "/catalog/floors/thumbnails/vintage-parquet-chevron.png"
+  "thumbnail": "/catalog/floors/thumbnails/vintage-parquet-chevron.png",
+  "tintAlbedo": false,
+  "assetStatus": "ready"
 }

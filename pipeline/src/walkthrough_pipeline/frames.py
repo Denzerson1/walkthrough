@@ -7,6 +7,7 @@ unit-tested without a video file or a GPU.
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -30,7 +31,23 @@ def ffmpeg_path() -> str:
     return exe
 
 
-def extract_frames(video: Path, out_dir: Path, fps: float = 3.0) -> list[Path]:
+def scale_filter(long_edge: int) -> str:
+    """
+    ffmpeg scale expression shrinking the long edge to `long_edge`, whichever
+    way round the phone was held, and never enlarging.
+
+    Scaling while decoding matters: a 4K PNG is ~12 MB, so a 10-minute walk
+    at 3 fps would write 20 GB of frames before blur rejection even starts.
+    """
+    return (
+        f"scale='if(gte(iw,ih),min({long_edge},iw),-2)':'if(gte(iw,ih),-2,min({long_edge},ih))'"
+        ":flags=area"
+    )
+
+
+def extract_frames(
+    video: Path, out_dir: Path, fps: float = 3.0, long_edge: int = 1600
+) -> list[Path]:
     """Decode the video to PNGs at `fps`. Returns the frame paths in order."""
     out_dir.mkdir(parents=True, exist_ok=True)
     for stale in out_dir.glob("frame_*.png"):
@@ -40,12 +57,61 @@ def extract_frames(video: Path, out_dir: Path, fps: float = 3.0) -> list[Path]:
         "-hide_banner",
         "-loglevel", "error",
         "-i", str(video),
-        "-vf", f"fps={fps}",
-        "-q:v", "2",
+        "-vf", f"fps={fps},{scale_filter(long_edge)}",
         str(out_dir / "frame_%05d.png"),
     ]
     subprocess.run(cmd, check=True)
     return sorted(out_dir.glob("frame_*.png"))
+
+
+#: Transfer functions that mean the clip is HDR (HLG or PQ). The pipeline
+#: expects SDR Rec. 709 (docs/CAPTURE.md); HDR decodes washed out.
+HDR_TRANSFERS = {"arib-std-b67", "smpte2084"}
+
+
+def probe(video: Path) -> dict:
+    exe = shutil.which("ffprobe")
+    if not exe:
+        raise FfmpegMissing("ffprobe is not on PATH (it ships with ffmpeg).")
+    out = subprocess.run(
+        [exe, "-v", "error", "-select_streams", "v:0", "-show_entries",
+         "stream=width,height,avg_frame_rate,color_transfer,codec_name:format=duration",
+         "-of", "json", str(video)],
+        check=True, capture_output=True, text=True,
+    ).stdout
+    return json.loads(out)
+
+
+def video_warnings(info: dict) -> list[str]:
+    """What in a probed clip contradicts docs/CAPTURE.md, in plain words."""
+    streams = info.get("streams") or []
+    if not streams:
+        return ["No video stream found in this file."]
+    s = streams[0]
+    warnings = []
+    if s.get("color_transfer") in HDR_TRANSFERS:
+        warnings.append(
+            "This clip is HDR. Re-record in SDR Rec. 709 (docs/CAPTURE.md): HDR frames "
+            "decode washed out and the reconstruction inherits it."
+        )
+    long_side = max(int(s.get("width") or 0), int(s.get("height") or 0))
+    if long_side < 3000:
+        warnings.append(f"Only {long_side} px on the long side; the guide asks for 4K.")
+    num, _, den = str(s.get("avg_frame_rate", "0/1")).partition("/")
+    rate = float(num) / float(den or 1) if float(den or 1) else 0.0
+    if 0 < rate < 50:
+        warnings.append(f"{rate:.0f} fps; the guide asks for 60 so blur rejection has choice.")
+    duration = float((info.get("format") or {}).get("duration") or 0)
+    if 0 < duration < 40:
+        warnings.append(f"Only {duration:.0f} s of footage; a room needs roughly 60-90 s.")
+    return warnings
+
+
+def check_video(video: Path) -> list[str]:
+    try:
+        return video_warnings(probe(video))
+    except (FfmpegMissing, subprocess.CalledProcessError) as exc:
+        return [f"Could not inspect the video: {exc}"]
 
 
 def variance_of_laplacian(image: np.ndarray) -> float:

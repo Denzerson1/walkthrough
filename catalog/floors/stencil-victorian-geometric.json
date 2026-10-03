@@ -16,10 +16,14 @@
     0.4
   ],
   "glossy": false,
-  "license": "CC0",
-  "source": "Generated procedurally by scripts/seed_floors.py",
+  "license": "CC0-1.0",
+  "source": "https://ambientcg.com/view?id=Tiles100",
   "maps": {
-    "albedo": "/catalog/floors/thumbnails/stencil-victorian-geometric.png"
+    "albedo": "/files/assets/floors/stencil-victorian-geometric/color.jpg",
+    "normal": "/files/assets/floors/stencil-victorian-geometric/normal.jpg",
+    "roughness": "/files/assets/floors/stencil-victorian-geometric/roughness.jpg"
   },
-  "thumbnail": "/catalog/floors/thumbnails/stencil-victorian-geometric.png"
+  "thumbnail": "/catalog/floors/thumbnails/stencil-victorian-geometric.png",
+  "tintAlbedo": true,
+  "assetStatus": "ready"
 }
