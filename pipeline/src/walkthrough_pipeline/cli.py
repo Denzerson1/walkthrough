@@ -20,6 +20,7 @@ from rich.console import Console
 
 from . import frames as frames_mod
 from . import roomplan as roomplan_mod
+from . import stray as stray_mod
 from . import train as train_mod
 from .manifest import Manifest
 from .paths import ProjectPaths, repo_root
@@ -73,6 +74,12 @@ def _existing(raw: Path | None, what: str) -> Path | None:
     return path
 
 
+def _stray(paths: ProjectPaths) -> stray_mod.StrayCapture | None:
+    """The project's Stray Scanner capture, if it was ingested from one."""
+    root = stray_mod.find_capture(paths.input / "stray")
+    return stray_mod.load(root) if root is not None else None
+
+
 def _fail(message: str) -> typer.Exit:
     console.print(f"[red]{message}[/red]")
     return typer.Exit(1)
@@ -80,24 +87,40 @@ def _fail(message: str) -> typer.Exit:
 
 @app.command()
 def ingest(
-    video: Path = typer.Argument(..., help="The capture (.mov/.mp4); Windows paths are fine"),
+    capture: Path = typer.Argument(
+        ..., help="A video (.mov/.mp4) or a Stray Scanner dataset folder; Windows paths are fine"
+    ),
     project: str = typer.Option(..., "--project", "-p", help="Project id, e.g. flat-01"),
     roomplan: Path | None = typer.Option(
-        None, help="RoomPlan export: a .json or .usdz file, or a folder holding one"
+        None, help="RoomPlan export: .json, .usdz or Polycam .glb, or a folder holding one"
     ),
 ) -> None:
     """Copy a capture into the project layout and check it before hours go into it."""
-    video = _existing(video, "Video")
+    capture = _existing(capture, "Capture")
     roomplan = _existing(roomplan, "RoomPlan export")
     paths = _paths(project)
     paths.ensure()
     for stale in paths.input.glob("video.*"):
         stale.unlink()
-    target = paths.input / f"video{video.suffix.lower()}"
-    shutil.copy2(video, target)
-    console.print(f"[green]Ingested[/green] {video.name} -> {target.relative_to(repo_root())}")
-    for warning in frames_mod.check_video(target):
-        console.print(f"[yellow]{warning}[/yellow]")
+    shutil.rmtree(paths.input / "stray", ignore_errors=True)
+
+    if capture.is_dir():
+        if not stray_mod.is_capture(capture):
+            raise typer.BadParameter(f"{capture} is a folder but not a Stray Scanner dataset.")
+        shutil.copytree(capture, paths.input / "stray")
+        loaded = stray_mod.load(paths.input / "stray")
+        console.print(
+            f"[green]Ingested Stray Scanner capture[/green]: {len(loaded)} posed frames, "
+            f"video {loaded.size[0]}x{loaded.size[1]}"
+        )
+    else:
+        target = paths.input / f"video{capture.suffix.lower()}"
+        shutil.copy2(capture, target)
+        console.print(
+            f"[green]Ingested[/green] {capture.name} -> {target.relative_to(repo_root())}"
+        )
+        for warning in frames_mod.check_video(target):
+            console.print(f"[yellow]{warning}[/yellow]")
 
     if roomplan is not None:
         dest = paths.input / "roomplan"
@@ -110,7 +133,7 @@ def ingest(
             shutil.copy2(roomplan, dest / roomplan.name)
         found = roomplan_mod.find_export(dest)
         if found is None:
-            raise typer.BadParameter(f"No .json or .usdz RoomPlan export in {roomplan}")
+            raise typer.BadParameter(f"No RoomPlan export (.json, .usdz, .glb) in {roomplan}")
         # Parsed now: a scan that cannot be read should fail here, not after
         # an hour of training.
         scan = roomplan_mod.load(found)
@@ -135,49 +158,79 @@ def _area(poly: list[tuple[float, float]]) -> float:
 @app.command()
 def frames(
     project: str = typer.Option(..., "--project", "-p"),
-    fps: float = typer.Option(3.0, help="Extraction rate"),
+    fps: float = typer.Option(3.0, help="Frames kept per second of footage"),
     min_frames: int = typer.Option(150),
     max_frames: int = typer.Option(600),
     long_edge: int = typer.Option(1600, help="Frames are scaled to this long edge (8 GB VRAM)"),
 ) -> None:
     """Extract frames with ffmpeg and drop blurry ones."""
     paths = _paths(project)
-    video = next((p for p in paths.input.glob("video.*")), None)
-    if video is None:
-        raise typer.BadParameter(f"No video in {paths.input}. Run `pipeline ingest` first.")
+    out_dir = paths.work / "frames"
+    capture = _stray(paths)
+    if capture is not None:
+        report = _frames_from_stray(capture, paths.work / "frames_raw", out_dir, fps, long_edge)
+    else:
+        video = next((p for p in paths.input.glob("video.*")), None)
+        if video is None:
+            raise typer.BadParameter(f"No capture in {paths.input}. Run `pipeline ingest` first.")
+        report = _frames_from_video(
+            video, paths.work / "frames_raw", out_dir, fps, min_frames, max_frames, long_edge
+        )
+    report.update(fps=fps, long_edge=long_edge)
+    (paths.work / "frames_report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    console.print(f"[green]{report['kept']} frames ready[/green] in {out_dir}")
 
-    raw_dir = paths.work / "frames_raw"
+
+def _replace_with(out_dir: Path, keep: list[Path]) -> None:
+    shutil.rmtree(out_dir, ignore_errors=True)
+    out_dir.mkdir(parents=True)
+    for path in keep:
+        shutil.copy2(path, out_dir / path.name)
+
+
+def _frames_from_video(
+    video: Path, raw_dir: Path, out_dir: Path,
+    fps: float, min_frames: int, max_frames: int, long_edge: int,
+) -> dict:
     console.print(f"Extracting frames at {fps} fps, long edge {long_edge} px ...")
     extracted = frames_mod.extract_frames(video, raw_dir, fps=fps, long_edge=long_edge)
     console.print(f"  {len(extracted)} frames decoded")
-
-    scores = frames_mod.score_directory(raw_dir)
-    selection = frames_mod.select_frames(scores, min_frames=min_frames, max_frames=max_frames)
-    console.print(f"  {selection.summary}")
-
-    out_dir = paths.work / "frames"
-    if out_dir.exists():
-        shutil.rmtree(out_dir)
-    out_dir.mkdir(parents=True)
-    for path in selection.keep:
-        shutil.copy2(path, out_dir / path.name)
-
-    (paths.work / "frames_report.json").write_text(
-        json.dumps(
-            {
-                "decoded": len(extracted),
-                "kept": len(selection.keep),
-                "dropped_blurry": len(selection.dropped_blurry),
-                "dropped_to_target": len(selection.dropped_to_target),
-                "blur_threshold": selection.threshold,
-                "fps": fps,
-                "long_edge": long_edge,
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
+    selection = frames_mod.select_frames(
+        frames_mod.score_directory(raw_dir), min_frames=min_frames, max_frames=max_frames
     )
-    console.print(f"[green]{len(selection.keep)} frames ready[/green] in {out_dir}")
+    console.print(f"  {selection.summary}")
+    _replace_with(out_dir, selection.keep)
+    return {
+        "source": "video",
+        "decoded": len(extracted),
+        "kept": len(selection.keep),
+        "dropped_blurry": len(selection.dropped_blurry),
+        "dropped_to_target": len(selection.dropped_to_target),
+        "blur_threshold": selection.threshold,
+    }
+
+
+#: Candidates per kept frame when choosing the sharpest from a posed capture.
+CANDIDATES_PER_FRAME = 4
+
+
+def _frames_from_stray(
+    capture: stray_mod.StrayCapture, raw_dir: Path, out_dir: Path, fps: float, long_edge: int
+) -> dict:
+    """
+    The sharpest of every few consecutive frames, keeping each frame's
+    number so it lines up with its ARKit pose and depth map.
+    """
+    video_fps = frames_mod.frame_rate(capture.video) or 60.0
+    step = max(1, round(video_fps / (fps * CANDIDATES_PER_FRAME)))
+    console.print(f"Decoding every {step}th frame, long edge {long_edge} px ...")
+    candidates = frames_mod.extract_numbered(capture.video, raw_dir, step, long_edge)
+    keep = frames_mod.sharpest_per_window(
+        frames_mod.score_directory(raw_dir), CANDIDATES_PER_FRAME
+    )
+    console.print(f"  {len(candidates)} candidates, kept the sharpest {len(keep)}")
+    _replace_with(out_dir, keep)
+    return {"source": "stray", "decoded": len(candidates), "kept": len(keep), "step": step}
 
 
 @app.command()
@@ -192,9 +245,16 @@ def poses(
         "distortion in video). OPENCV_FISHEYE if the frames are visibly fisheye.",
     ),
 ) -> None:
-    """Estimate camera poses with COLMAP (pycolmap, GPU SIFT), then undistort."""
-    pycolmap = _pycolmap()
+    """
+    Camera poses for the trainer: from ARKit for a Stray capture, otherwise
+    estimated with COLMAP (pycolmap, GPU SIFT) and undistorted.
+    """
     paths = _paths(project)
+    capture = _stray(paths)
+    if capture is not None:
+        _poses_from_stray(capture, paths)
+        return
+    pycolmap = _pycolmap()
     frame_dir = paths.work / "frames"
     names = sorted(p.name for p in frame_dir.glob("*.png")) if frame_dir.is_dir() else []
     if not names:
@@ -270,6 +330,30 @@ def poses(
         )
 
 
+def _poses_from_stray(capture: stray_mod.StrayCapture, paths: ProjectPaths) -> None:
+    frame_paths = sorted((paths.work / "frames").glob("frame_*.png"))
+    if not frame_paths:
+        raise typer.BadParameter("No frames. Run `pipeline frames` first.")
+    started = time.time()
+    console.print(f"Building the dataset from ARKit poses and LiDAR ({len(frame_paths)} frames)")
+    built = stray_mod.build_dataset(capture, frame_paths, paths.work / "undistorted")
+    report = {
+        "source": "stray (ARKit poses, LiDAR depth)",
+        "frames": built.frames,
+        "registered": built.frames,
+        "share": 1.0,
+        "points3D": built.points,
+        "depth_observations": built.observations,
+        "image_size": [built.width, built.height],
+        "minutes": round((time.time() - started) / 60, 1),
+    }
+    (paths.work / "poses_report.json").write_text(json.dumps(report, indent=2))
+    console.print(
+        f"[green]{built.frames} frames posed by ARKit[/green], {built.points:,} LiDAR points "
+        f"seen {built.observations:,} times"
+    )
+
+
 @app.command()
 def train(
     project: str = typer.Option(..., "--project", "-p"),
@@ -283,7 +367,12 @@ def train(
     if not (data / "sparse").is_dir():
         raise typer.BadParameter("No undistorted poses. Run `pipeline poses` first.")
     settings = train_mod.TrainSettings(
-        max_splats=max_splats, steps=steps, holdout_every=holdout_every
+        max_splats=max_splats,
+        steps=steps,
+        holdout_every=holdout_every,
+        # LiDAR points carry real depth, so supervise with it; COLMAP's sparse
+        # points are too few and too noisy on plain walls to be worth it.
+        depth=_stray(paths) is not None,
     )
     result_dir = paths.work / "train"
     shutil.rmtree(result_dir, ignore_errors=True)
@@ -308,7 +397,8 @@ def train(
 def align(project: str = typer.Option(..., "--project", "-p")) -> None:
     """Level the scene with the floor at y = 0, and fit it to the RoomPlan scan in metres."""
     try:
-        report = align_scene(_paths(project), project)
+        paths = _paths(project)
+        report = align_scene(paths, project, metric=_stray(paths) is not None)
     except AlignmentFailed as exc:
         raise _fail(str(exc)) from exc
     console.print(
@@ -386,6 +476,7 @@ def info(project: str = typer.Option(..., "--project", "-p")) -> None:
     paths = _paths(project)
     rows = [
         ("input video", next((p for p in paths.input.glob("video.*")), None)),
+        ("stray capture", stray_mod.find_capture(paths.input / "stray")),
         ("roomplan", roomplan_mod.find_export(paths.input / "roomplan")),
         ("frames", paths.work / "frames"),
         ("poses", paths.work / "undistorted"),

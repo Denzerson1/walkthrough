@@ -25,9 +25,9 @@ estate agents.
 ## How it fits together
 
 ```
-iPhone video ─┐
-              ├─► pipeline (WSL2, GPU) ─► scene.spz + manifest.json ─► API ─► viewer
-RoomPlan scan ┘   frames → poses → train → align → export
+Stray Scanner (video + ARKit poses + LiDAR) ─┐
+                                             ├─► pipeline (WSL2, GPU) ─► scene.spz + manifest ─► viewer
+Polycam Floorplan (walls, doors)  ───────────┘   frames → poses → train → align → export
 ```
 
 | Folder | What |
@@ -66,11 +66,13 @@ Needs Windows with an NVIDIA GPU (built on an RTX 2080 Super, 8 GB) and WSL2.
 wsl --install -d Ubuntu
 pnpm run setup:pipeline       # once: CUDA, torch, gsplat, COLMAP inside WSL
 
-pnpm run pipeline run-all "C:\captures\room.mov" --project flat-01 --roomplan "C:\captures\room.json"
+pnpm run pipeline run-all "C:\captures\stray\8a3f1c2e" --project flat-01 --roomplan "C:\captures\room.glb"
 ```
 
-About an hour per room on the 2080 Super, most of it COLMAP and training.
-Then open `http://localhost:5173/p/flat-01`.
+Capture with **Stray Scanner** (free) and scan walls with **Polycam Floorplan**
+(free); a plain video file also works, with lower quality. About 40 minutes per
+room on the 2080 Super, most of it training. Then open
+`http://localhost:5173/p/flat-01` and press Reset to see the raw capture.
 
 How to film: [`docs/CAPTURE.md`](docs/CAPTURE.md). How the stages work, measured
 results and known failure modes: [`docs/PIPELINE.md`](docs/PIPELINE.md).

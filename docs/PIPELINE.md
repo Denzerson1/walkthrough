@@ -1,7 +1,7 @@
-# Pipeline: video (+ RoomPlan scan) → scene
+# Pipeline: capture (+ RoomPlan scan) → scene
 
-One command turns an iPhone capture of a room, plus an optional RoomPlan
-LiDAR scan of it, into a scene the viewer loads: Y up, floor at y = 0, real
+One command turns an iPhone capture of a room — a **Stray Scanner** recording
+(recommended) or a plain video — plus an optional RoomPlan scan of it, into a scene the viewer loads: Y up, floor at y = 0, real
 metres, walls and doors in the manifest, floor split out, SPZ-compressed.
 
 ```bash
@@ -84,11 +84,23 @@ pnpm run pipeline align   --project <id>
 pnpm run pipeline export  --project <id> [--no-crop] [--sh-degree 3]
 ```
 
+### Two kinds of capture
+
+| | Stray Scanner folder (recommended) | Plain video |
+|---|---|---|
+| Camera positions | ARKit's, recorded by the phone | Estimated by COLMAP from texture |
+| Plain walls | Held by LiDAR depth in training | Often fog |
+| Scale | Metres, exact | From the RoomPlan scan, else a 10–20% guess |
+| Gravity | Exact | From how the phone was held |
+
+The stage names are the same for both; each stage checks which it has.
+
 ### ingest
 
-Copies the video and scan into `input/`, then **checks both before anything
-slow happens**: the clip against `docs/CAPTURE.md` (HDR, under 4K, under
-60 fps, too short) and the scan by parsing it and printing walls, openings,
+Copies the capture and scan into `input/` (`input/stray/` or `input/video.*`),
+then **checks both before anything slow happens**: a video against
+`docs/CAPTURE.md` (HDR, under 4K, under 60 fps, too short), a Stray folder by
+reading its poses, and the scan by parsing it and printing walls, openings,
 furniture boxes, floor area and ceiling height.
 
 ### frames
@@ -100,9 +112,20 @@ variance of the Laplacian, relative to this capture's median sharpness (a
 plain wall scores low even when sharp). Too few survivors relaxes the
 threshold; too many thins evenly across the walk.
 
+**Stray:** decodes every few frames without autorotation (the poses refer to
+the sensor's orientation) and keeps the sharpest of each run of 4 candidates,
+named by frame number (`frame_000420.png`) so each lines up with its pose and
+depth map.
+
 ### poses
 
-pycolmap: SIFT features on the GPU, matching, incremental mapping, then
+**Stray:** no estimation. Writes the trainer's dataset straight from ARKit:
+one PINHOLE camera per frame (autofocus moves the focal length), poses as
+recorded, and LiDAR depth back-projected (confidence 2, 0.15–5 m), fused to
+one point per 2 cm voxel with up to 6 sightings each. Those points seed the
+splat, and their sightings are what the depth loss supervises.
+
+**Video:** pycolmap: SIFT features on the GPU, matching, incremental mapping, then
 undistortion to pinhole images for the trainer.
 
 - `--matcher auto` is exhaustive up to 400 frames (a room) and sequential
@@ -124,7 +147,17 @@ frames it never saw**: the honest quality number. World-space normalisation is
 off so the result stays in COLMAP's frame, where `align` can read gravity
 from the cameras. Output: `work/trained.ply`, never modified afterwards.
 
+**Stray:** adds `--depth-loss`: the rendered depth is pulled toward the LiDAR
+depth at every sighting, which is what keeps a white wall a wall.
+
 ### align
+
+**Stray:** the scene is already in metres with Y along gravity, so up is
+taken as given and scale is fixed at 1; only the floor height, and with a
+scan the yaw and position, are found. The scan fit allows ±2% for the two
+ARKit sessions to disagree.
+
+**Video:**
 
 1. **Up from the cameras.** People film upright, so the mean of the images'
    up vectors is gravity. A plane fit alone cannot tell a floor from a wall

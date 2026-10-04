@@ -68,12 +68,16 @@ def _transform_points(points: np.ndarray, m: np.ndarray) -> np.ndarray:
     return points @ m[:3, :3].T + m[:3, 3]
 
 
-def align_scene(paths: ProjectPaths, project_id: str) -> AlignReport:
+def align_scene(paths: ProjectPaths, project_id: str, metric: bool = False) -> AlignReport:
     """
     Gravity from the cameras, floor from a plane fit, then yaw, position and
     metric scale from the RoomPlan scan when there is one. Writes
     scene/scene.ply and the manifest's rooms; raises rather than writing a
     scene it does not trust.
+
+    `metric` says the splat is already in metres with Y up along gravity —
+    true of an ARKit-posed capture — so scale is 1 and only the floor height,
+    yaw and position remain to be found.
     """
     source = trained_ply(paths)
     if not source.is_file():
@@ -84,7 +88,10 @@ def align_scene(paths: ProjectPaths, project_id: str) -> AlignReport:
 
     # 1. Up. The cameras know which way was up; a plane fit alone cannot tell
     #    a floor from a wall in a frame with no fixed orientation.
-    if cameras:
+    if metric:
+        up = np.array([0.0, 1.0, 0.0])
+        up_from = "ARKit gravity"
+    elif cameras:
         up = gravity_from_cameras(cameras)
         up_from = "cameras"
     else:
@@ -137,7 +144,11 @@ def align_scene(paths: ProjectPaths, project_id: str) -> AlignReport:
         room, items, _ = roomplan.to_rooms(scan, room_id="room", room_name="Room")
         wall_height = room.walls[0].height
         ceiling = ceiling_height(heights[opaque])
-        if ceiling is not None:
+        if metric:
+            # A small margin only: RoomPlan and ARKit both measure in metres,
+            # and separate sessions agree to well under a percent.
+            guess, spread = 1.0, (0.98, 1.02)
+        elif ceiling is not None:
             guess, spread = wall_height / ceiling, (0.85, 1.15)
         elif cam_heights is not None:
             guess, spread = TYPICAL_CAMERA_HEIGHT_M / float(np.median(cam_heights)), (0.6, 1.6)
@@ -173,15 +184,22 @@ def align_scene(paths: ProjectPaths, project_id: str) -> AlignReport:
         manifest.rooms = [room]
         manifest.items = items
     else:
-        if cam_heights is None:
+        if metric:
+            scale, scale_from = 1.0, "ARKit (metric)"
+            warnings.append(
+                "No RoomPlan scan: walls and doors are not known, so the room is outlined "
+                "from the floor and has no doorways."
+            )
+        elif cam_heights is None:
             raise AlignmentFailed("No RoomPlan scan and no camera poses: scale is unknown.")
-        scale = TYPICAL_CAMERA_HEIGHT_M / float(np.median(cam_heights))
-        scale_from = "camera height (estimate)"
-        warnings.append(
-            "No RoomPlan scan: scale is estimated from a typical phone height and may be off "
-            "by 10-20%. Room walls and doors are not known, so the room is outlined from the "
-            "floor and has no doorways."
-        )
+        else:
+            scale = TYPICAL_CAMERA_HEIGHT_M / float(np.median(cam_heights))
+            scale_from = "camera height (estimate)"
+            warnings.append(
+                "No RoomPlan scan: scale is estimated from a typical phone height and may be "
+                "off by 10-20%. Room walls and doors are not known, so the room is outlined "
+                "from the floor and has no doorways."
+            )
         s = np.diag([scale, scale, scale, 1.0])
         transform = compose(transform, s)
         floor_pts = (aligned[opaque & (np.abs(heights) < threshold)] * scale)[:, [0, 2]]

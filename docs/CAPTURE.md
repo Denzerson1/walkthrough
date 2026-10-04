@@ -6,12 +6,48 @@ rescued by better training.
 
 ## Equipment
 
-- iPhone 16 Pro
-- **Blackmagic Camera** (free, App Store) — the stock Camera app will not let
-  you lock exposure, white balance and lens the way this needs
-- Optional: an app built on Apple **RoomPlan** that exports USDZ or JSON
+- iPhone 16 Pro (any iPhone with LiDAR)
+- **Stray Scanner** (free) — the capture
+- **Polycam** (free tier) — Floorplan mode, for walls and doors
+- Only for video-only capture: **Blackmagic Camera** (free)
 
-## Camera settings
+## Recommended: Stray Scanner + Polycam Floorplan
+
+Two free apps, one visit, nothing moved in between.
+
+1. **[Stray Scanner](https://apps.apple.com/us/app/stray-scanner/id1557051662)**
+   (free, MIT-licensed source) records video **plus the phone's own camera
+   positions (ARKit) and LiDAR depth for every frame**. The pipeline uses
+   those positions directly instead of guessing them from the footage, and
+   the depth keeps plain walls solid. The scene comes out in real metres.
+2. **Polycam → Floorplan mode** gives walls, doors and furniture boxes;
+   export glTF (`.glb`).
+
+**Filming with Stray Scanner**
+
+- Bright, even light: every lamp on, daylight if possible. The app exposes
+  automatically, so a bright room is what keeps frames sharp.
+- Hold the phone in landscape, steadily, and move **slowly** — slower than
+  feels necessary, especially when turning.
+- Start in the middle: a slow circle facing outward at eye, chest and knee
+  height. Then walk along the walls about 1–2 m from them, and finish by
+  crossing the room. Point at the floor and ceiling now and then.
+- 1.5–3 minutes per room. Stop and start a new recording per room.
+
+**Getting it to the PC:** Files app → On My iPhone → Stray Scanner → the
+recording's folder (it holds `rgb.mp4`, `odometry.csv`, `depth/`,
+`confidence/`). Copy the whole folder.
+
+```bash
+pnpm run pipeline run-all "C:\captures\stray\8a3f1c2e" --project flat-01 --roomplan "C:\captures
+oom.glb"
+```
+
+The rest of this guide covers the older **video-only** capture (Blackmagic
+Camera), still supported: the pipeline then recovers camera positions with
+COLMAP, which struggles on plain walls and gives no real scale.
+
+## Video-only capture: camera settings
 
 Set these once, then do not touch them during the shoot. Anything that
 changes mid-capture — exposure, white balance, focus, lens — becomes an
@@ -72,10 +108,10 @@ approximately right:
   the layout solver knows where furniture can go.
 - **Furniture boxes** for recolouring existing pieces.
 
-Use any app built on Apple RoomPlan. **Export JSON if the app offers it**
-(sometimes labelled "CapturedRoom" or "raw data"); USDZ also works. Some
-apps export a full LiDAR mesh (OBJ/PLY/GLB) instead of RoomPlan walls — that
-is not the same thing and the pipeline cannot use it.
+Tested with **Polycam's Floorplan mode, glTF export**. Any other RoomPlan app
+works if it exports RoomPlan JSON or USDZ. A plain LiDAR mesh (Polycam "3D
+Space", OBJ/PLY) is not the same thing: it has no labelled walls or doors and
+the pipeline cannot use it.
 
 Scan tips: walk the room slowly, point at every wall, door and window until
 the app outlines it, and finish the scan before moving anything.
@@ -102,15 +138,19 @@ data under GDPR. Treat it that way.
 
 ## Handing the capture over
 
-One command, from the repo in a Windows terminal (Windows paths are fine):
+One command, from the repo in a Windows terminal (Windows paths are fine).
+The capture is either a Stray Scanner folder or a video file:
 
 ```bash
-pnpm run pipeline run-all "C:\captures\living.mov" --project flat-01 --roomplan "C:\captures\living.json"
+pnpm run pipeline run-all "C:\captures\stray\8a3f1c2e" --project flat-01 --roomplan "C:\captures
+oom.glb"
+pnpm run pipeline run-all "C:\captures\living.mov" --project flat-01 --roomplan "C:\captures
+oom.glb"
 ```
 
-`ingest` checks the clip against this guide (HDR, resolution, frame rate,
-length) and parses the scan before anything slow starts, so a wrong export
-fails in seconds, not after an hour of training.
+`ingest` checks the capture (a video against this guide's settings) and
+parses the scan before anything slow starts, so a wrong export fails in
+seconds, not after an hour of training.
 
 With a RoomPlan scan, the measured reference distance is a cross-check only.
 Without one, write it down anyway: marking it in the editor is the planned way

@@ -7,6 +7,64 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-10-04 — First real captures, and the move to Stray Scanner
+
+### The owner's bedroom, filmed twice
+
+| Capture | Registered | Held-out PSNR | Result |
+|---|---|---|---|
+| 1: dim lamp light, mostly close-ups | 87% (after re-running exhaustive) | 14.5 dB | Fog |
+| 2: brighter, wider, flicker fixed (1/100 s) | 99% | 21.7 dB | Recognisable room, much smear |
+
+Both trained correctly (no stray processes, correct 108° intrinsics found by
+COLMAP); the footage was the limit. On the second, the floor fit was weak, no
+ceiling was found and the scan fit refused (16% inliers), so the scene is
+tilted and scaled by the camera-height guess (21 m² against a real 12.5 m²).
+The two failure modes are the ones the research below targets: COLMAP
+guessing poses from texture, and plain walls training as fog.
+
+### Polycam Floorplan glTF reads
+
+`roomplan.load_glb` reads Polycam's Floorplan export: walls, doors, floor
+type, eight furniture boxes, 2.53 m ceiling. Tested on the real 128 KB file,
+committed as `pipeline/tests/fixtures/polycam-bedroom.glb`.
+
+### Owner decisions
+
+- **Furniture appears only when the user adds it.** The viewer no longer
+  furnishes the flat on arrival; real furniture is never replaced.
+- **Capture with Stray Scanner** (free, MIT): ARKit poses and LiDAR depth per
+  frame, so the pipeline trains on our GPU without COLMAP and with depth
+  supervision. Scaniverse (finished splats, closed terms) is the benchmark to
+  compare against on the same visit.
+
+### Stray Scanner support
+
+| Piece | What |
+|---|---|
+| `stray.py` | Reads the dataset (both odometry formats), back-projects LiDAR depth, fuses it to one point per 2 cm voxel with up to 6 sightings, writes the trainer's dataset |
+| `colmap.write_model` | COLMAP binary model, one PINHOLE camera per frame (autofocus moves the focal length) |
+| `frames` | For Stray: sharpest of every 4 candidates, named by video frame number |
+| `poses` | For Stray: ARKit poses as recorded, no estimation |
+| `train` | `--depth-loss` for Stray: rendered depth is pulled toward LiDAR |
+| `align` | For Stray: gravity and scale taken as given; scan fit allowed ±2% |
+
+Pose convention checked against the app's source (`OdometryEncoder.swift`
+turns ARKit's camera 180° about X), and by test: on a synthetic room with
+rendered LiDAR, depth points land within 0.5 mm of the walls; with ARKit's
+unconverted axes they miss by 446 mm, so the test fails if the convention
+regresses. Every depth sighting projects back to its stored pixel.
+
+### Not verified
+
+| What | Why |
+|---|---|
+| A real Stray Scanner recording through the pipeline | None captured yet |
+| Whether Stray beats Scaniverse on the same room | To be compared on the next visit |
+| ARKit lens distortion | Ignored: the wide camera's is small, and Stray's per-frame lookup tables are not used yet |
+
+---
+
 ## 2026-10-03 — The capture pipeline runs, on the GPU, end to end
 
 The owner asked for everything needed to take real captures: an iPhone video

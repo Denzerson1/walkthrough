@@ -31,6 +31,8 @@ class TrainSettings:
     steps: int = 30_000
     holdout_every: int = 8
     sh_degree: int = 3
+    #: Supervise rendered depth with the dataset's 3D points (LiDAR).
+    depth: bool = False
 
 
 @dataclass
@@ -84,6 +86,7 @@ def command(data_dir: Path, result_dir: Path, settings: TrainSettings) -> list[s
         "--sh-degree", str(settings.sh_degree),
         "--strategy.cap-max", str(settings.max_splats),
         "--packed",
+        *(["--depth-loss"] if settings.depth else []),
     ]
 
 

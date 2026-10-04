@@ -60,6 +60,67 @@ def read_images_bin(path: Path) -> list[Camera]:
     return cameras
 
 
+#: COLMAP's id for the PINHOLE camera model (fx, fy, cx, cy).
+PINHOLE = 1
+
+
+@dataclass
+class PosedImage:
+    name: str
+    rotation: np.ndarray  # (3, 3) world -> camera, OpenCV axes
+    translation: np.ndarray  # (3,)
+    intrinsics: tuple[float, float, float, float]  # fx, fy, cx, cy in pixels
+    #: (K, 2) pixel positions of the 3D points this image observes, and
+    #: (K,) the ids of those points — what tells a trainer which pixels a
+    #: point's depth supervises.
+    points2d: np.ndarray
+    point_ids: np.ndarray
+
+
+def write_model(
+    out_dir: Path,
+    width: int,
+    height: int,
+    images: list[PosedImage],
+    points: np.ndarray,
+    colours: np.ndarray,
+) -> None:
+    """
+    Write a COLMAP binary model (cameras.bin, images.bin, points3D.bin) for
+    poses that come from somewhere other than COLMAP. Each image gets its own
+    PINHOLE camera, because phone intrinsics move with autofocus. Point ids
+    are their row index + 1; each point's track is rebuilt from the images'
+    observations so the two always agree.
+    """
+    from .splat import matrix_to_quaternion
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    cams = [struct.pack("<Q", len(images))]
+    for image_id, im in enumerate(images, start=1):
+        cams.append(struct.pack("<iiQQ4d", image_id, PINHOLE, width, height, *im.intrinsics))
+    (out_dir / "cameras.bin").write_bytes(b"".join(cams))
+
+    tracks: list[list[tuple[int, int]]] = [[] for _ in range(len(points))]
+    chunks = [struct.pack("<Q", len(images))]
+    for image_id, im in enumerate(images, start=1):
+        q = matrix_to_quaternion(im.rotation)
+        chunks.append(struct.pack("<i4d3di", image_id, *q, *im.translation, image_id))
+        chunks.append(im.name.encode("utf-8") + b"\0")
+        obs = np.zeros(len(im.point_ids), dtype=[("xy", "<f8", 2), ("id", "<i8")])
+        obs["xy"], obs["id"] = im.points2d, im.point_ids
+        chunks.append(struct.pack("<Q", len(obs)) + obs.tobytes())
+        for index, point_id in enumerate(im.point_ids):
+            tracks[point_id - 1].append((image_id, index))
+    (out_dir / "images.bin").write_bytes(b"".join(chunks))
+
+    rgb = np.clip(np.round(colours), 0, 255).astype(np.uint8)
+    chunks = [struct.pack("<Q", len(points))]
+    for i, (xyz, track) in enumerate(zip(points, tracks, strict=True)):
+        chunks.append(struct.pack("<Q3d3BdQ", i + 1, *xyz, *rgb[i], 0.0, len(track)))
+        chunks.append(np.asarray(track, dtype="<i4").tobytes())
+    (out_dir / "points3D.bin").write_bytes(b"".join(chunks))
+
+
 def find_model(sparse_dir: Path) -> Path | None:
     """The largest reconstruction under `sparse/` (COLMAP may write several)."""
     candidates = sorted(Path(sparse_dir).rglob("images.bin"), key=lambda p: -p.stat().st_size)

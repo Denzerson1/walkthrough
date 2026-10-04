@@ -64,6 +64,46 @@ def extract_frames(
     return sorted(out_dir.glob("frame_*.png"))
 
 
+def extract_numbered(video: Path, out_dir: Path, step: int, long_edge: int = 1600) -> list[Path]:
+    """
+    Every `step`-th frame, named by its frame number in the video
+    (frame_000042.png), so it lines up with per-frame poses and depth.
+
+    No autorotation: posed captures store frames in the sensor's orientation
+    and their intrinsics refer to that, whatever the container's rotation tag.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for stale in out_dir.glob("*.png"):
+        stale.unlink()
+    subprocess.run(
+        [ffmpeg_path(), "-hide_banner", "-loglevel", "error", "-noautorotate", "-i", str(video),
+         "-vf", f"select=not(mod(n\\,{step})),{scale_filter(long_edge)}", "-fps_mode", "vfr",
+         str(out_dir / "seq_%06d.png")],
+        check=True,
+    )
+    numbered = []
+    for i, path in enumerate(sorted(out_dir.glob("seq_*.png"))):
+        target = out_dir / f"frame_{i * step:06d}.png"
+        path.rename(target)
+        numbered.append(target)
+    return numbered
+
+
+def sharpest_per_window(scores: dict[Path, float], window: int) -> list[Path]:
+    """
+    The sharpest frame of each run of `window` consecutive candidates.
+
+    Keeps coverage even along the walk — one frame per stretch of it — while
+    still dropping the blurred moments, which a global threshold would
+    remove in clumps exactly where the person turned.
+    """
+    ordered = sorted(scores, key=lambda p: p.name)
+    return [
+        max(ordered[i : i + window], key=scores.__getitem__)
+        for i in range(0, len(ordered), window)
+    ]
+
+
 #: Transfer functions that mean the clip is HDR (HLG or PQ). The pipeline
 #: expects SDR Rec. 709 (docs/CAPTURE.md); HDR decodes washed out.
 HDR_TRANSFERS = {"arib-std-b67", "smpte2084"}
@@ -97,14 +137,24 @@ def video_warnings(info: dict) -> list[str]:
     long_side = max(int(s.get("width") or 0), int(s.get("height") or 0))
     if long_side < 3000:
         warnings.append(f"Only {long_side} px on the long side; the guide asks for 4K.")
-    num, _, den = str(s.get("avg_frame_rate", "0/1")).partition("/")
-    rate = float(num) / float(den or 1) if float(den or 1) else 0.0
+    rate = _rate(s)
     if 0 < rate < 50:
         warnings.append(f"{rate:.0f} fps; the guide asks for 60 so blur rejection has choice.")
     duration = float((info.get("format") or {}).get("duration") or 0)
     if 0 < duration < 40:
         warnings.append(f"Only {duration:.0f} s of footage; a room needs roughly 60-90 s.")
     return warnings
+
+
+def _rate(stream: dict) -> float:
+    num, _, den = str(stream.get("avg_frame_rate", "0/1")).partition("/")
+    return float(num) / float(den) if float(den or 0) else 0.0
+
+
+def frame_rate(video: Path) -> float:
+    """Average frames per second, or 0.0 if the file reports none."""
+    streams = probe(video).get("streams") or []
+    return _rate(streams[0]) if streams else 0.0
 
 
 def check_video(video: Path) -> list[str]:
