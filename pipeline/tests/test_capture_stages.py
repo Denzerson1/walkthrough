@@ -137,3 +137,7 @@ def test_windows_paths_are_translated_for_wsl():
     assert local_path(Path(r"C:\Users\me\room.mov")).as_posix() == "/mnt/c/Users/me/room.mov"
     assert local_path(Path("D:/caps/scan.json")).as_posix() == "/mnt/d/caps/scan.json"
     assert local_path(Path("data/room.mov")) == Path("data/room.mov")
+
+
+def test_relative_windows_paths_get_forward_slashes():
+    assert local_path(Path(r"data\captures\room.mov")).as_posix() == "data/captures/room.mov"

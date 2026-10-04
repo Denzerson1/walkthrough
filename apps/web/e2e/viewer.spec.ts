@@ -79,10 +79,9 @@ test.describe('viewer', () => {
 
   test('applying a floor raises the compare and reset controls', async ({ page }) => {
     await page.goto(`/p/${PROJECT}`);
-    // The viewer furnishes the flat on arrival, so it is staged from the
-    // first frame. Reset back to the bare capture to test the transition.
-    await expect(page.getByTestId('staged-badge')).toBeVisible({ timeout: 45_000 });
-    await page.getByTestId('reset-all').click();
+    // The capture opens as captured: furniture appears only when the user
+    // adds it, so nothing is staged until they change something.
+    await expect(page.getByTestId('room-strip')).toBeVisible({ timeout: 45_000 });
     await expect(page.getByTestId('staged-badge')).toBeHidden();
 
     await page.getByTestId('tool-floors').click();
@@ -97,7 +96,6 @@ test.describe('viewer', () => {
 
   test('reset returns to the original', async ({ page }) => {
     await page.goto(`/p/${PROJECT}`);
-    await expect(page.getByTestId('staged-badge')).toBeVisible({ timeout: 45_000 });
     await page.getByTestId('tool-floors').click();
     await page.locator('[data-floor-id]').first().click();
     await expect(page.getByTestId('staged-badge')).toBeVisible();

@@ -1,6 +1,6 @@
 /** Public viewer at /p/:projectId */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { Assistant, type AssistantAction } from '../components/Assistant';
 import { FloorPlan } from '../components/FloorPlan';
@@ -128,7 +128,7 @@ export function Viewer() {
    * assistant both get real placements rather than a pile at the centre.
    */
   const runAutoLayout = useCallback(
-    async (roomId: string, styleId: string, quiet = false) => {
+    async (roomId: string, styleId: string) => {
       try {
         const response = await fetch(apiUrl('/api/layout'), {
           method: 'POST',
@@ -140,7 +140,7 @@ export function Viewer() {
             .json()
             .then((b) => b.detail as string)
             .catch(() => 'Could not lay this room out.');
-          if (!quiet) setLayoutNote(detail);
+          setLayoutNote(detail);
           return;
         }
         const body = await response.json();
@@ -162,65 +162,18 @@ export function Viewer() {
             yaw: p.yaw,
           })),
         );
-        // Silent on arrival: the flat furnishes itself, and "1 did not fit"
-        // is a report on something nobody asked for. It still shows when the
-        // user furnishes a room themselves.
         setLayoutNote(
-          !quiet && body.skipped?.length
+          body.skipped?.length
             ? `Placed ${body.placements.length}; ${body.skipped.length} did not fit.`
             : null,
         );
         postEvent(projectId, { session_id: session, event: 'style_tried', value: styleId });
       } catch {
-        if (!quiet) setLayoutNote('Could not reach the layout service.');
+        setLayoutNote('Could not reach the layout service.');
       }
     },
     [projectId, session, setFloor, addItems, clearItems],
   );
-
-  /**
-   * Furnish the whole flat on arrival.
-   *
-   * An empty shell does not show what the product does, and asking someone to
-   * find the furniture panel before they see a single chair buries the point.
-   * The staged badge goes up immediately, which is correct — this IS staging —
-   * and "Hold to compare" shows the real empty capture underneath.
-   *
-   * Only on a fresh visit: a share link carries its own arrangement, and
-   * re-furnishing over it would throw away what was shared. And only in an
-   * empty flat: a capture whose scan found furniture already has some, and
-   * staging on top of it would stand virtual sofas inside the real ones.
-   */
-  const furnishedRef = useRef(false);
-  useEffect(() => {
-    if (furnishedRef.current) return;
-    if (!manifest || !catalog.styles.length) return;
-    if (searchParams.get('s')) return;
-    if (manifest.items.length) return;
-    if (viewer.items.length || Object.keys(viewer.floors).length) return;
-
-    // Modern by default — the least committal of the five, and the one whose
-    // pieces read best against a plain shell. The rest are a click away.
-    const style =
-      catalog.styles.find((s) => s.id === 'modern') ??
-      catalog.styles.find((s) => s.complete) ??
-      catalog.styles[0];
-    if (!style) return;
-    furnishedRef.current = true;
-    // Deferred a tick: runAutoLayout writes to the store, and doing that
-    // synchronously inside the effect that observed the store is the loop
-    // react-hooks/set-state-in-effect is there to catch.
-    const timer = setTimeout(() => {
-      for (const room of manifest.rooms) {
-        // A theme has no picks for a bathroom — its fittings are part of the
-        // capture. Asking anyway gets a 409 and a console error for something
-        // that is not a fault.
-        if (!style.picks?.[room.type]?.length) continue;
-        void runAutoLayout(room.id, style.id, true);
-      }
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [manifest, catalog.styles, searchParams, viewer.items.length, viewer.floors, runAutoLayout]);
 
   const applyActions = useCallback(
     (actions: AssistantAction[]) => {

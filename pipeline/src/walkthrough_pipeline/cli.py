@@ -51,14 +51,17 @@ def _pycolmap():
 def local_path(raw: Path) -> Path:
     r"""
     Accept a Windows path when running inside WSL: `C:\Users\me\room.mov`
-    becomes `/mnt/c/Users/me/room.mov`, so `pnpm pipeline` from a Windows
-    shell can be handed whatever Explorer copies.
+    becomes `/mnt/c/Users/me/room.mov`, and a relative `data\room.mov` gets
+    forward slashes, so `pnpm run pipeline` from a Windows shell can be
+    handed whatever Explorer copies.
     """
     text = str(raw)
-    if len(text) > 2 and text[1] == ":" and text[0].isalpha() and not raw.exists():
+    if raw.exists():
+        return raw
+    if len(text) > 2 and text[1] == ":" and text[0].isalpha():
         rest = text[2:].replace("\\", "/").lstrip("/")
         return Path(f"/mnt/{text[0].lower()}/{rest}")
-    return raw
+    return Path(text.replace("\\", "/"))
 
 
 def _existing(raw: Path | None, what: str) -> Path | None:

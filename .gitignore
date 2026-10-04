@@ -67,3 +67,6 @@ entities.json
 # Local tool state (Serena, headroom)
 .serena/
 .claude/.headroom_*
+
+# Small real exports used as test fixtures (each well under 1 MB)
+!pipeline/tests/fixtures/*.glb

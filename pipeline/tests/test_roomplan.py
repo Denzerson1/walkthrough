@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -247,3 +248,30 @@ def test_matrix_maps_points_like_apply():
 def test_no_ceiling_is_reported_as_unknown():
     rng = np.random.default_rng(0)
     assert ceiling_height(rng.uniform(0, 2.5, 50_000)) is None
+
+
+# --------------------------------------------------------------------------
+# Polycam Floorplan glTF — a real export (128 KB, committed as a fixture)
+# --------------------------------------------------------------------------
+
+POLYCAM = Path(__file__).parent / "fixtures" / "polycam-bedroom.glb"
+
+
+def test_polycam_glb_reads_as_a_room():
+    room, items, floor_y = roomplan.to_rooms(roomplan.load(POLYCAM))
+    assert room.type == "bedroom"
+    assert floor_y == pytest.approx(0.0, abs=0.01)
+    assert _area(room.floorPolygon) == pytest.approx(2.636 * 4.726, rel=0.01)
+    # Walls sink 10 cm below the floor in this export; the ceiling is at 2.53.
+    assert room.walls[0].height == pytest.approx(2.53, abs=0.01)
+    assert sorted(o.type for o in room.openings) == ["door", "door"]
+    assert sorted(i.label for i in items) == [
+        "bed", "chair", "chair", "chair", "storage", "storage", "storage", "table"
+    ]
+    bed = next(i for i in items if i.label == "bed")
+    assert bed.box.size[0] == pytest.approx(2.17, abs=0.02)  # long side first
+
+
+def test_find_export_finds_a_glb(tmp_path):
+    (tmp_path / "scan.glb").write_bytes(POLYCAM.read_bytes())
+    assert roomplan.find_export(tmp_path).name == "scan.glb"

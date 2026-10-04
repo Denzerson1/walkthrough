@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import math
 import re
+import struct
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -106,7 +107,7 @@ def find_export(directory: Path) -> Path | None:
     """The RoomPlan file in an ingested `input/roomplan/` folder, JSON first."""
     if not directory.is_dir():
         return None
-    for pattern in ("*.json", "*.usdz", "*.usda", "*.usdc", "*.usd"):
+    for pattern in ("*.json", "*.usdz", "*.usda", "*.usdc", "*.usd", "*.glb", "*.gltf"):
         found = sorted(directory.rglob(pattern))
         if found:
             return found[0]
@@ -119,7 +120,11 @@ def load(path: Path) -> Scan:
         return load_json(json.loads(path.read_text(encoding="utf-8")))
     if suffix in (".usdz", ".usda", ".usdc", ".usd"):
         return load_usd(path)
-    raise RoomPlanError(f"Not a RoomPlan export: {path.name} (expected .json or .usdz)")
+    if suffix == ".glb":
+        return load_glb(path.read_bytes())
+    raise RoomPlanError(
+        f"Not a RoomPlan export: {path.name} (expected .json, .usdz or .glb)"
+    )
 
 
 def load_json(data: dict) -> Scan:
@@ -255,6 +260,76 @@ def _axis_scales(world: np.ndarray) -> np.ndarray:
     return np.linalg.norm(world[:3, :3], axis=0)
 
 
+#: glTF node-name prefixes (Polycam's room export) to element kinds.
+_GLB_SURFACES = {"wall": "walls", "door": "doors", "window": "windows", "opening": "openings"}
+
+
+def load_glb(data: bytes) -> Scan:
+    """
+    A RoomPlan room exported as glTF binary — Polycam's Floorplan mode.
+
+    Nodes are named Wall_0, Door_1, Window_0, Floor_<Room>, and furniture
+    after its category (bed_0, chair_swivel_..._0, storage_shelf_0). The
+    geometry is baked into world space with no node transforms, so each
+    element's box is measured from its vertices: Y up, and the horizontal
+    axes from the smallest rectangle around its footprint. Joints (wall
+    corner fillers) and ceilings are ignored.
+    """
+    import cv2
+
+    if data[:4] != b"glTF":
+        raise RoomPlanError("Not a binary glTF file")
+    (json_len,) = struct.unpack_from("<I", data, 12)
+    doc = json.loads(data[20 : 20 + json_len])
+    binary = 20 + json_len + 8  # skip the BIN chunk header
+
+    def vertices(mesh_index: int) -> np.ndarray:
+        points = []
+        for prim in doc["meshes"][mesh_index]["primitives"]:
+            acc = doc["accessors"][prim["attributes"]["POSITION"]]
+            view = doc["bufferViews"][acc["bufferView"]]
+            start = binary + view.get("byteOffset", 0) + acc.get("byteOffset", 0)
+            stride = view.get("byteStride", 12)
+            raw = np.frombuffer(data, np.uint8, acc["count"] * stride, start)
+            points.append(raw.reshape(-1, stride)[:, :12].copy().view(np.float32))
+        return np.vstack(points).astype(np.float64)
+
+    elements: list[Element] = []
+    room_type = None
+    for node in doc.get("nodes", []):
+        if "mesh" not in node:
+            continue
+        name = node.get("name", "")
+        head = name.split("_")[0].lower()
+        if head in ("joint", "ceiling"):
+            continue
+        if head == "floor":
+            label = name.split("_", 1)[-1]  # Floor_Bedroom, Floor_LivingRoom
+            room_type = SECTION_TYPES.get(label[:1].lower() + label[1:], room_type)
+            kind, category = "floors", "floor"
+        elif head in _GLB_SURFACES:
+            kind, category = _GLB_SURFACES[head], head
+        else:
+            kind, category = "objects", head
+        pts = vertices(node["mesh"])
+        (cx, cz), (w, d), angle = cv2.minAreaRect(pts[:, [0, 2]].astype(np.float32))
+        if d > w:  # right axis along the long side
+            w, d, angle = d, w, angle + 90
+        a = np.radians(angle)
+        right = np.array([np.cos(a), 0.0, np.sin(a)])
+        up = np.array([0.0, 1.0, 0.0])
+        lo, hi = pts[:, 1].min(), pts[:, 1].max()
+        transform = np.eye(4)
+        transform[:3, 0], transform[:3, 1], transform[:3, 2] = right, up, np.cross(right, up)
+        transform[:3, 3] = [cx, (lo + hi) / 2, cz]
+        if kind == "floors":
+            transform[1, 3] = hi  # the floor's top surface is the floor
+        elements.append(Element(kind, category, transform, np.array([w, hi - lo, d]), name))
+    if not any(e.kind == "walls" for e in elements):
+        raise RoomPlanError("No Wall_ nodes in this glTF — is it a Floorplan/RoomPlan export?")
+    return Scan(elements, room_type=room_type)
+
+
 # --------------------------------------------------------------------------
 # Scan -> manifest rooms
 # --------------------------------------------------------------------------
@@ -363,7 +438,13 @@ def to_rooms(
     floor_y = floor_height(scan)
     poly = floor_polygon(scan)
     walls_in = scan.of("walls")
-    height = float(np.median([w.dimensions[1] for w in walls_in])) if walls_in else 2.5
+    # Floor to the top of the wall, not the wall's own height: some exports
+    # (Polycam) sink walls a few centimetres below the floor.
+    height = (
+        float(np.median([w.centre[1] + w.dimensions[1] / 2 for w in walls_in])) - floor_y
+        if walls_in
+        else 2.5
+    )
 
     corners = [(float(x), float(z)) for x, z in poly]
     walls = [
