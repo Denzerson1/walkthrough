@@ -141,3 +141,21 @@ def test_windows_paths_are_translated_for_wsl():
 
 def test_relative_windows_paths_get_forward_slashes():
     assert local_path(Path(r"data\captures\room.mov")).as_posix() == "data/captures/room.mov"
+
+
+def test_run_all_calls_every_stage_with_its_real_arguments():
+    """run-all calls the stages as plain functions, so a renamed option breaks it silently."""
+    import ast
+    import inspect
+
+    from walkthrough_pipeline import cli
+
+    tree = ast.parse(inspect.getsource(cli.run_all))
+    calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)]
+    stages = {c.func.id: c for c in calls if c.func.id in {
+        "ingest", "frames", "poses", "train", "align", "export"}}
+    assert len(stages) == 6
+    for name, call in stages.items():
+        params = set(inspect.signature(getattr(cli, name)).parameters)
+        passed = {k.arg for k in call.keywords}
+        assert passed == params, f"{name}: passes {passed}, takes {params}"

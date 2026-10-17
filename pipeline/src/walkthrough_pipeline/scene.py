@@ -18,7 +18,13 @@ import numpy as np
 
 from . import roomplan
 from .align import compose, fit_plane_ransac, gravity_alignment, rotation_between
-from .colmap import Camera, find_model, gravity_from_cameras, read_images_bin
+from .colmap import (
+    Camera,
+    find_model,
+    gravity_from_cameras,
+    read_images_bin,
+    read_points3d_bin,
+)
 from .floor import simplify_polygon
 from .manifest import Manifest, Room, Wall, Waypoint
 from .paths import ProjectPaths
@@ -202,8 +208,15 @@ def align_scene(paths: ProjectPaths, project_id: str, metric: bool = False) -> A
             )
         s = np.diag([scale, scale, scale, 1.0])
         transform = compose(transform, s)
-        floor_pts = (aligned[opaque & (np.abs(heights) < threshold)] * scale)[:, [0, 2]]
-        manifest.rooms = [_room_from_floor(floor_pts)]
+        lidar = _lidar_points(paths) if metric else None
+        if lidar is not None:
+            # Measured surfaces, not trained splats: training lets a few splats
+            # drift metres away, and an outline from splats picks them up.
+            plan = _transform_points(lidar, transform)
+            outline_xz = plan[(plan[:, 1] > -0.05) & (plan[:, 1] < 2.2)][:, [0, 2]]
+        else:
+            outline_xz = (aligned[opaque & (np.abs(heights) < threshold)] * scale)[:, [0, 2]]
+        manifest.rooms = [_room_from_floor(outline_xz, measured=lidar is not None)]
         manifest.items = []
 
     if cameras:
@@ -233,10 +246,13 @@ def align_scene(paths: ProjectPaths, project_id: str, metric: bool = False) -> A
     return report
 
 
-def floor_outline(floor_xz: np.ndarray, cell: float = 0.1) -> np.ndarray:
+def floor_outline(
+    floor_xz: np.ndarray, cell: float = 0.1, measured: bool = False
+) -> np.ndarray:
     """
-    The floor's outline from floor-height splats: the largest connected
-    region of well-populated 10 cm cells.
+    The room's outline from points near the floor: the largest connected
+    region of occupied 10 cm cells. `measured` points are LiDAR (floor and
+    walls up to 2.2 m); otherwise they are trained splats at floor height.
 
     A hull over the points themselves is ruined by strays — a real capture
     has floor-height splats metres outside the room, seen through a doorway
@@ -249,8 +265,17 @@ def floor_outline(floor_xz: np.ndarray, cell: float = 0.1) -> np.ndarray:
     idx = idx[keep]
     counts = np.zeros(idx.max(axis=0) + 1, dtype=np.int32)
     np.add.at(counts, (idx[:, 0], idx[:, 1]), 1)
-    occupied = counts >= max(3, np.percentile(counts[counts > 0], 25))
-    grid = cv2.morphologyEx(occupied.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+    # Measured points (LiDAR) are sparse but trustworthy: two in a cell is
+    # surface. Trained splats need a density bar to ignore the strays.
+    occupied = counts >= (2 if measured else max(3, np.percentile(counts[counts > 0], 25)))
+    # LiDAR mostly sees walls, so its cells form a ring whose outer contour is
+    # the room — once the ring is closed. Bridge gaps up to ~1 m (a doorway,
+    # a wall hidden behind a wardrobe); splat floors only need small holes shut.
+    size = 11 if measured else 5
+    pad = size if measured else 0  # room for the wide close to reach the edges
+    grid = np.pad(occupied.astype(np.uint8), pad)
+    grid = cv2.morphologyEx(grid, cv2.MORPH_CLOSE, np.ones((size, size), np.uint8))
+    lo = lo - pad * cell
     n, labels, stats, _ = cv2.connectedComponentsWithStats(grid, connectivity=4)
     if n < 2:
         raise AlignmentFailed("Too little floor in the splat to outline the room.")
@@ -263,11 +288,17 @@ def floor_outline(floor_xz: np.ndarray, cell: float = 0.1) -> np.ndarray:
     return simplify_polygon(poly, tolerance=cell * 1.5)
 
 
-def _room_from_floor(floor_xz: np.ndarray) -> Room:
-    """A room outlined from floor splats, for a capture without a scan."""
+def _lidar_points(paths: ProjectPaths) -> np.ndarray | None:
+    """The fused LiDAR points a posed capture wrote as the trainer's seed points."""
+    model = paths.work / "undistorted" / "sparse" / "points3D.bin"
+    return read_points3d_bin(model) if model.is_file() else None
+
+
+def _room_from_floor(floor_xz: np.ndarray, measured: bool = False) -> Room:
+    """A room outlined from floor points, for a capture without a scan."""
     if len(floor_xz) < 50:
         raise AlignmentFailed("Too little floor in the splat to outline the room.")
-    poly = floor_outline(floor_xz)
+    poly = floor_outline(floor_xz, measured=measured)
     x, z = poly[:, 0], poly[:, 1]
     if 0.5 * float(np.sum(x * np.roll(z, -1) - np.roll(x, -1) * z)) < 0:
         poly = poly[::-1]

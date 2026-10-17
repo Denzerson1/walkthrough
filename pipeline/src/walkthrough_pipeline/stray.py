@@ -21,6 +21,7 @@ Format (docs/format.md in the app's repo):
 
 from __future__ import annotations
 
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -33,6 +34,10 @@ DEPTH_RANGE_M = (0.15, 5.0)
 #: Fused points: one per voxel, each kept with at most this many sightings.
 VOXEL_M = 0.02
 MAX_TRACK = 6
+#: A pose that moves further than this between consecutive frames (1/60 s)
+#: is ARKit relocalising, not the phone moving; frames around it are dropped.
+JUMP_M = 0.05
+JUMP_DEG = 5.0
 
 
 class StrayError(ValueError):
@@ -190,6 +195,86 @@ def fuse(
     )
 
 
+def tracking_jumps(capture: StrayCapture, margin: int = 3) -> set[int]:
+    """Rows within `margin` frames of a pose jump (see JUMP_M, JUMP_DEG)."""
+    poses = capture.cam_to_world
+    step = np.linalg.norm(np.diff(poses[:, :3, 3], axis=0), axis=1)
+    relative = np.einsum("nji,njk->nik", poses[:-1, :3, :3], poses[1:, :3, :3])
+    angle = np.degrees(np.arccos(np.clip((np.trace(relative, axis1=1, axis2=2) - 1) / 2, -1, 1)))
+    rows: set[int] = set()
+    for jump in np.nonzero((step > JUMP_M) | (angle > JUMP_DEG))[0]:
+        rows.update(range(max(0, jump - margin + 1), min(len(poses), jump + margin + 1)))
+    return rows
+
+
+def edge_agreement(depth_mm: np.ndarray, gray: np.ndarray) -> float:
+    """
+    How well a depth map's edges line up with an image's edges: the
+    correlation of their gradient magnitudes. Depth steps (a door frame, a
+    shelf edge) are also visible edges, so the matching frame scores highest.
+    """
+    def edges(image: np.ndarray) -> np.ndarray:
+        image = image.astype(np.float32)
+        magnitude = np.hypot(cv2.Sobel(image, cv2.CV_32F, 1, 0), cv2.Sobel(image, cv2.CV_32F, 0, 1))
+        magnitude = cv2.GaussianBlur(magnitude, (0, 0), 1.5)
+        return (magnitude - magnitude.mean()) / max(float(magnitude.std()), 1e-6)
+
+    depth = np.log(np.maximum(depth_mm.astype(np.float32), 100.0))
+    return float((edges(depth) * edges(gray)).mean())
+
+
+def _turning(capture: StrayCapture) -> np.ndarray:
+    """Degrees turned between consecutive poses, smoothed over 15 frames."""
+    poses = capture.cam_to_world
+    relative = np.einsum("nji,njk->nik", poses[:-1, :3, :3], poses[1:, :3, :3])
+    angle = np.degrees(np.arccos(np.clip((np.trace(relative, axis1=1, axis2=2) - 1) / 2, -1, 1)))
+    return np.convolve(angle, np.ones(15) / 15, mode="same")
+
+
+def frame_offset(capture: StrayCapture, samples: int = 8, search: int = 4) -> tuple[int, float]:
+    """
+    Video frame number minus pose row for the same instant, measured.
+
+    The first real capture's video ran one frame behind its poses: depth row
+    n matched video frame n - 1. One frame while turning is a degree, ~20 px
+    at training size, and it smeared the whole scene. The depth map shares
+    the pose's instant, so the video frame whose edges best match it says
+    where the video stands. Measured where the phone turns fastest, where an
+    offset shows most. Returns (offset, share of samples that agreed).
+    """
+    from .frames import ffmpeg_path
+
+    turning = _turning(capture)
+    picks: list[int] = []
+    for row in np.argsort(-turning):
+        if search < row < len(capture) - search and all(abs(row - q) > 200 for q in picks):
+            picks.append(int(row))
+        if len(picks) == samples:
+            break
+
+    h, w = cv2.imread(str(capture.depth_path(int(capture.frames[0]))), cv2.IMREAD_UNCHANGED).shape
+    votes = []
+    for row in picks:
+        n = int(capture.frames[row])
+        raw = subprocess.run(
+            [ffmpeg_path(), "-v", "error", "-noautorotate", "-i", str(capture.video), "-vf",
+             f"select=between(n\\,{n - search}\\,{n + search}),scale={w}:{h}", "-fps_mode", "vfr",
+             "-f", "rawvideo", "-pix_fmt", "gray", "-"],
+            check=True, capture_output=True,
+        ).stdout
+        window = np.frombuffer(raw, np.uint8).reshape(-1, h, w)
+        if len(window) != 2 * search + 1:
+            continue
+        depth = cv2.imread(str(capture.depth_path(n)), cv2.IMREAD_UNCHANGED)
+        scores = [edge_agreement(depth, frame) for frame in window]
+        votes.append(int(np.argmax(scores)) - search)
+    if not votes:
+        return 0, 0.0
+    values, counts = np.unique(votes, return_counts=True)
+    best = int(values[np.argmax(counts)])
+    return best, float(counts.max() / len(votes))
+
+
 @dataclass
 class DatasetReport:
     frames: int
@@ -199,7 +284,9 @@ class DatasetReport:
     height: int
 
 
-def build_dataset(capture: StrayCapture, frames: list[Path], out_dir: Path) -> DatasetReport:
+def build_dataset(
+    capture: StrayCapture, frames: list[Path], out_dir: Path, offset: int = 0
+) -> DatasetReport:
     """
     The trainer's input — `images/` and a COLMAP `sparse/` model — from
     ARKit's poses and LiDAR depth instead of structure from motion.
@@ -212,8 +299,11 @@ def build_dataset(capture: StrayCapture, frames: list[Path], out_dir: Path) -> D
     from .colmap import PosedImage, write_model
 
     row_of = {int(f): i for i, f in enumerate(capture.frames)}
-    chosen = [(path, row_of[int(path.stem.split("_")[1])]) for path in frames
-              if int(path.stem.split("_")[1]) in row_of]
+    unstable = tracking_jumps(capture)
+    # A video frame shows the instant of pose row (frame number - offset).
+    chosen = [(path, row_of[n]) for path in frames
+              if (n := int(path.stem.split("_")[1]) - offset) in row_of
+              and row_of[n] not in unstable]
     if len(chosen) < 20:
         raise StrayError(f"Only {len(chosen)} frames have a pose; the capture is too short.")
 

@@ -64,13 +64,14 @@ def _render_depth(pose):
     return t  # rays have unit z, so the ray parameter is the z-depth
 
 
-def _write_capture(root: Path, n: int = 40, columns: int = 13) -> list[np.ndarray]:
+def _write_capture(root: Path, n: int = 90, columns: int = 13) -> list[np.ndarray]:
     (root / "depth").mkdir(parents=True)
     (root / "confidence").mkdir()
     (root / "rgb.mp4").write_bytes(b"")  # presence only; size is passed in
     poses, rows = [], []
     for i in range(n):
-        pose = _pose([0.3 * np.cos(i / 6), 0.0, 0.3 * np.sin(i / 6)], yaw_deg=i * 9)
+        # A full turn at a realistic hand-held pace: 4° and under 3 cm per frame.
+        pose = _pose([0.3 * np.cos(i / 12), 0.0, 0.3 * np.sin(i / 12)], yaw_deg=i * 4)
         poses.append(pose)
         depth_mm = np.clip(np.round(_render_depth(pose) * 1000), 0, 65535).astype(np.uint16)
         cv2.imwrite(str(root / "depth" / f"{i:06d}.png"), depth_mm)
@@ -102,7 +103,7 @@ def _distance_to_box(points):
 
 def test_poses_are_read_as_camera_to_world(capture):
     cap, poses = capture
-    assert len(cap) == 40 and cap.size == VIDEO
+    assert len(cap) == 90 and cap.size == VIDEO
     np.testing.assert_allclose(cap.cam_to_world, poses, atol=1e-6)
     np.testing.assert_allclose(cap.intrinsics[0], K)
 
@@ -121,7 +122,7 @@ def test_find_capture_looks_inside_a_folder(tmp_path):
 
 def test_depth_points_land_on_the_walls(capture):
     cap, _ = capture
-    for index in (0, 13, 27):
+    for index in (0, 30, 61):
         world, pixels = stray.depth_points(cap, index)
         assert len(world) > 5000
         assert np.percentile(_distance_to_box(world), 99) < 0.01  # mm rounding only
@@ -212,7 +213,7 @@ def _frames(tmp_path, cap, width=640):
 def test_dataset_poses_match_arkit(capture, tmp_path):
     cap, poses = capture
     report = stray.build_dataset(cap, _frames(tmp_path, cap), tmp_path / "ds")
-    assert report.frames == 20 and (report.width, report.height) == (640, 480)
+    assert report.frames == 45 and (report.width, report.height) == (640, 480)
     cams = read_images_bin(tmp_path / "ds" / "sparse" / "images.bin")
     np.testing.assert_allclose([c.centre for c in cams], [p[:3, 3] for p in poses[::2]],
                                atol=1e-9)
@@ -297,3 +298,90 @@ def test_metric_alignment_keeps_arkit_scale(tmp_path, monkeypatch):
     assert report.up_from == "ARKit gravity"
     assert report.scale == pytest.approx(1.0, abs=0.005)
     assert report.roomplan["inlier_ratio"] > 0.5
+
+
+def test_frames_around_a_tracking_jump_are_flagged(capture):
+    cap, _ = capture
+    assert stray.tracking_jumps(cap) == set()
+    cap.cam_to_world[20:, :3, 3] += [0.3, 0.0, 0.0]  # ARKit relocalises between 19 and 20
+    assert stray.tracking_jumps(cap) == {17, 18, 19, 20, 21, 22}
+
+
+def test_points3d_round_trip(capture, tmp_path):
+    from walkthrough_pipeline.colmap import read_points3d_bin
+
+    cap, _ = capture
+    report = stray.build_dataset(cap, _frames(tmp_path, cap), tmp_path / "ds")
+    points = read_points3d_bin(tmp_path / "ds" / "sparse" / "points3D.bin")
+    assert len(points) == report.points
+    assert np.percentile(_distance_to_box(points), 99) < 0.02
+
+
+def test_room_is_outlined_from_lidar_not_from_drifting_splats(capture, tmp_path):
+    """
+    The first real Stray room was outlined at 60 m² for a 21 m² room: training
+    had let splats drift up to 100 m away. The LiDAR points do not drift.
+    """
+    cap, _ = capture
+    paths = ProjectPaths(tmp_path / "p")
+    paths.ensure()
+    stray.build_dataset(cap, _frames(tmp_path, cap), paths.work / "undistorted")
+
+    rng = np.random.default_rng(3)
+    floor = np.column_stack([rng.uniform(LO[0], HI[0], 40_000), np.full(40_000, LO[1]),
+                             rng.uniform(LO[2], HI[2], 40_000)])
+    drift = np.column_stack([rng.uniform(-60, 60, 8_000), np.full(8_000, LO[1]),
+                             rng.uniform(-60, 60, 8_000)])
+    pts = np.vstack([floor, drift]).astype(np.float32)
+    n = len(pts)
+    q = np.zeros((n, 4), np.float32)
+    q[:, 0] = 1
+    write_ply(SplatCloud(pts, np.full((n, 3), 0.5, np.float32), np.full(n, 0.9, np.float32),
+                         np.full((n, 3), 0.01, np.float32), q), paths.work / "trained.ply")
+
+    align_scene(paths, "p", metric=True)
+    from walkthrough_pipeline.manifest import Manifest
+
+    poly = np.array(Manifest.load(paths.manifest).rooms[0].floorPolygon)
+    x, z = poly.T
+    area = abs(0.5 * np.sum(x * np.roll(z, -1) - np.roll(x, -1) * z))
+    assert area == pytest.approx((HI[0] - LO[0]) * (HI[2] - LO[2]), rel=0.1)
+
+
+# --------------------------------------------------------------------------
+# Video/pose sync
+# --------------------------------------------------------------------------
+
+
+def test_edge_agreement_prefers_the_matching_frame():
+    depth = np.full((192, 256), 3000, np.uint16)
+    depth[:, 120:] = 1500  # a door frame
+    image = np.where(np.arange(256) < 120, 90, 200).astype(np.uint8)[None].repeat(192, 0)
+    shifted = np.roll(image, 14, axis=1)
+    assert stray.edge_agreement(depth, image) > stray.edge_agreement(depth, shifted)
+
+
+def test_dataset_pairs_frames_with_the_offset_poses(capture, tmp_path):
+    cap, poses = capture
+    stray.build_dataset(cap, _frames(tmp_path, cap), tmp_path / "ds", offset=-1)
+    cams = read_images_bin(tmp_path / "ds" / "sparse" / "images.bin")
+    first = int(cams[0].name.split("_")[1].split(".")[0])
+    # Video frame v shows the instant of pose row v + 1.
+    np.testing.assert_allclose(cams[0].centre, poses[first + 1][:3, 3], atol=1e-9)
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed here")
+def test_a_video_one_frame_behind_its_poses_is_detected(capture, tmp_path):
+    cap, poses = capture
+    frames = tmp_path / "video"
+    frames.mkdir()
+    for v in range(len(poses) - 1):
+        # Video frame v shows what pose row v + 1 saw, as in the first real capture.
+        d = _render_depth(poses[v + 1])
+        image = np.clip(255 * (1 - np.minimum(d, 6) / 6), 0, 255).astype(np.uint8)
+        cv2.imwrite(str(frames / f"{v:06d}.png"), image)
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", "60", "-i",
+                    str(frames / "%06d.png"), "-c:v", "libx264", "-crf", "12",
+                    "-pix_fmt", "yuv420p", str(cap.video)], check=True)
+    offset, agreement = stray.frame_offset(cap, samples=1)
+    assert (offset, agreement) == (-1, 1.0)

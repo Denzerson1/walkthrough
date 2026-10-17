@@ -60,6 +60,19 @@ def read_images_bin(path: Path) -> list[Camera]:
     return cameras
 
 
+def read_points3d_bin(path: Path) -> np.ndarray:
+    """(N, 3) positions from COLMAP's binary `points3D.bin`."""
+    data = Path(path).read_bytes()
+    (count,) = struct.unpack_from("<Q", data, 0)
+    off, points = 8, np.empty((count, 3))
+    record = struct.calcsize("<Q3d3Bd")
+    for i in range(count):
+        points[i] = struct.unpack_from("<3d", data, off + 8)
+        (track,) = struct.unpack_from("<Q", data, off + record)
+        off += record + 8 + 8 * track
+    return points
+
+
 #: COLMAP's id for the PINHOLE camera model (fx, fy, cx, cy).
 PINHOLE = 1
 

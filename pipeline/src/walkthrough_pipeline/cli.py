@@ -336,7 +336,16 @@ def _poses_from_stray(capture: stray_mod.StrayCapture, paths: ProjectPaths) -> N
         raise typer.BadParameter("No frames. Run `pipeline frames` first.")
     started = time.time()
     console.print(f"Building the dataset from ARKit poses and LiDAR ({len(frame_paths)} frames)")
-    built = stray_mod.build_dataset(capture, frame_paths, paths.work / "undistorted")
+    offset, agreement = stray_mod.frame_offset(capture)
+    if agreement < 0.5:
+        console.print(
+            f"[yellow]Video/pose sync unclear ({agreement:.0%} of samples agreed); "
+            "assuming they line up.[/yellow]"
+        )
+        offset = 0
+    else:
+        console.print(f"  video is {offset:+d} frame(s) from its poses ({agreement:.0%} agree)")
+    built = stray_mod.build_dataset(capture, frame_paths, paths.work / "undistorted", offset)
     report = {
         "source": "stray (ARKit poses, LiDAR depth)",
         "frames": built.frames,
@@ -344,6 +353,8 @@ def _poses_from_stray(capture: stray_mod.StrayCapture, paths: ProjectPaths) -> N
         "share": 1.0,
         "points3D": built.points,
         "depth_observations": built.observations,
+        "video_frame_offset": offset,
+        "offset_agreement": round(agreement, 2),
         "image_size": [built.width, built.height],
         "minutes": round((time.time() - started) / 60, 1),
     }
@@ -372,7 +383,10 @@ def train(
         holdout_every=holdout_every,
         # LiDAR points carry real depth, so supervise with it; COLMAP's sparse
         # points are too few and too noisy on plain walls to be worth it.
+        # ARKit poses are good to a centimetre or so, not to a pixel, so they
+        # are refined in training; COLMAP's already are, against these images.
         depth=_stray(paths) is not None,
+        refine_poses=_stray(paths) is not None,
     )
     result_dir = paths.work / "train"
     shutil.rmtree(result_dir, ignore_errors=True)
@@ -455,13 +469,15 @@ def floor_cmd(
 
 @app.command(name="run-all")
 def run_all(
-    video: Path = typer.Argument(..., help="The capture (.mov/.mp4); Windows paths are fine"),
+    capture: Path = typer.Argument(
+        ..., help="A video (.mov/.mp4) or a Stray Scanner dataset folder; Windows paths are fine"
+    ),
     project: str = typer.Option(..., "--project", "-p"),
-    roomplan: Path | None = typer.Option(None, help="RoomPlan export (JSON or USDZ)"),
+    roomplan: Path | None = typer.Option(None, help="RoomPlan export (.json, .usdz or .glb)"),
     fps: float = typer.Option(3.0),
 ) -> None:
     """ingest -> frames -> poses -> train -> align -> export."""
-    ingest(video=video, project=project, roomplan=roomplan)
+    ingest(capture=capture, project=project, roomplan=roomplan)
     frames(project=project, fps=fps, min_frames=150, max_frames=600, long_edge=1600)
     poses(project=project, matcher="auto", camera_model="OPENCV")
     train(project=project, max_splats=1_500_000, steps=30_000, holdout_every=8)

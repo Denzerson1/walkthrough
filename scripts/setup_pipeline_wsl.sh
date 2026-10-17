@@ -41,6 +41,13 @@ export PATH="$HOME/.local/bin:$PATH"
 # exactly that pair, and gsplat's reference trainer at the same tag.
 [ -d "$HOME/gsplat" ] || git clone --depth 1 --branch v1.5.3 \
   https://github.com/nerfstudio-project/gsplat.git "$HOME/gsplat"
+# The trainer's depth loss divides by rendered depth inside torch.where, so an
+# empty pixel (depth 0) still computes 1/0 and its gradient is inf * 0 = NaN,
+# which poisons every parameter within a hundred steps. Dense LiDAR depth
+# always hits some empty pixels. Clamp the divisor; the 1 cm floor is the
+# trainer's own near plane. Anchored on the exact line, so a no-op if changed.
+sed -i 's|disp = torch.where(depths > 0.0, 1.0 / depths, torch.zeros_like(depths))|disp = torch.where(depths > 0.0, 1.0 / depths.clamp(min=1e-2), torch.zeros_like(depths))|' \
+  "$HOME/gsplat/examples/simple_trainer.py"
 GS="$HOME/.venvs/gsplat/bin/python"
 [ -x "$GS" ] || uv venv --python 3.10 "$HOME/.venvs/gsplat"
 uv pip install --python "$GS" torch==2.4.1 torchvision==0.19.1 \
