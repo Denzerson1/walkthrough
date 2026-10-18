@@ -258,3 +258,18 @@ def test_mitres_reach_out_at_convex_corners_and_in_at_inside_ones():
     reach = fg.mitres(ell, t)
     assert reach[3][1] == pytest.approx(-t)  # (2, 3) -> (2, 1) ends short of (2, 1)
     assert reach[4][0] == pytest.approx(t)  # (2, 1) -> (0, 1) starts past it
+
+
+def test_convex_hull_of_a_footprint():
+    pts = [[0, 0], [2, 0], [2, 1], [0, 1], [1, 0.5], [1, 0], [2, 0.5]]
+    hull = fg.convex_hull(pts)
+    assert fg.signed_area(hull) == pytest.approx(2.0)
+    assert len(hull) == 4
+
+
+def test_a_bed_facing_along_its_box_is_sized_length_deep():
+    from walkthrough_pipeline.rebuild import sized_for
+
+    # Scanned as (2.09 long, 0.69, 1.69 wide) with its depth along x (yaw 270).
+    assert sized_for((0, -1), [2.09, 0.69, 1.69], 270) == [1.69, 0.69, 2.09]
+    assert sized_for((1, 0), [2.09, 0.69, 1.69], 270) == [2.09, 0.69, 1.69]

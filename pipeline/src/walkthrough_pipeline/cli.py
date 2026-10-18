@@ -26,7 +26,7 @@ from . import rebuild as rebuild_mod
 from . import roomplan as roomplan_mod
 from . import stray as stray_mod
 from . import train as train_mod
-from .manifest import Manifest, Waypoint
+from .manifest import Manifest, Obstacle, Waypoint
 from .paths import ProjectPaths, repo_root
 from .scene import AlignmentFailed, align_scene, export_scene, trained_ply
 
@@ -485,7 +485,7 @@ def rebuild(
     floor: str = typer.Option("oak-plank-natural", help="Catalog floor id, unless dressed"),
     wall_colour: str | None = typer.Option(None, help="Wall paint as #rrggbb (default: dressing)"),
     lightmap_size: int = typer.Option(2048, help="Baked-light atlas edge in pixels"),
-    samples: int = typer.Option(1024, help="Cycles samples for the bake"),
+    samples: int = typer.Option(2048, help="Cycles samples for the bake"),
     preview_only: bool = typer.Option(False, help="Only render a still, to judge the look"),
 ) -> None:
     """Rebuild the flat 1:1 from its floor-plan scan in Blender, with baked light."""
@@ -558,6 +558,7 @@ def rebuild(
         manifest.assets.lightmap = Path(spec["out"]["lightmap"]).name
         meta = json.loads(Path(spec["out"]["meta"]).read_text())
         manifest.assets.lightmapScale = meta["lightmapScale"]
+        manifest.rooms[0].obstacles = [Obstacle(**o) for o in meta.get("obstacles", [])]
         manifest.write(paths.manifest)
     console.print(f"[green]Rebuilt[/green] in {(time.time() - started) / 60:.1f} min")
 

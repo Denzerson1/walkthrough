@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src" / "walkthroug
 from flat_geometry import (  # noqa: E402  (standard library only, so importable here)
     WALL_T,
     atlas_cells,
+    convex_hull,
     grow,
     is_air,
     is_flat,
@@ -318,34 +319,38 @@ def roof_window(b: Builder, sk: dict) -> None:
               depth - 0.035, depth - 0.027)
 
 
-VIEW_DISTANCE = 4.0  # how far out the view photo stands
+DOME_RADIUS = 80.0
+VIEW_DISTANCE = 12.0  # how far out the buildings across the courtyard stand
 
 
-def window_view(sk: dict, index: int) -> bpy.types.Object:
+def outside(spec: dict) -> list[bpy.types.Object]:
     """
-    The customer's photo out of a roof window, on a plane parallel to its
-    glass a few metres out. The plane spans the photo's field of view (a
-    phone's 1x lens, 69 degrees along its long side) and a third more, so a
-    glance in at an angle still lands on it. Shown unlit, and hidden while
-    baking, so it never shades the room.
+    What the windows look out on: a sky dome in the photo's sky colours, and
+    the customer's photo out of a window, its sky cut away, standing a street
+    width out from the roof windows. A photo on a plane just behind the glass
+    showed its edges and blank background from an angle; the dome has none.
+    Both are shown unlit, and hidden while baking (the bake has its own sky).
     """
-    frame = sk["frame"]
-    u0, u1, v0, v1 = sk["sash"]
-    uc, vc = (u0 + u1) / 2, (v0 + v1) / 2
-    image = bpy.data.images.load(sk["view"])
-    long_side = 2 * VIEW_DISTANCE * math.tan(math.radians(69 / 2)) * 1.3
-    w, h = image.size
-    across, up = (long_side * w / h, long_side) if h >= w else (long_side, long_side * h / w)
-    n = sk["depth"] + VIEW_DISTANCE
-    # Looking out, the photo's right is the slope's -u and its up is +v.
-    corners = [(uc + across / 2, vc - up / 2), (uc - across / 2, vc - up / 2),
-               (uc - across / 2, vc + up / 2), (uc + across / 2, vc + up / 2)]
-    mesh = bpy.data.meshes.new(f"view-{index + 1}")
-    mesh.from_pydata([P(*slope_point(frame, a, b_, n)) for a, b_ in corners], [], [(0, 1, 2, 3)])
-    uv = mesh.uv_layers.new(name="UVMap")
-    for loop, coord in zip(mesh.loops, ((0, 0), (1, 0), (1, 1), (0, 1)), strict=True):
-        uv.data[loop.index].uv = coord
-    mat = bpy.data.materials.new(f"view-{index + 1}")
+    view = spec.get("outside")
+    if not view:
+        return []
+    room = spec["rooms"][0]
+    cx = sum(p[0] for p in room["polygon"]) / len(room["polygon"])
+    cz = sum(p[1] for p in room["polygon"]) / len(room["polygon"])
+    objects = [sky_dome(view, (cx, cz))]
+    skylights = spec["skylights"]
+    if skylights:
+        objects.append(view_card(view, skylights))
+    for obj in objects:
+        # Seen by the camera only: to light, the dome would be a shell
+        # around the flat shutting out the sun and the sky.
+        obj.visible_diffuse = obj.visible_glossy = obj.visible_shadow = False
+        obj.visible_transmission = obj.visible_volume_scatter = False
+    return objects
+
+
+def unlit_material(name: str, image: bpy.types.Image, alpha: bool) -> bpy.types.Material:
+    mat = bpy.data.materials.new(name)
     nodes, links = mat.node_tree.nodes, mat.node_tree.links
     bsdf = nodes["Principled BSDF"]
     tex = nodes.new("ShaderNodeTexImage")
@@ -353,8 +358,88 @@ def window_view(sk: dict, index: int) -> bpy.types.Object:
     links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
     links.new(tex.outputs["Color"], bsdf.inputs["Emission Color"])
     bsdf.inputs["Emission Strength"].default_value = 1.0
-    mesh.materials.append(mat)
-    obj = bpy.data.objects.new(f"view-{index + 1}", mesh)
+    if alpha:
+        links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
+        mat.surface_render_method = "BLENDED"
+    return mat
+
+
+def sky_dome(view: dict, centre: tuple[float, float]) -> bpy.types.Object:
+    """A sphere around the flat, painted from the ground up through the horizon to the zenith."""
+    import numpy as np
+
+    def lin(colour: str) -> np.ndarray:
+        return np.array(hex_rgba(colour)[:3])
+
+    # Below the photo's bottom edge lie the lower floors of the buildings it
+    # shows, not more sky: the dome takes their colour up to a little above
+    # the horizon, where the photo starts.
+    ground, horizon, zenith = lin(view["below"]), lin(view["horizon"]), lin(view["zenith"])
+    rows = 256
+    elevation = np.linspace(-90, 90, rows)
+    up = np.clip((elevation - 4) / 86, 0, 1)[:, None] ** 0.6
+    down = np.clip((6 - elevation) / 6, 0, 1)[:, None]
+    colour = horizon * (1 - up) + zenith * up
+    colour = colour * (1 - down) + ground * down
+    pixels = np.ones((rows, 4, 4), np.float32)
+    pixels[..., :3] = colour[:, None, :]
+    image = bpy.data.images.new("sky", 4, rows, float_buffer=False)
+    image.colorspace_settings.name = "sRGB"
+    srgb = np.where(pixels[..., :3] <= 0.0031308, pixels[..., :3] * 12.92,
+                    1.055 * np.power(pixels[..., :3], 1 / 2.4) - 0.055)
+    pixels[..., :3] = srgb
+    image.pixels.foreach_set(pixels.ravel())
+    image.pack()
+
+    bm = bmesh.new()
+    bmesh.ops.create_uvsphere(bm, u_segments=48, v_segments=24, radius=DOME_RADIUS)
+    bmesh.ops.reverse_faces(bm, faces=bm.faces)  # seen from inside
+    layer = bm.loops.layers.uv.verify()
+    for face in bm.faces:
+        for loop in face.loops:
+            z = max(-1.0, min(1.0, loop.vert.co.z / DOME_RADIUS))
+            loop[layer].uv = (0.5, 0.5 + math.asin(z) / math.pi)
+    mesh = bpy.data.meshes.new("sky")
+    bm.to_mesh(mesh)
+    bm.free()
+    mesh.materials.append(unlit_material("sky", image, alpha=False))
+    obj = bpy.data.objects.new("sky", mesh)
+    bpy.context.collection.objects.link(obj)
+    obj.location = P(centre[0], 0.0, centre[1])
+    return obj
+
+
+def view_card(view: dict, skylights: list[dict]) -> bpy.types.Object:
+    """
+    The photo out of the window, sky cut away, on a plane facing back in
+    through the roof windows: centred on them, VIEW_DISTANCE out along their
+    slope, as large as the photo's field of view (a phone's 1x lens, 69
+    degrees along its long side) at that distance.
+    """
+    frame = skylights[0]["frame"]
+    centres = [Vector(sk["centre"]) for sk in skylights]
+    centre = sum(centres, Vector()) / len(centres)
+    o = Vector(frame["origin"])
+    uc = (centre - o).dot(Vector(frame["u"]))
+    vc = (centre - o).dot(Vector(frame["v"]))
+    n = (centre - o).dot(Vector(frame["n"])) + VIEW_DISTANCE
+    # The photo was shot along the window's tilt, so its foot lies a few
+    # degrees above the horizon; lowered so it meets the facade colour below.
+    vc -= VIEW_DISTANCE * math.tan(math.radians(6))
+    image = bpy.data.images.load(view["view"])
+    long_side = 2 * VIEW_DISTANCE * math.tan(math.radians(69 / 2))
+    w, h = image.size
+    across, up = (long_side * w / h, long_side) if h >= w else (long_side, long_side * h / w)
+    # Looking out, the photo's right is the slope's -u and its up is +v.
+    corners = [(uc + across / 2, vc - up / 2), (uc - across / 2, vc - up / 2),
+               (uc - across / 2, vc + up / 2), (uc + across / 2, vc + up / 2)]
+    mesh = bpy.data.meshes.new("view")
+    mesh.from_pydata([P(*slope_point(frame, a, b_, n)) for a, b_ in corners], [], [(0, 1, 2, 3)])
+    uv = mesh.uv_layers.new(name="UVMap")
+    for loop, coord in zip(mesh.loops, ((0, 0), (1, 0), (1, 1), (0, 1)), strict=True):
+        uv.data[loop.index].uv = coord
+    mesh.materials.append(unlit_material("view", image, alpha=True))
+    obj = bpy.data.objects.new("view", mesh)
     bpy.context.collection.objects.link(obj)
     return obj
 
@@ -369,6 +454,12 @@ def door(b: Builder, wall: dict, lo: float, hi: float, top: float) -> None:
     # one looked down past the floor's edge as a bright line. 3 mm proud,
     # not flush, so its top is not in the floor's plane.
     wall_box(b, "trim", wall, lo, hi, -SLAB_T, 0.003, 0, WALL_T)
+    # A lever handle on the room side, at the latch edge: rose, neck, lever
+    # pointing back towards the hinges.
+    face, hu = mid - 0.02, hi - 0.075
+    wall_box(b, "steel", wall, hu - 0.025, hu + 0.025, 1.025, 1.075, face - 0.008, face)
+    wall_box(b, "steel", wall, hu - 0.01, hu + 0.01, 1.04, 1.06, face - 0.058, face - 0.008)
+    wall_box(b, "steel", wall, hu - 0.14, hu + 0.01, 1.04, 1.06, face - 0.075, face - 0.058)
     # Sides stop where the head starts: overlapping coplanar boxes render black.
     wall_box(b, "trim", wall, lo - TRIM_W, lo, 0, top, -TRIM_D, 0)
     wall_box(b, "trim", wall, hi, hi + TRIM_W, 0, top, -TRIM_D, 0)
@@ -444,65 +535,260 @@ def plain_uvs(obj: bpy.types.Object) -> None:
 
 BLOCK_COLOURS = {"bed": "#e9e4dc", "sofa": "#8d9390", "tv": "#1b1c1e", "appliance": "#e8e8e6"}
 
-#: Surfaces the finishes are made of: colour (sRGB) and roughness.
-SURFACES = {
-    "gloss": ("#f3f3f1", 0.12), "stone": ("#6f6d69", 0.45), "plinth": ("#3d3d3c", 0.6),
-    "oak": ("#c4ab8c", 0.55), "wenge": ("#3a2a23", 0.5), "linen": ("#f1eee8", 0.9),
-    "boucle": ("#e6e1d7", 1.0), "black": ("#121314", 0.2), "fabric": ("#a29e98", 0.9),
-    "white": ("#efeeea", 0.6), "coats": ("#2b2a2c", 0.95), "shade": ("#f4f0e6", 0.8),
-}
+FRONT_T, GAP, GRIP = 0.019, 0.003, 0.03  # front thickness, gap between fronts, grip channel
+
+#: Rounded edges, for the pieces that have them: (bevel width, segments).
+SOFTNESS = {"sofa": (0.06, 5), "bed": (0.025, 3), "stool": (0.006, 2), "air-con": (0.02, 3),
+            "tv": (0.003, 1)}
+
+Part = tuple[str, tuple[float, float, float, float, float, float]]
 
 
-def finish_parts(finish: str, w: float, h: float, d: float) -> list[tuple[str, tuple]]:
+def fronts(x0: float, x1: float, z0: float, z1: float, y: float, columns: list,
+           surface: str = "gloss", grips: bool = True) -> list[Part]:
+    """
+    Door and drawer fronts standing on a carcass face, their front at y.
+    `columns` are (width, count) left to right, a width of 0 sharing what is
+    left; each column's fronts are stacked with a recessed aluminium grip
+    channel between them (`grips`), as on a handleless kitchen, or a plain gap.
+    """
+    fixed = sum(c[0] for c in columns if c[0])
+    free = sum(1 for c in columns if not c[0])
+    share = (x1 - x0 - fixed) / free if free else 0.0
+    parts: list[Part] = []
+    x = x0
+    for column in columns:
+        width, count = column[0] or share, column[1]
+        between = GRIP if grips else GAP
+        height = (z1 - z0 - between * (count - 1)) / count
+        for i in range(count):
+            za = z0 + i * (height + between)
+            parts.append((surface, (x + GAP / 2, x + width - GAP / 2, y, y + FRONT_T,
+                                    za, za + height)))
+            if grips and i < count - 1:
+                parts.append(("alu", (x, x + width, y + 0.004, y + FRONT_T + 0.01,
+                                      za + height + 0.001, za + height + GRIP - 0.001)))
+        x += width
+    return parts
+
+
+def column_span(x0: float, x1: float, columns: list, tag: str) -> tuple[float, float] | None:
+    """Where along a run of `columns` (see `fronts`) the one tagged `tag` lies."""
+    fixed = sum(c[0] for c in columns if c[0])
+    free = sum(1 for c in columns if not c[0])
+    share = (x1 - x0 - fixed) / free if free else 0.0
+    x = x0
+    for column in columns:
+        width = column[0] or share
+        if tag in column[2:]:
+            return x, x + width
+        x += width
+    return None
+
+
+def sink(x0: float, x1: float, y0: float, y1: float, h: float, lo: float,
+         hi: float) -> list[Part]:
+    """A worktop with an inset basin between lo and hi, and a tap behind it."""
+    cx = (lo + hi) / 2
+    hx0, hx1, hy0, hy1 = cx - 0.25, cx + 0.25, y0 + 0.08, y0 + 0.50
+    top, wall, rim = h - 0.04, 0.012, 0.02
+    return [
+        ("stone", (x0, hx0, y0 - 0.02, y1, top, h)),
+        ("stone", (hx1, x1, y0 - 0.02, y1, top, h)),
+        ("stone", (hx0, hx1, y0 - 0.02, hy0, top, h)),
+        ("stone", (hx0, hx1, hy1, y1, top, h)),
+        ("basin", (hx0, hx1, hy0, hy1, h - 0.19, h - 0.18)),
+        ("basin", (hx0, hx0 + wall, hy0, hy1, h - 0.18, h)),
+        ("basin", (hx1 - wall, hx1, hy0, hy1, h - 0.18, h)),
+        ("basin", (hx0 + wall, hx1 - wall, hy0, hy0 + wall, h - 0.18, h)),
+        ("basin", (hx0 + wall, hx1 - wall, hy1 - wall, hy1, h - 0.18, h)),
+        ("basin", (hx0 - rim, hx0, hy0 - rim, hy1 + rim, h, h + 0.006)),
+        ("basin", (hx1, hx1 + rim, hy0 - rim, hy1 + rim, h, h + 0.006)),
+        ("basin", (hx0, hx1, hy0 - rim, hy0, h, h + 0.006)),
+        ("basin", (hx0, hx1, hy1, hy1 + rim, h, h + 0.006)),
+        ("steel", (cx - 0.022, cx + 0.022, hy1 + 0.03, hy1 + 0.074, h, h + 0.30)),
+        ("steel", (cx - 0.012, cx + 0.012, hy1 - 0.16, hy1 + 0.07, h + 0.276, h + 0.30)),
+    ]
+
+
+def finish_parts(finish: str, w: float, h: float, d: float, opts: dict) -> list[Part]:
     """
     A piece drawn from boxes, in its own frame: x across, y depth with the
-    front at -d/2, z up from 0. The built-ins the scan boxed (a kitchen run,
-    an island, a wardrobe) are architecture more than furniture, and parts
-    in the right materials read as them where a single block reads as a crate.
+    front at -d/2, z up from 0. Built as the photos show it: handleless high
+    gloss fronts with grip channels, a worktop with its sink, the bar's oak
+    top overhanging where the stools go, an open wardrobe with its shelves,
+    rail and drawers. Parts may reach outside the scanned box (an overhang).
     """
     x0, x1, y0, y1 = -w / 2, w / 2, -d / 2, d / 2
-    base = [("plinth", (x0, x1, y0 + 0.06, y1, 0, 0.1)),
-            ("gloss", (x0, x1, y0 + 0.02, y1, 0.1, h - 0.04)),
-            ("stone", (x0, x1, y0, y1, h - 0.04, h))]
-    legs = [("oak", (x, x + 0.03, y, y + 0.03, 0, h * 0.7))
-            for x in (x0 + 0.04, x1 - 0.07) for y in (y0 + 0.04, y1 - 0.07)]
-    parts = {
-        "kitchen-base": base,
-        "oven": [*base, ("black", (x0 + 0.03, x1 - 0.03, y0 + 0.015, y0 + 0.021, 0.4, h - 0.1))],
-        "kitchen-tall": [base[0], ("gloss", (x0, x1, y0, y1, 0.1, h))],
-        "kitchen-wall": [("gloss", (x0, x1, y0, y1, 0, h))],
-        "hob": [("black", (x0, x1, y0, y1, 0, h))],
-        "island": [("plinth", (x0 + 0.04, x1 - 0.04, y0 + 0.06, y1 - 0.06, 0, 0.1)),
-                   ("gloss", (x0 + 0.02, x1 - 0.02, y0 + 0.02, y1 - 0.02, 0.1, h - 0.04)),
-                   ("oak", (x0, x1, y0, y1, h - 0.04, h))],
-        "shelves": [("oak", (x0, x1, y1 - 0.02, y1, 0, h))] + [
-            ("oak", (x0, x1, y0, y1 - 0.02, z, z + 0.025)) for z in (0.0, h / 2, h - 0.025)],
-        "wardrobe": [("oak", (x0, x1, y0, y1, 0, h))],
-        "open-wardrobe": [("oak", (x0, x0 + 0.02, y0, y1, 0, h)),
-                          ("oak", (x1 - 0.02, x1, y0, y1, 0, h)),
-                          ("oak", (x0 + 0.02, x1 - 0.02, y0, y1, h - 0.02, h)),
-                          ("oak", (x0 + 0.02, x1 - 0.02, y0, y1, 0, 0.1)),
-                          ("oak", (x0 + 0.02, x1 - 0.02, y1 - 0.015, y1, 0.1, h - 0.02)),
-                          ("oak", (x0 + 0.02, x1 - 0.02, y0, y1 - 0.015, h - 0.36, h - 0.34)),
-                          ("coats", (x0 + 0.08, x1 - 0.08, y0 + 0.1, y1 - 0.08, 0.7, h - 0.42))],
-        "bed": [("wenge", (x0, x1, y0, y1, 0, 0.3)),
-                ("linen", (x0 + 0.03, x1 - 0.03, y0 + 0.03, y1 - 0.03, 0.3, h))],
-        "sofa": [("boucle", (x0, x1, y0, y1, 0, 0.42)),
-                 ("boucle", (x0, x1, y1 - 0.24, y1, 0.42, h)),
-                 ("boucle", (x0, x0 + 0.22, y0, y1 - 0.24, 0.42, h * 0.82)),
-                 ("boucle", (x1 - 0.22, x1, y0, y1 - 0.24, 0.42, h * 0.82))],
-        "tv": [("black", (x0, x1, y0, y1, 0, h))],
-        "stool": [*legs, ("fabric", (x0, x1, y0, y1, h * 0.7, h * 0.7 + 0.07)),
-                  ("fabric", (x0 + 0.03, x1 - 0.03, y1 - 0.05, y1, h * 0.7 + 0.07, h))],
-        "panel": [("oak", (x0, x1, y0, y1, 0, h))],
-        "air-con": [("white", (x0, x1, y0, y1, 0, h))],
-    }
-    if finish not in parts:
-        raise ValueError(f"Unknown finish {finish!r}")
-    return parts[finish]
+    plinth = ("plinth", (x0, x1, y0 + 0.06, y1, 0, 0.1))
+    carcass = ("white", (x0, x1, y0 + FRONT_T, y1, 0.1, h - 0.04))
+    top_grip = ("alu", (x0, x1, y0 + 0.004, y0 + FRONT_T + 0.01,
+                        h - 0.04 - GRIP + 0.001, h - 0.041))
+    worktop = ("stone", (x0, x1, y0 - 0.02, y1, h - 0.04, h))
+    xi0, xi1 = x0 + 0.018, x1 - 0.018  # inside a carcass's sides
+
+    if finish == "kitchen-base":
+        columns = opts.get("columns", [[0, 1]])
+        parts = [plinth, carcass, top_grip,
+                 *fronts(x0, x1, 0.1 + GAP, h - 0.04 - GRIP, y0, [c[:2] for c in columns])]
+        span = column_span(x0, x1, columns, "sink")
+        return parts + (sink(x0, x1, y0, y1, h, *span) if span else [worktop])
+    if finish == "oven":
+        zt = h - 0.04 - GRIP - GAP
+        return [plinth, carcass, top_grip, worktop,
+                ("gloss", (x0 + GAP / 2, x1 - GAP / 2, y0, y0 + FRONT_T, 0.1 + GAP, 0.3)),
+                ("black", (x0 + 0.004, x1 - 0.004, y0, y0 + FRONT_T, 0.31, zt)),
+                ("steel", (x0 + 0.004, x1 - 0.004, y0 - 0.002, y0 + 0.005, zt - 0.075, zt)),
+                ("steel", (x0 + 0.07, x1 - 0.07, y0 - 0.05, y0 - 0.03, zt - 0.13, zt - 0.112)),
+                ("steel", (x0 + 0.09, x0 + 0.105, y0 - 0.03, y0, zt - 0.13, zt - 0.112)),
+                ("steel", (x1 - 0.105, x1 - 0.09, y0 - 0.03, y0, zt - 0.13, zt - 0.112))]
+    if finish == "hob":
+        return [("black", (x0, x1, y0, y1, 0, h))]
+    if finish == "kitchen-tall":
+        return [plinth, ("white", (x0, x1, y0 + FRONT_T, y1, 0.1, h)),
+                *fronts(x0, x1, 0.1 + GAP, 0.86, y0, [[0, 2]]),
+                ("alu", (x0, x1, y0 + 0.004, y0 + FRONT_T + 0.01, 0.861, 0.889)),
+                ("gloss", (x0 + GAP / 2, x1 - GAP / 2, y0, y0 + FRONT_T, 0.89, 1.955)),
+                ("gloss", (x0 + GAP / 2, x1 - GAP / 2, y0, y0 + FRONT_T, 1.958, h - 0.002))]
+    if finish == "kitchen-wall":
+        rows, columns = opts.get("rows", 1), opts.get("columns", 1)
+        parts = [("white", (x0, x1, y0 + FRONT_T, y1, 0, h))]
+        height = h / rows
+        for r in range(rows):
+            parts += fronts(x0, x1, r * height + GAP / 2, (r + 1) * height - GAP / 2, y0,
+                            [[0, 1]] * columns, grips=False)
+        return parts
+    if finish == "shelves":
+        parts = []
+        for i, z in enumerate((0.0, (h - 0.035) / 2, h - 0.035)):
+            parts.append(("oak-warm", (x0, x1, y0, y1, z, z + 0.035)))
+            if i < 2:  # a picture frame stood on each of the lower two
+                f0 = x0 + 0.05 + 0.06 * i
+                parts += [("frame", (f0, f0 + 0.2, y1 - 0.06, y1 - 0.045, z + 0.035, z + 0.29)),
+                          ("picture", (f0 + 0.02, f0 + 0.18, y1 - 0.062, y1 - 0.06,
+                                       z + 0.055, z + 0.27))]
+        return parts
+    if finish == "panel":
+        return [(opts.get("surface", "oak-warm"), (x0, x1, y0, y1, 0, h))]
+    if finish == "air-con":
+        return [("white", (x0, x1, y0, y1, 0, h)),
+                ("vent", (x0 + 0.05, x1 - 0.05, y0 - 0.002, y0 + 0.03, 0.02, 0.07))]
+    if finish == "island":
+        # Drawers face the kitchen (-y); the free end is +x, the bar side +y.
+        out_end, out_back = opts.get("overhangEnd", 0.42), opts.get("overhangBack", 0.27)
+        bar = opts.get("barWidth", 0.3)
+        parts = [("plinth", (x0 + 0.05, x1 - 0.05, y0 + 0.06, y1 - 0.06, 0, 0.1)),
+                 ("white", (x0, x1 - 0.025, y0 + FRONT_T, y1 - 0.02, 0.1, h - 0.04)),
+                 ("alu", (x0, x1 - 0.025, y0 + 0.004, y0 + FRONT_T + 0.01,
+                          h - 0.04 - GRIP + 0.001, h - 0.041)),
+                 *fronts(x0, x1 - 0.025, 0.1 + GAP, h - 0.04 - GRIP, y0, [[0, 3]] * 3),
+                 ("oak-warm", (x1 - 0.025, x1, y0, y1 - 0.02, 0, h - 0.04)),
+                 ("oak-warm", (x0, x1, y1 - 0.02, y1, 0, h - 0.04)),
+                 ("stone", (x0, x1 - 0.25, y0 - 0.02, y1 - bar, h - 0.04, h)),
+                 ("oak-warm", (x0, x1 + out_end, y1 - bar, y1 + out_back, h - 0.04, h)),
+                 ("oak-warm", (x1 - 0.25, x1 + out_end, y0 - 0.02, y1 - bar, h - 0.04, h))]
+        if opts.get("backPanel", True):
+            parts += [("oak-warm", (x0, x0 + 0.03, y0, y1, h, h + 0.75)),
+                      ("glass-shelf", (x0 + 0.03, x0 + 0.2, y0 + 0.08, y1 - 0.08,
+                                       h + 0.45, h + 0.462))]
+        return parts
+    if finish == "wardrobe":
+        doors = opts.get("doors", 2)
+        parts = [("oak", (x0, x1, y0 + FRONT_T, y1, 0, h)),
+                 *fronts(x0, x1, 0.06, h - 0.004, y0, [[0, 1]] * doors, surface="oak",
+                         grips=False)]
+        width = w / doors
+        for i in range(doors - 1):  # bar handles beside each meeting edge
+            edge = x0 + width * (i + 1)
+            for hx in (edge - 0.05, edge + 0.035):
+                parts += [("steel", (hx, hx + 0.015, y0 - 0.035, y0 - 0.02, 0.95, 1.35)),
+                          ("steel", (hx, hx + 0.015, y0 - 0.02, y0, 0.96, 0.98)),
+                          ("steel", (hx, hx + 0.015, y0 - 0.02, y0, 1.32, 1.34))]
+        return parts
+    if finish == "open-wardrobe":
+        # An open wardrobe section: both sides full height, top, plinth and
+        # back, two shelves at the top, a rail with clothes, a glass shelf
+        # with boxes, drawers and a wire basket below.
+        ym = (y0 + y1) / 2
+        drawers = opts.get("drawers", 3)
+        parts = [("oak", (x0, xi0, y0, y1, 0, h)), ("oak", (xi1, x1, y0, y1, 0, h)),
+                 ("oak", (xi0, xi1, y0, y1, h - 0.018, h)),
+                 ("oak", (xi0, xi1, y0 + 0.02, y1, 0, 0.06)),
+                 ("oak", (xi0, xi1, y1 - 0.008, y1, 0.06, h - 0.018)),
+                 ("oak", (xi0, xi1, y0 + 0.01, y1 - 0.008, h - 0.38, h - 0.362)),
+                 ("oak", (xi0, xi1, y0 + 0.01, y1 - 0.008, h - 0.2, h - 0.182)),
+                 ("steel", (xi0, xi1, ym - 0.01, ym + 0.01, h - 0.46, h - 0.44)),
+                 ("coats", (xi0 + 0.06, xi0 + 0.55 * (xi1 - xi0), ym - 0.2, ym + 0.2,
+                            1.08, h - 0.47)),
+                 ("wenge", (xi0 + 0.58 * (xi1 - xi0), xi1 - 0.05, ym - 0.18, ym + 0.18,
+                            1.25, h - 0.47))]
+        if drawers:
+            parts += [("glass-shelf", (xi0, xi1, y0 + 0.02, y1 - 0.01, 0.98, 0.99)),
+                      ("boxes", (xi0 + 0.03, xi0 + 0.3, y0 + 0.05, y0 + 0.36, 0.99, 1.13)),
+                      ("boxes", (xi0 + 0.33, xi1 - 0.03, y0 + 0.05, y0 + 0.36, 0.99, 1.13)),
+                      ("basket", (xi0 + 0.01, xi1 - 0.01, y0 + 0.03, y1 - 0.03, 0.07, 0.27))]
+            height = (0.95 - 0.30 - GAP * (drawers - 1)) / drawers
+            for i in range(drawers):
+                za = 0.30 + i * (height + GAP)
+                parts += [("oak", (xi0 + GAP, xi1 - GAP, y0, y0 + FRONT_T, za, za + height)),
+                          ("oak", (xi0 + 0.01, xi1 - 0.01, y0 + FRONT_T, y1 - 0.02,
+                                   za + 0.02, za + height - 0.02))]
+        return parts
+    if finish == "bed":
+        return [("wenge", (x0, x1, y0, y1, 0, 0.28)),
+                ("linen", (x0 + 0.02, x1 - 0.02, y0 + 0.02, y1 - 0.02, 0.28, h))]
+    if finish == "sofa":
+        return [("boucle", (x0, x1, y0, y1, 0, 0.42)),
+                ("boucle", (x0, x1, y1 - 0.26, y1, 0.42, h)),
+                ("boucle", (x0, x0 + 0.24, y0, y1 - 0.26, 0.42, 0.62)),
+                ("boucle", (x1 - 0.24, x1, y0, y1 - 0.26, 0.42, 0.62)),
+                ("boucle", (x0 + 0.34, x0 + 0.8, y1 - 0.38, y1 - 0.24, 0.42, 0.7)),
+                ("boucle", (x1 - 0.8, x1 - 0.34, y1 - 0.38, y1 - 0.24, 0.42, 0.7))]
+    if finish == "tv":
+        return [("black", (x0, x1, y0, y0 + 0.012, 0, h)),
+                ("vent", (x0 + 0.08, x1 - 0.08, y0 + 0.012, y1, 0.08, h - 0.08))]
+    if finish == "stool":
+        seat = h * 0.65
+        parts = [("oak-warm", (x, x + 0.03, y, y + 0.03, 0, seat))
+                 for x in (x0 + 0.05, x1 - 0.08) for y in (y0 + 0.05, y1 - 0.08)]
+        parts += [("oak-warm", (x0 + 0.08, x1 - 0.08, y0 + 0.055, y0 + 0.075, 0.29, 0.31)),
+                  ("oak-warm", (x0 + 0.08, x1 - 0.08, y1 - 0.075, y1 - 0.055, 0.29, 0.31)),
+                  ("oak-warm", (x0 + 0.055, x0 + 0.075, y0 + 0.08, y1 - 0.08, 0.33, 0.35)),
+                  ("oak-warm", (x1 - 0.075, x1 - 0.055, y0 + 0.08, y1 - 0.08, 0.33, 0.35)),
+                  ("fabric", (x0 + 0.02, x1 - 0.02, y0 + 0.02, y1 - 0.04, seat, seat + 0.07)),
+                  ("fabric", (x0 + 0.04, x1 - 0.04, y1 - 0.07, y1 - 0.02, seat + 0.07, h))]
+        return parts
+    raise ValueError(f"Unknown finish {finish!r}")
 
 
-def finished(item: dict) -> bpy.types.Object:
+def surface_material(name: str, surface: dict) -> bpy.types.Material:
+    """A surface from the spec: its colour or its texture, and its roughness."""
+    mat = bpy.data.materials.get(f"surface-{name}")
+    if mat is not None:
+        return mat
+    mat = material(f"surface-{name}", surface["colour"], surface["roughness"])
+    if surface.get("texture"):
+        nodes, links = mat.node_tree.nodes, mat.node_tree.links
+        tex = nodes.new("ShaderNodeTexImage")
+        tex.image = bpy.data.images.load(surface["texture"])
+        links.new(tex.outputs["Color"], nodes["Principled BSDF"].inputs["Base Color"])
+    return mat
+
+
+def box_uvs(bm: bmesh.types.BMesh, faces, size: tuple[float, float, float]) -> None:
+    """Texture coordinates in metres on a box's faces, running along each face's longer
+    side, so a veneer's grain follows a board's length."""
+    layer = bm.loops.layers.uv.verify()
+    for face in faces:
+        axis = max(range(3), key=lambda i: abs(face.normal[i]))
+        a, b = [i for i in range(3) if i != axis]
+        if size[b] > size[a]:
+            a, b = b, a
+        for loop in face.loops:
+            loop[layer].uv = (loop.vert.co[a], loop.vert.co[b])
+
+
+def finished(item: dict, surfaces: dict) -> bpy.types.Object:
     """A piece built from its finish's parts, at its true size; one object, one material each."""
     w, h, d = item["size"]
     mesh = bpy.data.meshes.new(item["id"])
@@ -521,36 +807,38 @@ def finished(item: dict) -> bpy.types.Object:
             face.material_index = 0
         slots = ["shade"]
     else:
-        for surface, (px0, px1, py0, py1, pz0, pz1) in finish_parts(item["finish"], w, h, d):
+        parts = finish_parts(item["finish"], w, h, d, item.get("options") or {})
+        for surface, (px0, px1, py0, py1, pz0, pz1) in parts:
             if surface not in slots:
                 slots.append(surface)
             cube = bmesh.ops.create_cube(bm, size=1.0)
-            bmesh.ops.scale(bm, verts=cube["verts"], vec=(px1 - px0, py1 - py0, pz1 - pz0))
+            size = (px1 - px0, py1 - py0, pz1 - pz0)
+            bmesh.ops.scale(bm, verts=cube["verts"], vec=size)
             bmesh.ops.translate(bm, verts=cube["verts"],
                                 vec=((px0 + px1) / 2, (py0 + py1) / 2, (pz0 + pz1) / 2))
-            for face in {f for v in cube["verts"] for f in v.link_faces}:
+            faces = {f for v in cube["verts"] for f in v.link_faces}
+            for face in faces:
                 face.material_index = slots.index(surface)
+            box_uvs(bm, faces, size)
     bm.to_mesh(mesh)
     bm.free()
     for surface in slots:
-        mat = bpy.data.materials.get(f"surface-{surface}")
-        if mat is None:
-            mat = material(f"surface-{surface}", *SURFACES[surface])
-        mesh.materials.append(mat)
+        mesh.materials.append(surface_material(surface, surfaces[surface]))
     obj = bpy.data.objects.new(item["id"], mesh)
     bpy.context.collection.objects.link(obj)
-    if item["finish"] == "sofa":
-        bevel = obj.modifiers.new("soft", "BEVEL")  # boucle is all rounded edges
-        bevel.width, bevel.segments = 0.05, 4
-    plain_uvs(obj)
+    if item["finish"] in SOFTNESS:
+        bevel = obj.modifiers.new("soft", "BEVEL")
+        bevel.width, bevel.segments = SOFTNESS[item["finish"]]
+    if not obj.data.uv_layers:
+        plain_uvs(obj)
     return obj
 
 
-def furniture(item: dict) -> bpy.types.Object:
+def furniture(item: dict, surfaces: dict) -> bpy.types.Object:
     """The piece's model (or a block), fitted to its scanned box and turned to face `front`."""
     w, h, d = item["size"]
     if item.get("finish") and not item["model"]:
-        obj = finished(item)
+        obj = finished(item, surfaces)
     elif item["model"]:
         before = {o.name for o in bpy.data.objects}
         bpy.ops.import_scene.gltf(filepath=item["model"])
@@ -649,6 +937,23 @@ def light(spec: dict, windows: list[dict]) -> tuple[float, float] | None:
                              (min(zs) + max(zs)) / 2)
         return None
 
+    # Portals in the roof windows: Cycles then aims its sky samples through
+    # them instead of over the whole sky, which most of the room never sees.
+    # Light reaching a hall only by bouncing came out speckled without them.
+    for i, sk in enumerate(spec.get("skylights", [])):
+        u0, u1, v0, v1 = sk["sash"]
+        frame = sk["frame"]
+        lamp = bpy.data.lights.new(f"portal-{i}", "AREA")
+        lamp.shape, lamp.size, lamp.size_y = "RECTANGLE", u1 - u0, v1 - v0
+        if hasattr(lamp, "cycles") and hasattr(lamp.cycles, "is_portal"):
+            lamp.cycles.is_portal = True
+        obj = bpy.data.objects.new(lamp.name, lamp)
+        bpy.context.collection.objects.link(obj)
+        axes = [P(*frame[k]) for k in ("u", "v", "n")]  # its -Z, the light's way, into the room
+        obj.matrix_world = Matrix.Translation(
+            P(*slope_point(frame, (u0 + u1) / 2, (v0 + v1) / 2, sk["depth"]))
+        ) @ Matrix((axes[0], axes[1], axes[2])).transposed().to_4x4()
+
     main = max(windows, key=lambda w: w["area"])
     patch = None
     if spec.get("sun"):
@@ -728,12 +1033,33 @@ def hero_view(spec: dict, windows: list[dict],
     return P(eye.x, eye.y, eye.z), P(look.x, look.y, look.z)
 
 
+def obstacles(pieces: list[bpy.types.Object]) -> list[dict]:
+    """
+    What a person walks into: each piece standing on the floor, as the
+    convex outline of its parts below chest height (so a bar top's overhang
+    counts, a wall cupboard above the worktop does not). The viewer keeps
+    the walk out of them.
+    """
+    out = []
+    for obj in pieces:
+        low = []
+        for v in obj.data.vertices:
+            w = obj.matrix_world @ v.co  # Blender (x, -z, y)
+            if w.z < 1.1:
+                low.append((w.x, -w.y))
+        bottom = min((obj.matrix_world @ v.co).z for v in obj.data.vertices)
+        if low and bottom < 0.9:
+            out.append({"id": obj.name, "footprint": convex_hull(low)})
+    return out
+
+
 def expose(exposure: float, views: list[bpy.types.Object]) -> None:
     """Grade the preview as the viewer will show it: the room exposed, the views as photographed."""
     bpy.context.scene.view_settings.exposure = math.log2(exposure)
     for obj in views:
-        bsdf = obj.data.materials[0].node_tree.nodes["Principled BSDF"]
-        bsdf.inputs["Emission Strength"].default_value = 1.0 / exposure
+        for mat in obj.data.materials:
+            bsdf = mat.node_tree.nodes["Principled BSDF"]
+            bsdf.inputs["Emission Strength"].default_value = 1.0 / exposure
 
 
 def preview(spec: dict, windows: list[dict], patch: tuple[float, float] | None,
@@ -953,6 +1279,7 @@ def main() -> None:
         windows += build_room(b, room, spec["skylights"] if i == 0 else [])
     trim = material("trim", "#f1efea", 0.45)
     mats = {
+        "steel": surface_material("steel", spec["surfaces"]["steel"]),
         "wall": material("wall", spec["wall_colour"], 0.92),
         "ceiling": material("ceiling", "#f4f2ee", 0.95),
         "trim": trim,
@@ -979,8 +1306,8 @@ def main() -> None:
             floor_uvs(obj, spec["floors"][obj.name.removeprefix("floorzone-")]["tile"])
         else:
             plain_uvs(obj)
-    pieces = [furniture(item) for item in spec["items"]]
-    views = [window_view(sk, i) for i, sk in enumerate(spec["skylights"]) if sk.get("view")]
+    pieces = [furniture(item, spec["surfaces"]) for item in spec["items"]]
+    views = outside(spec)
     patch = light(spec, windows)
 
     out = spec["out"]
@@ -1000,7 +1327,8 @@ def main() -> None:
     # on the scale; the views out of the windows carry no baked light and
     # so stay as photographed.
     Path(out["meta"]).write_text(json.dumps({"lightmapScale": scale * exposure,
-                                             "exposure": exposure}))
+                                             "exposure": exposure,
+                                             "obstacles": obstacles(pieces)}))
     for obj in glass + views:
         obj.hide_render = False
     expose(exposure, views)

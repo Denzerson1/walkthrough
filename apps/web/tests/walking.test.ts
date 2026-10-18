@@ -223,3 +223,42 @@ describe('headroom under a roof slope', () => {
     expect(canStand([2, 3.2], [flatRoof])).toBe(true);
   });
 });
+
+describe('furniture', () => {
+  const room: WalkableRoom = {
+    floorPolygon: [
+      [0, 0],
+      [5, 0],
+      [5, 4],
+      [0, 4],
+    ],
+    walls: [
+      { start: [0, 0], end: [5, 0] },
+      { start: [5, 0], end: [5, 4] },
+      { start: [5, 4], end: [0, 4] },
+      { start: [0, 4], end: [0, 0] },
+    ],
+    openings: [],
+    obstacles: [
+      {
+        footprint: [
+          [2, 1],
+          [3, 1],
+          [3, 2],
+          [2, 2],
+        ],
+      },
+    ],
+  };
+
+  it('keeps a person out of a piece and a shoulder away from it', () => {
+    expect(canStand([2.5, 1.5], [room])).toBe(false);
+    expect(canStand([2.5, 2.1], [room])).toBe(false);
+    expect(canStand([2.5, 2.5], [room])).toBe(true);
+  });
+
+  it('slides along a piece instead of walking into it', () => {
+    const end = moveWithCollision([1.5, 1.5], [0.5, 0.2], [room]);
+    expect(end[0]).toBeLessThan(2 - BODY_RADIUS + 1e-9);
+  });
+});

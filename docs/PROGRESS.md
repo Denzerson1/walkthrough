@@ -7,6 +7,39 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-10-19 — The flat made true to the photos
+
+The owner's review of the first rebuild, worked through:
+
+- **Entry hall:** clean, no grey specks: light portals in the roof windows
+  and 2048 bake samples (the hall is lit only by bounce, the noisiest kind).
+  Doors have lever handles.
+- **Views:** the photo out of the window has its sky cut out and stands
+  12 m out, in front of a sky dome in the photo's own colours with its
+  facade colour below the horizon: no blank background from an angle. The
+  viewer now antialiases the rebuilt flat, which stopped sashes shimmering.
+- **Bar:** oak L-top overhanging the free end and the sofa side, end and
+  back panels in oak, two more stools facing it from the sofa side, the
+  first stool turned to it.
+- **Walking:** the walk keeps a shoulder's width out of every piece on the
+  floor (footprints from the bake, `obstacles` in the manifest).
+- **Wardrobe:** against the wall (the scan had it 35 cm off), the open
+  section full height with side panels both ends, shelves, rail, clothes,
+  glass shelf, drawers and basket; the door section with bar handles.
+- **Kitchen:** handleless high-gloss fronts with aluminium grip channels,
+  worktop with inset sink and tap, black glass hob and oven, two rows of
+  wall units, tall unit, oak end panel, open shelves with frames, the air
+  conditioner. Oak, concrete-look worktop and fabrics textured.
+
+Verified: rebuilt in 7.7 min; screenshots from eight fixed spots in Chrome,
+no console errors; 316 Python and 81 web tests, lint clean.
+
+Not right yet: gloss fronts show no reflections (the viewer is unlit); the
+movable pieces are parts until the owner's Higgsfield models arrive; the
+bed's head is assumed at the knee wall, as the scan's box runs.
+
+---
+
 ## 2026-10-18 — The owner's flat rebuilt 1:1 in Blender
 
 Direction changed after comparing with an X post of an Airbnb modelled in

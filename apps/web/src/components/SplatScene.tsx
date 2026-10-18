@@ -237,7 +237,9 @@ export function SplatScene({
     let renderer: THREE.WebGLRenderer;
     try {
       renderer = new THREE.WebGLRenderer({
-        antialias: false,
+        // A rebuilt flat is hard-edged geometry: without antialiasing, window
+        // sashes and linings shimmer as you move. Splats need none.
+        antialias: Boolean(model),
         alpha: false,
         powerPreference: 'high-performance',
       });
@@ -277,7 +279,15 @@ export function SplatScene({
 
     sceneRef.current = { scene, camera, renderer, floorGroup, furnitureGroup, walkCursor };
     // Development only: lets tests and debugging inspect the live scene.
-    if (import.meta.env.DEV) (window as unknown as { __viewer?: unknown }).__viewer = sceneRef.current;
+    // Dev only: the scene and the walk state, so tests can stand anywhere.
+    if (import.meta.env.DEV) {
+      (window as unknown as { __viewer?: unknown }).__viewer = {
+        get ctx() {
+          return sceneRef.current;
+        },
+        state: stateRef.current,
+      };
+    }
 
     let disposed = false;
     // No orientation flip anywhere below. Scenes reaching the viewer are
@@ -304,7 +314,7 @@ export function SplatScene({
       // light map's scale, so the views out of the windows stay as shot.
       renderer.toneMapping = THREE.AgXToneMapping;
       renderer.toneMappingExposure = 1;
-      loadBakedModel(model)
+      loadBakedModel(model, renderer.capabilities.getMaxAnisotropy())
         .then((group) => {
           if (disposed || !sceneRef.current) return;
           scene.add(group);
@@ -1138,7 +1148,7 @@ function loadFloorMaps(
  * — so phones draw what Cycles computed, and live lights (there for placed
  * catalog furniture) cannot light the room a second time.
  */
-async function loadBakedModel(model: BakedModel): Promise<THREE.Group> {
+async function loadBakedModel(model: BakedModel, anisotropy: number): Promise<THREE.Group> {
   const [gltf, lightMap] = await Promise.all([
     new GLTFLoader().loadAsync(model.url),
     new THREE.TextureLoader().loadAsync(model.lightmapUrl),
@@ -1150,6 +1160,8 @@ async function loadBakedModel(model: BakedModel): Promise<THREE.Group> {
   gltf.scene.traverse((node) => {
     if (!(node instanceof THREE.Mesh)) return;
     const source = node.material as THREE.MeshStandardMaterial;
+    // Floors and veneers seen at a glance along them stay sharp.
+    if (source.map) source.map.anisotropy = anisotropy;
     const material = new THREE.MeshBasicMaterial({
       name: source.name,
       map: source.map,

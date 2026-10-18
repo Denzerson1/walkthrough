@@ -64,6 +64,13 @@ class Opening(BaseModel):
         return 0.0 if self.type == "door" else DEFAULT_SILL_M
 
 
+class Obstacle(BaseModel):
+    """A piece standing on the floor, as its outline in plan; the walk keeps out of it."""
+
+    id: str
+    footprint: list[Vec2]
+
+
 class Room(BaseModel):
     id: str
     name: str
@@ -79,6 +86,8 @@ class Room(BaseModel):
     #: The ceiling as scanned, piece by piece: 3D outlines, flat or sloped.
     #: Where a slope comes down, a person cannot stand upright (canStand).
     ceilings: list[list[Vec3]] = Field(default_factory=list)
+    #: The rebuilt flat's pieces standing on the floor (canStand keeps out).
+    obstacles: list[Obstacle] = Field(default_factory=list)
 
     @field_validator("floorPolygon")
     @classmethod

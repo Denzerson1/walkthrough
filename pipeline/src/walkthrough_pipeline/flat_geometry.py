@@ -546,3 +546,21 @@ def join_partitions(partitions: list[dict], thickness: float) -> list[dict]:
                 if -thickness <= along <= length + thickness and abs(off) <= thickness * 0.6:
                     p[key] = [p[key][0] - nx * off, p[key][1] - nz * off]
     return out
+
+
+def convex_hull(points) -> list[list[float]]:
+    """The convex hull of plan points, counter-clockwise (Andrew's monotone chain)."""
+    pts = sorted({(round(p[0], 4), round(p[1], 4)) for p in points})
+    if len(pts) < 3:
+        return [list(p) for p in pts]
+
+    def half(seq):
+        out: list[tuple[float, float]] = []
+        for p in seq:
+            while len(out) >= 2 and _cross(out[-2], out[-1], p) <= 0:
+                out.pop()
+            out.append(p)
+        return out
+
+    lower, upper = half(pts), half(reversed(pts))
+    return [list(p) for p in lower[:-1] + upper[:-1]]

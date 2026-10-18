@@ -280,6 +280,7 @@ export interface WalkableRoom {
   walls: WallSegment[];
   openings: Array<{ type: 'door' | 'window'; wallIndex: number; offset: number; width: number }>;
   ceilings?: Vec3[][];
+  obstacles?: Array<{ footprint: Vec2[] }>;
 }
 
 /** Shoulder radius of the person being simulated, in metres. */
@@ -354,14 +355,26 @@ export function inDoorway(p: Vec2, room: WalkableRoom, wallIndex: number): boole
   );
 }
 
+/** True when `p` is inside `footprint` or within `radius` of its outline. */
+export function nearPolygon(p: Vec2, footprint: Vec2[], radius: number): boolean {
+  if (footprint.length < 3) return false;
+  if (pointInPolygon(p, footprint)) return true;
+  for (let i = 0; i < footprint.length; i++) {
+    const next = footprint[(i + 1) % footprint.length];
+    if (distancePointToSegment(p, footprint[i], next) < radius) return true;
+  }
+  return false;
+}
+
 /**
  * True when a person of `radius` may stand at `p`.
  *
  * Standing is allowed inside any room's floor polygon, provided the point is
  * not within `radius` of a wall — unless that wall has a door there, which is
- * what lets someone walk from one room into the next — and the ceiling there
- * clears HEADROOM. Rooms are tested independently and the first that accepts
- * wins, so a point in a shared doorway is reachable from both sides.
+ * what lets someone walk from one room into the next — nor of a piece of
+ * furniture standing there, and the ceiling clears HEADROOM. Rooms are tested
+ * independently and the first that accepts wins, so a point in a shared
+ * doorway is reachable from both sides.
  */
 export function canStand(p: Vec2, rooms: WalkableRoom[], radius = BODY_RADIUS): boolean {
   for (const room of rooms) {
@@ -376,6 +389,7 @@ export function canStand(p: Vec2, rooms: WalkableRoom[], radius = BODY_RADIUS): 
       break;
     }
     if (blocked) continue;
+    if (room.obstacles?.some((o) => nearPolygon(p, o.footprint, radius))) continue;
     const ceiling = room.ceilings?.length ? ceilingHeight(p, room.ceilings) : undefined;
     if (ceiling === undefined || ceiling >= HEADROOM) return true;
   }

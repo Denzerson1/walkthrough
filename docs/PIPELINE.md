@@ -269,27 +269,37 @@ were made, but automatic and viewable on a phone.
 cannot see; placed by hand from the capture photos):
 
 - `roofWindows`: windows in a slope (Floorplan mode only finds windows in
-  upright walls), with plumb and level linings as built, and the photo out
-  of each (`view`) on a plane behind its glass.
+  upright walls), with plumb and level linings as built. The first one's
+  `view` photo (cropped by `viewCrop`) has its sky cut out and stands a
+  street width out; behind it a sky dome in the photo's own sky colours,
+  and the colour of its foot below the horizon.
 - `floors`: each floor re-laid from its photo (`photo_texture.py`). The A4
   sheet in the shot gives scale and perspective (its corners rectify the
   floor plane) and the exposure; the plank or tile lattice is fitted and
   real planks or tile faces are cut out and laid again, seamlessly.
 - `windowsFace` (compass bearing), `location`, `sun` (date, time): the real
   sun position for that moment.
-- `items`: a finish per scanned piece (kitchen base, wall and tall units,
-  island, wardrobe, bed, sofa, stool ...), drawn from parts until the
-  piece's own model exists; `extras`: built-ins the scanner missed.
+- `items`: a finish per scanned piece, drawn from parts until the piece's
+  own model exists: `kitchen-base` (fronts in `columns`, one tagged `sink`
+  gets basin and tap), `kitchen-wall` (`rows`, `columns`), `kitchen-tall`,
+  `oven`, `hob`, `island` (oak bar top overhanging `overhangEnd` and
+  `overhangBack`), `wardrobe` (`doors`), `open-wardrobe` (`drawers`), `bed`,
+  `sofa`, `stool`, `tv`; `min`/`max` correct a scanned box, `front` names
+  the side a piece faces. `extras`: what the scanner missed (panels,
+  shelves, the air conditioner, a pendant, more stools).
 - `hero`: the preview's view, also the walkthrough's start.
 
 **Light:** Cycles bakes diffuse light (direct and bounced) into one 2048
-atlas, denoised with Open Image Denoise and exposed like a camera for the
-room (sun spots clip, as they do in a photo). Faces nobody sees from inside
-stay in for the bake, so the room's solids block light, but get no atlas.
+atlas at 2048 samples, with light portals in the roof windows, denoised
+with Open Image Denoise and exposed like a camera for the room (sun spots
+clip, as they do in a photo). Faces nobody sees from inside stay in for the
+bake, so the room's solids block light, but get no atlas. Oak, worktop and
+fabric carry generated textures (`photo_texture.surface_texture`).
 
-**Viewer:** shows `flat.glb` unlit (colour × baked light). Floor swaps
-change only the texture under the light. Under a slope the walk stops where
-the ceiling drops below 1.8 m (`canStand`, from the manifest's `ceilings`).
+**Viewer:** shows `flat.glb` unlit (colour × baked light), antialiased.
+Floor swaps change only the texture under the light. The walk stops where a
+slope drops below 1.8 m (the manifest's `ceilings`) and keeps out of every
+piece standing on the floor (its `obstacles`, written by the bake).
 
 `work/rebuild_preview.png` is a Cycles still from the hero view. About 4
 minutes per room on the 2080 Super; `--preview-only` about 1 minute.

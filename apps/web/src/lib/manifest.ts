@@ -74,6 +74,13 @@ export interface Room {
    * a slope comes down, a person cannot stand upright; see `canStand`.
    */
   ceilings?: Vec3[][];
+  /** The rebuilt flat's pieces standing on the floor, as outlines; see `canStand`. */
+  obstacles?: Obstacle[];
+}
+
+export interface Obstacle {
+  id: string;
+  footprint: Vec2[];
 }
 
 export interface ItemBox {

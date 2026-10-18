@@ -302,3 +302,112 @@ def mean_albedo(path: Path) -> str:
     c = linear_to_srgb(np.median(lin[~paper], axis=0)) * 255
     r, g, b = (int(round(v)) for v in c)
     return f"#{r:02x}{g:02x}{b:02x}"
+
+
+# --------------------------------------------------------------------------
+# Views out of windows
+# --------------------------------------------------------------------------
+
+
+def window_view(path: Path, crop: tuple[float, float, float, float] = (0.0, 0.0, 1.0, 1.0),
+                max_side: int = 1600) -> tuple[Image.Image, str, str, str]:
+    """
+    The customer's photo out of a window with its sky cut out; the sky's
+    colour at the top of the cut and at its foot; and the colour along the
+    photo's bottom edge, for what lies below what the photo shows.
+
+    Shown whole on a plane behind the glass, a photo's edges and its own sky
+    read as a picture hung outside, and from an angle the plane ran out into
+    blank background. Cut out, the buildings stand on their own in front of
+    a sky dome painted in the photo's sky colours, which goes on past them.
+    The sky is the blue or bright, unsaturated region joined to the top edge.
+    `crop` (left, top, right, bottom, as fractions) cuts away the window's own
+    frame and glare where the shot was taken through the glass.
+    """
+    image = ImageOps.exif_transpose(Image.open(path)).convert("RGB")
+    w, h = image.size
+    image = image.crop((round(crop[0] * w), round(crop[1] * h),
+                        round(crop[2] * w), round(crop[3] * h)))
+    image.thumbnail((max_side, max_side))
+    rgb = np.asarray(image, np.float32) / 255
+    hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)  # H in degrees, S and V in 0..1
+    hue, sat, val = hsv[..., 0], hsv[..., 1], hsv[..., 2]
+    sky = ((hue > 185) & (hue < 250) & (val > 0.45)) | ((sat < 0.12) & (val > 0.82))
+    sky = cv2.morphologyEx(sky.astype(np.uint8), cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
+    _, labels = cv2.connectedComponents(sky)
+    touching = set(np.unique(labels[0][sky[0] > 0]).tolist())
+    mask = np.isin(labels, list(touching)) & (sky > 0)
+    # Contrails, birds and specks inside the sky are sky too.
+    mask = cv2.morphologyEx(mask.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((15, 15), np.uint8))
+    alpha = 1.0 - cv2.GaussianBlur(mask.astype(np.float32), (0, 0), 1.5)
+    rows = np.flatnonzero(mask.any(axis=1))
+    lin = srgb_to_linear(rgb)
+
+    def colour(row_lo: int, row_hi: int) -> str:
+        band = mask[row_lo:row_hi] > 0
+        c = np.median(lin[row_lo:row_hi][band], axis=0) if band.any() else np.array([0.5, 0.6, 0.8])
+        r, g, b = (int(round(v)) for v in linear_to_srgb(c) * 255)
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+    if rows.size:
+        top, bottom = int(rows[0]), int(rows[-1]) + 1
+        span = max(1, (bottom - top) // 10)
+        zenith, horizon = colour(top, top + span), colour(bottom - span, bottom)
+    else:
+        zenith, horizon = "#8fb0d6", "#dfe8f0"
+    foot = max(1, lin.shape[0] // 12)
+    below = lin[-foot:][mask[-foot:] == 0]
+    c = np.median(below, axis=0) if below.size else np.array([0.5, 0.45, 0.4])
+    r, g, b = (int(round(v)) for v in linear_to_srgb(c) * 255)
+    rgba = np.dstack([rgb, alpha]) * 255
+    image = Image.fromarray(rgba.astype(np.uint8), "RGBA")
+    return image, zenith, horizon, f"#{r:02x}{g:02x}{b:02x}"
+
+
+# --------------------------------------------------------------------------
+# Generated surfaces: veneer, worktop, fabric
+# --------------------------------------------------------------------------
+
+
+def _tiling_noise(rng, cells: tuple[int, int], px: int) -> np.ndarray:
+    """Smooth value noise on a px x px tile that wraps seamlessly; cells (across y, along x)."""
+    grid = rng.random(cells).astype(np.float32)
+    padded = np.pad(grid, 2, mode="wrap")
+    scale_y, scale_x = px / cells[0], px / cells[1]
+    big = cv2.resize(padded, (round(padded.shape[1] * scale_x), round(padded.shape[0] * scale_y)),
+                     interpolation=cv2.INTER_CUBIC)
+    oy, ox = round(2 * scale_y), round(2 * scale_x)
+    return big[oy : oy + px, ox : ox + px]
+
+
+def surface_texture(kind: str, colour: str, px: int = 1024, seed: int = 0) -> Image.Image:
+    """
+    A seamless texture for one metre of a surface, around its colour:
+    `veneer` (oak: long fibres and growth bands along x), `stone` (a
+    concrete-look worktop: soft mottling) or `boucle` (nubbly fabric).
+    Plain colour read as plastic on big oak and fabric surfaces; this is
+    the grain a camera sees at walking distance, not a scan of the piece.
+    """
+    rng = np.random.default_rng(seed)
+    if kind == "veneer":
+        fibres = (0.5 * _tiling_noise(rng, (256, 4), px) + 0.3 * _tiling_noise(rng, (96, 8), px)
+                  + 0.2 * _tiling_noise(rng, (24, 16), px))
+        warp = _tiling_noise(rng, (4, 2), px)
+        y = np.arange(px, dtype=np.float32)[:, None] / px
+        bands = 0.5 + 0.5 * np.sin(2 * np.pi * (y * 9 + 0.35 * warp))
+        pores = (_tiling_noise(rng, (512, 32), px) > 0.82).astype(np.float32)
+        value = 0.65 * fibres + 0.35 * bands - 0.12 * pores
+        spread = 0.14
+    elif kind == "stone":
+        value = 0.6 * _tiling_noise(rng, (12, 12), px) + 0.4 * _tiling_noise(rng, (96, 96), px)
+        spread = 0.12
+    elif kind == "boucle":
+        value = 0.7 * _tiling_noise(rng, (300, 300), px) + 0.3 * _tiling_noise(rng, (40, 40), px)
+        spread = 0.18
+    else:
+        raise ValueError(f"Unknown surface texture {kind!r}")
+    value = (value - value.mean()) / max(float(value.std()), 1e-6)
+    hexcode = colour.lstrip("#")
+    base = srgb_to_linear(np.array([int(hexcode[i : i + 2], 16) / 255 for i in (0, 2, 4)]))
+    lin = base[None, None, :] * (1 + spread * np.clip(value, -2.5, 2.5))[..., None] / 1.0
+    return Image.fromarray((linear_to_srgb(lin) * 255).astype(np.uint8))

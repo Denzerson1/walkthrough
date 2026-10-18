@@ -27,7 +27,6 @@ import subprocess
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageOps
 
 from . import flat_geometry, photo_texture
 from .manifest import Manifest, ManifestItem, Room
@@ -45,6 +44,62 @@ STAND_INS = {
     "storage": ("wardrobe", "shelf", "sideboard"),
     "plant": ("plant",),
 }
+
+
+#: What the pieces drawn from parts are made of: colour (sRGB), roughness,
+#: and a generated texture where flat colour reads as plastic. Colours read
+#: off the capture photos against their white walls.
+SURFACES: dict[str, tuple[str, float, str | None]] = {
+    "gloss": ("#f4f4f2", 0.12, None),        # kitchen fronts, high gloss
+    "white": ("#efefec", 0.6, None),         # carcasses, appliances
+    "plinth": ("#dedcd8", 0.6, None),
+    "stone": ("#7d7c79", 0.45, "stone"),     # concrete-look worktop
+    "alu": ("#a3a4a2", 0.35, None),          # grip channels
+    "steel": ("#b6b7b5", 0.3, None),         # handles, tap, oven trim
+    "black": ("#0f1011", 0.15, None),        # hob, oven glass, TV
+    "basin": ("#f3f3f1", 0.25, None),
+    "oak": ("#d3c0a5", 0.55, "veneer"),      # the wardrobe: pale oak
+    "oak-warm": ("#a98b6b", 0.5, "veneer"),  # kitchen backsplash, island, shelves
+    "wenge": ("#3c2b24", 0.5, "veneer"),     # the bed base
+    "linen": ("#f2f0eb", 0.9, None),
+    "boucle": ("#e8e3d9", 1.0, "boucle"),
+    "fabric": ("#a8a39d", 0.9, "boucle"),    # bar stools
+    "coats": ("#2e2b2c", 0.95, None),
+    "shade": ("#f3efe5", 0.8, None),
+    "glass-shelf": ("#dfe7e6", 0.05, None),
+    "frame": ("#6b5038", 0.5, None),
+    "picture": ("#e6e1d6", 0.8, None),
+    "vent": ("#8d8f91", 0.5, None),
+    "basket": ("#7d7f80", 0.4, None),
+    "boxes": ("#bdb8b0", 0.9, None),         # felt boxes in the wardrobe
+}
+
+
+def surfaces(paths: ProjectPaths) -> dict[str, dict]:
+    """The surfaces as build_flat.py takes them, textures written into the scene folder."""
+    out = {}
+    for i, (name, (colour, roughness, kind)) in enumerate(SURFACES.items()):
+        texture = None
+        if kind:
+            path = paths.scene / f"surface-{name}.jpg"
+            photo_texture.surface_texture(kind, colour, seed=i).save(path, quality=90)
+            texture = str(path)
+        out[name] = {"colour": colour, "roughness": roughness, "texture": texture}
+    return out
+
+
+def outside_view(paths: ProjectPaths, wanted: list[dict]) -> dict | None:
+    """The view out of the windows: the first photo out of one, its sky cut out, and the
+    sky's colours for the dome behind it."""
+    first = next((w for w in wanted if w.get("view")), None)
+    if first is None:
+        return None
+    image, zenith, horizon, below = photo_texture.window_view(
+        repo_root() / first["view"], tuple(first.get("viewCrop", (0.0, 0.0, 1.0, 1.0)))
+    )
+    out = paths.scene / "view.png"
+    image.save(out)
+    return {"view": str(out), "zenith": zenith, "horizon": horizon, "below": below}
 
 
 class BlenderMissing(RuntimeError):
@@ -115,6 +170,21 @@ def facing(item: ManifestItem, room: Room) -> tuple[float, float]:
     return float(front[0]), float(front[1])
 
 
+def sized_for(front, size: list[float], yaw: float) -> list[float]:
+    """
+    A scanned box's size as (across its front, height, depth) for a front
+    the dressing names. The scan sizes a box along its long side first, so
+    a bed comes as (length, height, width); facing along that side, a model
+    fitted to it would be stretched sideways. Swap when the front runs along
+    the box's first axis rather than its depth.
+    """
+    yaw_r = math.radians(yaw)
+    depth_axis = (-math.sin(yaw_r), math.cos(yaw_r))
+    if abs(front[0] * depth_axis[0] + front[1] * depth_axis[1]) < 0.5:
+        return [size[2], size[1], size[0]]
+    return list(size)
+
+
 def catalog_floor(floor: dict) -> dict:
     """A catalog floor as build_flat.py takes it: local texture files and tile size."""
     maps = floor.get("maps") or {}
@@ -166,15 +236,6 @@ def roof_windows(ceilings: list, wanted: list[dict]) -> list[dict]:
                                            w["depth"], w.get("bottom", 0.0))
         out.append({"ceiling": index, "frame": frame, **window})
     return out
-
-
-def view_photo(paths: ProjectPaths, index: int, photo: str) -> str:
-    """The customer's photo out of a window, upright and web-sized, for behind its glass."""
-    image = ImageOps.exif_transpose(Image.open(repo_root() / photo)).convert("RGB")
-    image.thumbnail((1600, 1600))
-    out = paths.scene / f"view-{index + 1}.jpg"
-    image.save(out, quality=85)
-    return str(out)
 
 
 def sun(dressing: dict, facing_dir: tuple[float, float]) -> dict | None:
@@ -259,8 +320,12 @@ def scene_spec(
         own = paths.scene / item.model if item.model else None
         has_own = bool(own and own.is_file())
         dress = dressed.get(item.id, {})
-        front = list(facing(item, room_of[item.roomId]))
+        # A scan box has no front; the dressing names it where the wall rule
+        # guesses wrong (an island's drawers face the kitchen, not a wall).
+        front = list(dress.get("front") or facing(item, room_of[item.roomId]))
         centre, size = list(item.box.center), list(item.box.size)
+        if "front" in dress:
+            size = sized_for(front, size, item.box.yaw)
         if "min" in dress:
             centre, size = box_from_corners(dress["min"], dress["max"], front)
         finish = None if has_own else dress.get("finish")
@@ -273,6 +338,7 @@ def scene_spec(
                 "front": front,
                 # A finish draws the piece from parts; the piece's own model still wins.
                 "finish": finish,
+                "options": dress.get("options", {}),
                 "model": str(own) if has_own else (None if finish else stand_in(item, furniture)),
                 "own": has_own,
             }
@@ -281,13 +347,10 @@ def scene_spec(
         centre, size = box_from_corners(extra["min"], extra["max"], extra["front"])
         items.append({"id": extra["id"], "label": extra["finish"], "center": centre,
                       "size": size, "front": list(extra["front"]), "finish": extra["finish"],
-                      "model": None, "own": False})
+                      "options": extra.get("options", {}), "model": None, "own": False})
 
     wanted = dressing.get("roofWindows", [])
     skylights = roof_windows(rooms[0]["ceilings"], wanted) if rooms else []
-    for i, (skylight, w) in enumerate(zip(skylights, wanted, strict=True)):
-        if w.get("view"):
-            skylight["view"] = view_photo(paths, i, w["view"])
     light = None
     if skylights:
         n = skylights[0]["frame"]["n"]
@@ -298,6 +361,8 @@ def scene_spec(
         "items": items,
         "floors": floors,
         "skylights": skylights,
+        "outside": outside_view(paths, wanted),
+        "surfaces": surfaces(paths),
         "sun": light,
         "hero": dressing.get("hero"),
         "wall_colour": wall_colour,
