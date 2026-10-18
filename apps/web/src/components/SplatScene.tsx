@@ -300,9 +300,10 @@ export function SplatScene({
     };
 
     if (model) {
-      // The bake was graded in Blender with AgX at +1 stop; match it.
+      // Graded in Blender with AgX; the room's exposure is already in the
+      // light map's scale, so the views out of the windows stay as shot.
       renderer.toneMapping = THREE.AgXToneMapping;
-      renderer.toneMappingExposure = 2;
+      renderer.toneMappingExposure = 1;
       loadBakedModel(model)
         .then((group) => {
           if (disposed || !sceneRef.current) return;
@@ -1156,7 +1157,9 @@ async function loadBakedModel(model: BakedModel): Promise<THREE.Group> {
       transparent: source.transparent,
       opacity: source.opacity,
     });
-    if (!source.transparent) {
+    // Only what was baked has the second UV set; the views outside the
+    // windows are photos, shown as they are.
+    if (!source.transparent && node.geometry.getAttribute("uv1")) {
       material.lightMap = lightMap;
       // MeshBasicMaterial divides the light map by pi (a Lambert BRDF).
       material.lightMapIntensity = model.lightmapScale * Math.PI;

@@ -28,6 +28,7 @@ from pathlib import Path
 
 import numpy as np
 
+from . import flat_geometry
 from .manifest import ItemBox, ManifestItem, Opening, Room, Wall, Waypoint
 
 SURFACE_KINDS = ("walls", "doors", "windows", "openings", "floors")
@@ -272,8 +273,10 @@ def load_glb(data: bytes) -> Scan:
     after its category (bed_0, chair_swivel_..._0, storage_shelf_0). The
     geometry is baked into world space with no node transforms, so each
     element's box is measured from its vertices: Y up, and the horizontal
-    axes from the smallest rectangle around its footprint. Joints (wall
-    corner fillers) and ceilings are ignored.
+    axes from the smallest rectangle around its footprint. Floors and
+    ceilings also keep their outlines: Polycam splits an open-plan space into
+    floor zones (Floor_Kitchen, Floor_Bedroom ...) and a sloped ceiling into
+    flat and pitched pieces. Joints (wall corner fillers) are ignored.
     """
     import cv2
 
@@ -283,16 +286,32 @@ def load_glb(data: bytes) -> Scan:
     doc = json.loads(data[20 : 20 + json_len])
     binary = 20 + json_len + 8  # skip the BIN chunk header
 
-    def vertices(mesh_index: int) -> np.ndarray:
-        points = []
+    def accessor(index: int, dtype, width: int) -> np.ndarray:
+        acc = doc["accessors"][index]
+        view = doc["bufferViews"][acc["bufferView"]]
+        start = binary + view.get("byteOffset", 0) + acc.get("byteOffset", 0)
+        size = np.dtype(dtype).itemsize * width
+        stride = view.get("byteStride", size)
+        raw = np.frombuffer(data, np.uint8, (acc["count"] - 1) * stride + size, start)
+        rows = np.lib.stride_tricks.as_strided(raw, (acc["count"], size), (stride, 1))
+        return rows.copy().view(dtype).reshape(acc["count"], width)
+
+    def geometry(mesh_index: int) -> tuple[np.ndarray, np.ndarray]:
+        """Vertices and triangles (indices into them) of all the mesh's primitives."""
+        points, triangles, base = [], [], 0
         for prim in doc["meshes"][mesh_index]["primitives"]:
-            acc = doc["accessors"][prim["attributes"]["POSITION"]]
-            view = doc["bufferViews"][acc["bufferView"]]
-            start = binary + view.get("byteOffset", 0) + acc.get("byteOffset", 0)
-            stride = view.get("byteStride", 12)
-            raw = np.frombuffer(data, np.uint8, acc["count"] * stride, start)
-            points.append(raw.reshape(-1, stride)[:, :12].copy().view(np.float32))
-        return np.vstack(points).astype(np.float64)
+            pts = accessor(prim["attributes"]["POSITION"], np.float32, 3).astype(np.float64)
+            if "indices" in prim:
+                dtype = {5121: np.uint8, 5123: np.uint16, 5125: np.uint32}[
+                    doc["accessors"][prim["indices"]]["componentType"]
+                ]
+                tris = accessor(prim["indices"], dtype, 1).reshape(-1, 3).astype(np.int64)
+            else:
+                tris = np.arange(len(pts)).reshape(-1, 3)
+            points.append(pts)
+            triangles.append(tris + base)
+            base += len(pts)
+        return np.vstack(points), np.vstack(triangles)
 
     elements: list[Element] = []
     room_type = None
@@ -301,7 +320,12 @@ def load_glb(data: bytes) -> Scan:
             continue
         name = node.get("name", "")
         head = name.split("_")[0].lower()
-        if head in ("joint", "ceiling"):
+        if head == "joint":
+            continue
+        pts, tris = geometry(node["mesh"])
+        if head == "ceiling":
+            elements.append(Element("ceilings", "ceiling", np.eye(4), np.zeros(3), name,
+                                    corners=_outline(pts, tris)))
             continue
         if head == "floor":
             label = name.split("_", 1)[-1]  # Floor_Bedroom, Floor_LivingRoom
@@ -311,7 +335,6 @@ def load_glb(data: bytes) -> Scan:
             kind, category = _GLB_SURFACES[head], head
         else:
             kind, category = "objects", head
-        pts = vertices(node["mesh"])
         (cx, cz), (w, d), angle = cv2.minAreaRect(pts[:, [0, 2]].astype(np.float32))
         if d > w:  # right axis along the long side
             w, d, angle = d, w, angle + 90
@@ -322,12 +345,48 @@ def load_glb(data: bytes) -> Scan:
         transform = np.eye(4)
         transform[:3, 0], transform[:3, 1], transform[:3, 2] = right, up, np.cross(right, up)
         transform[:3, 3] = [cx, (lo + hi) / 2, cz]
+        corners = None
         if kind == "floors":
             transform[1, 3] = hi  # the floor's top surface is the floor
-        elements.append(Element(kind, category, transform, np.array([w, hi - lo, d]), name))
+            top = np.abs(pts[tris][:, :, 1] - hi).max(axis=1) < 0.01
+            outline = _outline(pts, tris[top])
+            homo = np.hstack([outline, np.ones((len(outline), 1))])
+            corners = (homo @ np.linalg.inv(transform).T)[:, :3]  # in the element's frame
+        elements.append(
+            Element(kind, category, transform, np.array([w, hi - lo, d]), name, corners=corners)
+        )
     if not any(e.kind == "walls" for e in elements):
         raise RoomPlanError("No Wall_ nodes in this glTF — is it a Floorplan/RoomPlan export?")
     return Scan(elements, room_type=room_type)
+
+
+def _outline(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
+    """The boundary of a flat, hole-free patch of triangles, as an ordered loop of points."""
+    keys = [tuple(np.round(p, 4)) for p in points]  # weld vertices split at UV seams
+    index: dict[tuple, int] = {}
+    for k in keys:
+        index.setdefault(k, len(index))
+    welded = np.array(list(index))
+    remap = np.array([index[k] for k in keys])
+    count: dict[tuple[int, int], int] = {}
+    for tri in remap[triangles]:
+        for a, b in ((tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])):
+            edge = (min(a, b), max(a, b))
+            count[edge] = count.get(edge, 0) + 1
+    neighbours: dict[int, list[int]] = {}
+    for (a, b), n in count.items():
+        if n == 1:  # on one triangle only: the boundary
+            neighbours.setdefault(a, []).append(b)
+            neighbours.setdefault(b, []).append(a)
+    start = next(iter(neighbours))
+    loop, prev, at = [start], -1, start
+    while True:
+        step = next(v for v in neighbours[at] if v != prev)
+        if step == start:
+            break
+        loop.append(step)
+        prev, at = at, step
+    return welded[loop].astype(np.float64)
 
 
 # --------------------------------------------------------------------------
@@ -368,16 +427,67 @@ def floor_polygon(scan: Scan) -> np.ndarray:
     end to end and takes each corner where neighbouring walls' lines meet,
     because RoomPlan wall ends overlap or fall short by a few centimetres.
     """
-    floors = [f for f in scan.of("floors") if f.corners is not None and len(f.corners) >= 3]
-    if floors:
-        f = max(floors, key=lambda e: float(e.dimensions[0] * e.dimensions[2]))
-        homo = np.hstack([f.corners, np.ones((len(f.corners), 1))])
-        poly = (homo @ f.transform.T)[:, [0, 2]]
+    zones = [polygon for _, polygon in floor_zones(scan)]
+    if len(zones) > 1:  # an open plan, scanned as several floor zones
+        poly = np.array(flat_geometry.polygon_union([z.tolist() for z in zones]))
+    elif zones:
+        poly = zones[0]
     else:
         poly = _chain_walls(wall_segments(scan))
     if _signed_area(poly) < 0:
         poly = poly[::-1]
     return poly
+
+
+def floor_zones(scan: Scan) -> list[tuple[str, np.ndarray]]:
+    """Each floor element's label (Kitchen, Bedroom, Other ...) and outline (x, z)."""
+    zones = []
+    for f in scan.of("floors"):
+        if f.corners is None or len(f.corners) < 3:
+            continue
+        homo = np.hstack([f.corners, np.ones((len(f.corners), 1))])
+        label = f.identifier.split("_", 1)[1] if "_" in f.identifier else "Floor"
+        zones.append((label, (homo @ f.transform.T)[:, [0, 2]]))
+    return zones
+
+
+def ceilings(scan: Scan, floor_y: float) -> list[list[list[float]]]:
+    """The ceiling pieces as 3D outlines above the floor: flat ones and slopes."""
+    return [
+        [[round(float(x), 4), round(float(y - floor_y), 4), round(float(z), 4)]
+         for x, y, z in c.corners]
+        for c in scan.of("ceilings")
+        if c.corners is not None and len(c.corners) >= 3
+    ]
+
+
+def partitions(scan: Scan, polygon: np.ndarray, floor_y: float) -> list[dict]:
+    """
+    Walls that are not on the room's outline: partitions inside an open plan,
+    such as the sides of a wardrobe niche. The outline's own walls come from
+    the polygon; these are what the scan saw besides them.
+    """
+    out = []
+    for wall, (a, b) in zip(scan.of("walls"), wall_segments(scan), strict=True):
+        mid = (a + b) / 2
+        on_outline = any(
+            _distance_to_segment(mid, polygon[i], polygon[(i + 1) % len(polygon)]) < 0.1
+            for i in range(len(polygon))
+        )
+        if not on_outline:
+            out.append({
+                "start": [round(float(v), 4) for v in a],
+                "end": [round(float(v), 4) for v in b],
+                "height": round(float(wall.centre[1] + wall.dimensions[1] / 2 - floor_y), 3),
+            })
+    return out
+
+
+def _distance_to_segment(p: np.ndarray, a, b) -> float:
+    a, b = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
+    ab = b - a
+    t = float(np.clip(np.dot(p - a, ab) / max(float(ab @ ab), 1e-12), 0.0, 1.0))
+    return float(np.linalg.norm(p - (a + t * ab)))
 
 
 def _chain_walls(segments: list[tuple[np.ndarray, np.ndarray]]) -> np.ndarray:

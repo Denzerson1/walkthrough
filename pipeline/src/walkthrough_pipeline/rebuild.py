@@ -11,6 +11,11 @@ so a phone shows what a GPU path tracer computed.
 This module turns the manifest into a plain JSON spec; `pipeline/blender/
 build_flat.py` runs inside Blender and builds from it, so nothing here needs
 Blender and nothing there needs this package.
+
+What a floor-plan scan cannot see comes from the project's dressing file,
+`input/dressing.json`, read off the customer's photos: roof windows in a
+slope, which way the windows face, floors re-laid from photos of them, the
+finish of each piece, built-ins the scanner missed, and the preview's view.
 """
 
 from __future__ import annotations
@@ -22,7 +27,9 @@ import subprocess
 from pathlib import Path
 
 import numpy as np
+from PIL import Image, ImageOps
 
+from . import flat_geometry, photo_texture
 from .manifest import Manifest, ManifestItem, Room
 from .paths import ProjectPaths, repo_root
 
@@ -108,16 +115,103 @@ def facing(item: ManifestItem, room: Room) -> tuple[float, float]:
     return float(front[0]), float(front[1])
 
 
+def catalog_floor(floor: dict) -> dict:
+    """A catalog floor as build_flat.py takes it: local texture files and tile size."""
+    maps = floor.get("maps") or {}
+    return {
+        "id": floor["id"],
+        "albedo": asset_path(maps.get("albedo")),
+        "normal": asset_path(maps.get("normal")),
+        "roughness": asset_path(maps.get("roughness")),
+        "tile": floor.get("tileSizeM", [1.0, 1.0]),
+        "colour": floor.get("baseColor", "#b08a5a"),
+    }
+
+
+def photo_floor(paths: ProjectPaths, name: str, entry: dict) -> dict:
+    """A floor re-laid from the customer's photo of it, written into the scene folder."""
+    source = repo_root() / entry["photo"]
+    if "planks" in entry:
+        image, size = photo_texture.plank_texture(source, entry["planks"])
+    else:
+        image, size = photo_texture.tile_texture(source, tuple(entry["tiles"]),
+                                                 entry.get("offset", 0.0))
+    out = paths.scene / f"floor-{name.lower()}.jpg"
+    image.save(out, quality=90)
+    return {"id": f"photo-{name.lower()}", "albedo": str(out), "normal": None, "roughness": None,
+            "tile": list(size), "colour": photo_texture.mean_albedo(source)}
+
+
+def box_from_corners(lo, hi, front) -> tuple[list[float], list[float]]:
+    """An axis-aligned box from two corners: its centre, and its size as
+    (across its front, height, depth) the way furniture boxes are sized."""
+    centre = [(a + b) / 2 for a, b in zip(lo, hi, strict=True)]
+    dx, dy, dz = (abs(b - a) for a, b in zip(lo, hi, strict=True))
+    return centre, [dz, dy, dx] if abs(front[0]) > abs(front[1]) else [dx, dy, dz]
+
+
+def roof_windows(ceilings: list, wanted: list[dict]) -> list[dict]:
+    """Each roof window the dressing places, worked out in the slope it sits in."""
+    out = []
+    for w in wanted:
+        index = next(
+            (i for i, c in enumerate(ceilings) if not flat_geometry.is_flat(c)
+             and flat_geometry.point_in_polygon(*w["at"], [[p[0], p[2]] for p in c])),
+            None,
+        )
+        if index is None:
+            raise ValueError(f"No sloped ceiling over the roof window at {w['at']}")
+        frame = flat_geometry.slope_frame(ceilings[index])
+        window = flat_geometry.roof_window(frame, w["at"], w["width"], w["length"],
+                                           w["depth"], w.get("bottom", 0.0))
+        out.append({"ceiling": index, "frame": frame, **window})
+    return out
+
+
+def view_photo(paths: ProjectPaths, index: int, photo: str) -> str:
+    """The customer's photo out of a window, upright and web-sized, for behind its glass."""
+    image = ImageOps.exif_transpose(Image.open(repo_root() / photo)).convert("RGB")
+    image.thumbnail((1600, 1600))
+    out = paths.scene / f"view-{index + 1}.jpg"
+    image.save(out, quality=85)
+    return str(out)
+
+
+def sun(dressing: dict, facing_dir: tuple[float, float]) -> dict | None:
+    """Where the sun stands at the dressing's date and time, as a scene direction towards it."""
+    place, when = dressing.get("location"), dressing.get("sun")
+    if not place or not when or "windowsFace" not in dressing:
+        return None
+    year, month, day = (int(v) for v in when["date"].split("-"))
+    hours, minutes = (int(v) for v in when["time"].split(":"))
+    bearing, elevation = flat_geometry.sun_position(
+        year, month, day, hours + minutes / 60, place["utcOffset"],
+        place["latitude"], place["longitude"],
+    )
+    x, z = flat_geometry.compass_to_scene(bearing, dressing["windowsFace"], facing_dir)
+    e = math.radians(elevation)
+    return {"bearing": round(bearing, 1), "elevation": round(elevation, 1),
+            "direction": [x * math.cos(e), math.sin(e), z * math.cos(e)]}
+
+
 def scene_spec(
     paths: ProjectPaths,
     manifest: Manifest,
-    floor: dict,
+    floors: dict[str, dict],
     furniture: list[dict],
     wall_colour: str,
     lightmap_size: int,
     samples: int,
+    scan: dict | None = None,
+    dressing: dict | None = None,
 ) -> dict:
-    """Everything build_flat.py needs, in scene space: metres, Y up."""
+    """
+    Everything build_flat.py needs, in scene space: metres, Y up. `floors`
+    holds the main floor under "main" and a floor zone's own floor under its
+    scan label; `scan` carries what the manifest does not keep (ceiling
+    pieces, partitions, floor zones), for the first room.
+    """
+    scan, dressing = scan or {}, dressing or {}
     rooms = []
     for room in manifest.rooms:
         rooms.append(
@@ -144,37 +238,68 @@ def scene_spec(
                     }
                     for i, w in enumerate(room.walls)
                 ],
+                "ceilings": [],
+                "partitions": [],
+                "zones": [],
             }
         )
+    if rooms and scan:
+        rooms[0]["ceilings"] = scan.get("ceilings", [])
+        rooms[0]["partitions"] = scan.get("partitions", [])
+        rooms[0]["zones"] = [
+            {"label": label, "polygon": [list(p) for p in polygon]}
+            for label, polygon in scan.get("zones", [])
+            if label in floors
+        ]
 
     room_of = {r.id: r for r in manifest.rooms}
+    dressed = dressing.get("items", {})
     items = []
     for item in manifest.items:
         own = paths.scene / item.model if item.model else None
+        has_own = bool(own and own.is_file())
+        dress = dressed.get(item.id, {})
+        front = list(facing(item, room_of[item.roomId]))
+        centre, size = list(item.box.center), list(item.box.size)
+        if "min" in dress:
+            centre, size = box_from_corners(dress["min"], dress["max"], front)
+        finish = None if has_own else dress.get("finish")
         items.append(
             {
                 "id": item.id,
                 "label": item.label,
-                "center": list(item.box.center),
-                "size": list(item.box.size),
-                "front": list(facing(item, room_of[item.roomId])),
-                "model": str(own) if own and own.is_file() else stand_in(item, furniture),
-                "own": bool(own and own.is_file()),
+                "center": centre,
+                "size": size,
+                "front": front,
+                # A finish draws the piece from parts; the piece's own model still wins.
+                "finish": finish,
+                "model": str(own) if has_own else (None if finish else stand_in(item, furniture)),
+                "own": has_own,
             }
         )
+    for extra in dressing.get("extras", []):
+        centre, size = box_from_corners(extra["min"], extra["max"], extra["front"])
+        items.append({"id": extra["id"], "label": extra["finish"], "center": centre,
+                      "size": size, "front": list(extra["front"]), "finish": extra["finish"],
+                      "model": None, "own": False})
 
-    maps = floor.get("maps") or {}
+    wanted = dressing.get("roofWindows", [])
+    skylights = roof_windows(rooms[0]["ceilings"], wanted) if rooms else []
+    for i, (skylight, w) in enumerate(zip(skylights, wanted, strict=True)):
+        if w.get("view"):
+            skylight["view"] = view_photo(paths, i, w["view"])
+    light = None
+    if skylights:
+        n = skylights[0]["frame"]["n"]
+        across = math.hypot(n[0], n[2])
+        light = sun(dressing, (n[0] / across, n[2] / across))
     return {
         "rooms": rooms,
         "items": items,
-        "floor": {
-            "id": floor["id"],
-            "albedo": asset_path(maps.get("albedo")),
-            "normal": asset_path(maps.get("normal")),
-            "roughness": asset_path(maps.get("roughness")),
-            "tile": floor.get("tileSizeM", [1.0, 1.0]),
-            "colour": floor.get("baseColor", "#b08a5a"),
-        },
+        "floors": floors,
+        "skylights": skylights,
+        "sun": light,
+        "hero": dressing.get("hero"),
         "wall_colour": wall_colour,
         "lightmap_size": lightmap_size,
         "samples": samples,

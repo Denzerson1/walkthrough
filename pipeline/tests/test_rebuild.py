@@ -122,7 +122,7 @@ def test_spec_carries_rooms_openings_items_and_outputs(tmp_path):
     paths = ProjectPaths(tmp_path / "p")
     paths.ensure()
     floor = {"id": "oak", "tileSizeM": [0.6, 0.6], "maps": {}, "baseColor": "#c49a63"}
-    spec = scene_spec(paths, manifest, floor, [], "#eeeae3", 1024, 64)
+    spec = scene_spec(paths, manifest, {"main": floor}, [], "#eeeae3", 1024, 64)
     json.dumps(spec)  # plain JSON, for Blender
     (r,) = spec["rooms"]
     assert len(r["walls"]) == 4 and r["height"] == pytest.approx(2.5)
@@ -132,3 +132,129 @@ def test_spec_carries_rooms_openings_items_and_outputs(tmp_path):
     (sofa,) = spec["items"]
     assert sofa["model"] is None and sofa["own"] is False
     assert spec["out"]["glb"].endswith("flat.glb")
+
+
+# The scanned attic flat's shape: a flat ceiling at 2.57 m that slopes down
+# to a 0.81 m knee wall along z = 3.71.
+FLAT_CEILING = [[-3.0, 2.57, -1.3], [3.0, 2.57, -1.3], [3.0, 2.57, 2.21], [-3.0, 2.57, 2.21]]
+SLOPE = [[-3.0, 2.57, 2.21], [3.0, 2.57, 2.21], [3.0, 0.81, 3.71], [-3.0, 0.81, 3.71]]
+
+
+def test_union_of_floor_zones_is_their_outline():
+    entry = [[-0.78, -3.71], [1.08, -3.71], [1.08, -1.23], [0.18, -1.23], [0.18, -1.73],
+             [-0.78, -1.73]]
+    living = [[-2.99, -1.27], [-0.78, -1.27], [-0.78, -1.73], [0.18, -1.73], [0.18, -1.23],
+              [2.99, -1.23], [2.99, 3.71], [-2.99, 3.71]]
+    outline = fg.polygon_union([entry, living])
+    assert fg.signed_area(outline) == pytest.approx(
+        fg.signed_area(entry) + fg.signed_area(living), abs=1e-6)
+    assert len(outline) == 8  # the shared zig-zag between the zones is gone
+    assert [-0.78, -1.73] not in outline
+
+
+def test_ceiling_height_follows_the_slope():
+    ceilings = [FLAT_CEILING, SLOPE]
+    assert fg.ceiling_height(0.0, 0.0, ceilings, 2.5) == pytest.approx(2.57)
+    assert fg.ceiling_height(0.0, 3.71 - 0.75, ceilings, 2.5) == pytest.approx(1.69, abs=0.01)
+    assert fg.ceiling_height(9.0, 9.0, ceilings, 2.5) == 2.5  # nothing overhead
+
+
+def test_gable_wall_profile_and_pieces():
+    # The side wall x = 3 runs from the back (z = -1.3) to the knee wall.
+    profile = fg.wall_profile([3.0, -1.3], [3.0, 3.71], [FLAT_CEILING, SLOPE], 2.5)
+    assert [round(u, 2) for u, _ in profile] == [0.0, 3.51, 5.01]
+    assert profile[0][1] == pytest.approx(2.57) and profile[-1][1] == pytest.approx(0.82, abs=0.02)
+    pieces = fg.wall_pieces(5.01, profile, [])
+    area = sum((u1 - u0) * ((t0 + t1) / 2 - y0) for u0, u1, y0, t0, t1 in pieces)
+    assert area == pytest.approx(3.51 * 2.57 + 1.5 * (2.57 + 0.82) / 2, abs=0.05)
+
+
+def test_wall_pieces_never_bend_and_keep_openings_empty():
+    profile = [(0.0, 2.5), (2.0, 2.5), (4.0, 1.0)]
+    door = (0.5, 1.4, 0.0, 2.0)
+    pieces = fg.wall_pieces(4.0, profile, [door])
+    for u0, u1, y0, t0, t1 in pieces:
+        assert t0 >= y0 and t1 >= y0
+        assert not (0.5 < (u0 + u1) / 2 < 1.4 and y0 < 2.0)
+    # No piece's top bends: at its middle, the real top (the profile, capped
+    # at the piece's row, 0-2.0 m under the door head, 2.0-2.5 m above) is
+    # the straight line between its ends.
+    def real_top(u):
+        return 2.5 if u <= 2.0 else 2.5 - 1.5 * (u - 2.0) / 2.0
+
+    for u0, u1, y0, t0, t1 in pieces:
+        row_top = 2.0 if y0 < 2.0 else 2.5
+        assert min(row_top, real_top((u0 + u1) / 2)) == pytest.approx((t0 + t1) / 2)
+
+
+def test_roof_window_lining_flares_plumb_below_and_level_above():
+    frame = fg.slope_frame(SLOPE)
+    assert math.degrees(frame["angle"]) == pytest.approx(49.6, abs=0.2)
+    assert frame["n"][1] > 0  # out of the room is up
+    w = fg.roof_window(frame, at=(1.6, 3.0), width=0.78, length=1.18, depth=0.22, bottom=0.0)
+    u0, u1, v0, v1 = w["hole"]
+    assert u1 - u0 == pytest.approx(0.78)
+    assert v1 - v0 == pytest.approx(0.22 * math.tan(frame["angle"]) + 1.18
+                                    + 0.22 / math.tan(frame["angle"]))
+    bottom = w["lining"][2]  # plumb: its inner and outer edges line up in plan
+    assert bottom[0][0] == pytest.approx(bottom[3][0])
+    assert bottom[0][2] == pytest.approx(bottom[3][2])
+    top = w["lining"][3]  # level
+    assert top[0][1] == pytest.approx(top[3][1])
+    centre_x = w["centre"][0]
+    assert centre_x == pytest.approx(1.6, abs=1e-6)
+
+
+def test_sun_position_at_vienna_noon_on_the_equinox():
+    # Solar noon in Vienna on CET is about 12:02 (longitude 16.37 E, equation of time).
+    bearing, elevation = fg.sun_position(2026, 3, 20, 12 + 2 / 60, 1, 48.21, 16.37)
+    assert bearing == pytest.approx(180, abs=3)
+    assert elevation == pytest.approx(90 - 48.21, abs=1.5)
+
+
+def test_compass_to_scene_turns_clockwise():
+    facing = (0.0, 1.0)  # windows face +z, bearing 147
+    assert fg.compass_to_scene(147, 147, facing) == pytest.approx((0.0, 1.0))
+    assert fg.compass_to_scene(237, 147, facing) == pytest.approx((-1.0, 0.0))
+
+
+def test_union_snaps_corners_that_round_apart():
+    # Two pieces whose shared corner differs by 0.2 mm across a rounding boundary.
+    a = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.1849], [0.0, 1.1849]]
+    b = [[0.0, 1.1851], [1.0, 1.1851], [1.0, 2.0], [0.0, 2.0]]
+    outline = fg.polygon_union([a, b])
+    assert len(outline) == 4
+    assert fg.signed_area(outline) == pytest.approx(2.0, abs=1e-3)
+
+
+def test_coplanar_ceiling_pieces_merge():
+    left = [[-3.0, 2.57, 2.21], [0.18, 2.57, 2.21], [0.18, 0.81, 3.71], [-3.0, 0.81, 3.71]]
+    right = [[0.18, 2.57, 2.21], [3.0, 2.57, 2.21], [3.0, 0.81, 3.71], [0.18, 0.81, 3.71]]
+    flat_a = [[-3.0, 2.57, -1.3], [0.18, 2.57, -1.3], [0.18, 2.57, 2.21], [-3.0, 2.57, 2.21]]
+    flat_b = [[0.18, 2.57, -1.3], [3.0, 2.57, -1.3], [3.0, 2.57, 2.21], [0.18, 2.57, 2.21]]
+    merged = fg.merge_ceilings([left, right, flat_a, flat_b])
+    assert len(merged) == 2
+    slope = next(c for c in merged if not fg.is_flat(c))
+    assert len(slope) == 4
+    assert {round(p[0], 2) for p in slope} == {-3.0, 3.0}
+
+
+def test_gable_bends_where_the_ceiling_stops_just_short_of_the_wall():
+    # The wall line from the floor outline is 1.3 mm outside the scanned ceiling's edge.
+    flat = [[-2.99, 2.57, -1.27], [2.99, 2.57, -1.27], [2.99, 2.57, 2.21], [-2.99, 2.57, 2.21]]
+    slope = [[-2.99, 2.57, 2.21], [2.99, 2.57, 2.21], [2.99, 0.81, 3.71], [-2.99, 0.81, 3.71]]
+    profile = fg.wall_profile([-2.9913, 3.7137], [-2.9913, -1.2725], [flat, slope], 2.5)
+    assert len(profile) == 3
+    assert profile[1][1] == pytest.approx(2.57, abs=0.02)
+
+
+def test_mitres_reach_out_at_convex_corners_and_in_at_inside_ones():
+    t = 0.15
+    square = fg.mitres(SQUARE, t)
+    # Each wall's outer face runs one thickness past its end and before its start.
+    assert all(start == pytest.approx(-t) and end == pytest.approx(t) for start, end in square)
+    # An L: the corner at (2, 1) turns inwards, so the walls meeting there stop short.
+    ell = [[0.0, 0.0], [4.0, 0.0], [4.0, 3.0], [2.0, 3.0], [2.0, 1.0], [0.0, 1.0]]
+    reach = fg.mitres(ell, t)
+    assert reach[3][1] == pytest.approx(-t)  # (2, 3) -> (2, 1) ends short of (2, 1)
+    assert reach[4][0] == pytest.approx(t)  # (2, 1) -> (0, 1) starts past it

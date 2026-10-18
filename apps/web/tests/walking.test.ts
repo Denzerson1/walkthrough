@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   BODY_RADIUS,
   canStand,
+  ceilingHeight,
   distanceAlongWall,
   inDoorway,
   moveWithCollision,
@@ -170,5 +171,55 @@ describe('roomAt', () => {
 
   it('returns undefined outside every room', () => {
     expect(roomAt([99, 99], flat)).toBeUndefined();
+  });
+});
+
+describe('headroom under a roof slope', () => {
+  // A 4 x 4 m room whose ceiling is flat at 2.5 m for z < 2, then slopes
+  // down to a 0.8 m knee wall at z = 4.
+  const attic: WalkableRoom = {
+    floorPolygon: [
+      [0, 0],
+      [4, 0],
+      [4, 4],
+      [0, 4],
+    ],
+    walls: [
+      { start: [0, 0], end: [4, 0] },
+      { start: [4, 0], end: [4, 4] },
+      { start: [4, 4], end: [0, 4] },
+      { start: [0, 4], end: [0, 0] },
+    ],
+    openings: [],
+    ceilings: [
+      [
+        [0, 2.5, 0],
+        [4, 2.5, 0],
+        [4, 2.5, 2],
+        [0, 2.5, 2],
+      ],
+      [
+        [0, 2.5, 2],
+        [4, 2.5, 2],
+        [4, 0.8, 4],
+        [0, 0.8, 4],
+      ],
+    ],
+  };
+
+  it('reads the ceiling height off the piece overhead', () => {
+    expect(ceilingHeight([2, 1], attic.ceilings!)).toBeCloseTo(2.5);
+    expect(ceilingHeight([2, 3], attic.ceilings!)).toBeCloseTo(1.65);
+  });
+
+  it('lets a person stand only where the slope clears their head', () => {
+    expect(canStand([2, 1], [attic])).toBe(true);
+    expect(canStand([2, 2.6], [attic])).toBe(true); // 1.99 m
+    expect(canStand([2, 3.2], [attic])).toBe(false); // 1.48 m
+  });
+
+  it('ignores headroom in rooms without a scanned ceiling', () => {
+    const { ceilings: _, ...flatRoof } = attic;
+    expect(canStand([2, 3.2], [flatRoof])).toBe(true);
   });
 });

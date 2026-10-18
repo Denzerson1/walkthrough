@@ -247,7 +247,7 @@ circles in `docs/CAPTURE.md` exist to cover.
 ## Rebuild: the flat 1:1 with baked light
 
 ```bash
-pnpm run pipeline rebuild --project flat-01 --roomplan "C:\captures\room.glb" [--floor oak-plank-natural] [--wall-colour "#eeeae3"]
+pnpm run pipeline rebuild --project flat-01 --roomplan "captures\scan.glb" [--preview-only]
 ```
 
 Instead of showing the capture's pixels, rebuild the flat from its
@@ -255,19 +255,41 @@ floor-plan scan (Polycam Floorplan glTF, RoomPlan JSON or USDZ) in Blender
 and bake its light with Cycles on the GPU, the way the X-post apartments
 were made, but automatic and viewable on a phone.
 
-- **Geometry, exact from the scan:** walls with real door and window
-  openings, floor and ceiling slabs, skirting, door and window frames.
-- **Furniture:** every scanned piece in its exact box. A piece's own model
-  (`items[].model`, a `.glb` made from a photo of it, e.g. with Higgsfield)
-  when it exists, a catalog piece of the same kind, or a plain block.
-- **Light:** sky plus a warm sun through the largest window, positioned so
-  the sun patch lands in the room. Baked (diffuse, direct + indirect) into a
-  2048 atlas on a second UV set, 8-bit sRGB plus a scale (~0.3 MB).
-- **Viewer:** shows `flat.glb` unlit (colour × baked light) instead of the
-  splat. Floor swaps change only the texture, so the baked light and
-  shadows stay.
-- `work/rebuild_preview.png` is a Cycles still from the hero view, for
-  judging the look without opening the viewer.
+**From the scan, exact:**
 
-About 4 minutes per room on the 2080 Super. `--preview-only` takes under a
-minute.
+- The outline is the union of the scan's floor zones (Polycam cuts an open
+  plan into Kitchen, Bedroom, Other ...), so a passage between zones stays
+  open. Walls between zones that are not on the outline become partitions.
+- The ceiling is the scan's own ceiling pieces, merged where they share a
+  plane: flat parts and roof slopes. Walls follow it, so gable walls come
+  out as gables and a knee wall at its real height. Wall ends are mitred.
+- Doors from the scan, each with leaf, architrave, threshold and a backing.
+
+**From the photos, in `input/dressing.json`** (what a floor-plan scan
+cannot see; placed by hand from the capture photos):
+
+- `roofWindows`: windows in a slope (Floorplan mode only finds windows in
+  upright walls), with plumb and level linings as built, and the photo out
+  of each (`view`) on a plane behind its glass.
+- `floors`: each floor re-laid from its photo (`photo_texture.py`). The A4
+  sheet in the shot gives scale and perspective (its corners rectify the
+  floor plane) and the exposure; the plank or tile lattice is fitted and
+  real planks or tile faces are cut out and laid again, seamlessly.
+- `windowsFace` (compass bearing), `location`, `sun` (date, time): the real
+  sun position for that moment.
+- `items`: a finish per scanned piece (kitchen base, wall and tall units,
+  island, wardrobe, bed, sofa, stool ...), drawn from parts until the
+  piece's own model exists; `extras`: built-ins the scanner missed.
+- `hero`: the preview's view, also the walkthrough's start.
+
+**Light:** Cycles bakes diffuse light (direct and bounced) into one 2048
+atlas, denoised with Open Image Denoise and exposed like a camera for the
+room (sun spots clip, as they do in a photo). Faces nobody sees from inside
+stay in for the bake, so the room's solids block light, but get no atlas.
+
+**Viewer:** shows `flat.glb` unlit (colour × baked light). Floor swaps
+change only the texture under the light. Under a slope the walk stops where
+the ceiling drops below 1.8 m (`canStand`, from the manifest's `ceilings`).
+
+`work/rebuild_preview.png` is a Cycles still from the hero view. About 4
+minutes per room on the 2080 Super; `--preview-only` about 1 minute.

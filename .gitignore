@@ -70,3 +70,6 @@ entities.json
 
 # Small real exports used as test fixtures (each well under 1 MB)
 !pipeline/tests/fixtures/*.glb
+
+# Raw captures (photos, scans): large binaries, never in git.
+captures/

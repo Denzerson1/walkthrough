@@ -58,6 +58,13 @@ exclude = ["data", "node_modules", ".venv"]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = ["B008"]  # FastAPI Depends() in defaults is the documented pattern.
 
+# Editor type checking (Pyright, via Serena or an IDE): the uv venv.
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+extraPaths = ["services/api/src", "pipeline/src"]
+exclude = ["data", "node_modules", ".venv", "pipeline/blender"]
+
 [tool.pytest.ini_options]
 testpaths = ["services/api/tests", "pipeline/tests"]
 pythonpath = ["services/api/src", "pipeline/src"]

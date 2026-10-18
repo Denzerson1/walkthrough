@@ -69,6 +69,11 @@ export interface Room {
    * room has a replacement floor.
    */
   originalFloorColor?: string;
+  /**
+   * The ceiling as scanned, piece by piece: 3D outlines, flat or sloped. Where
+   * a slope comes down, a person cannot stand upright; see `canStand`.
+   */
+  ceilings?: Vec3[][];
 }
 
 export interface ItemBox {

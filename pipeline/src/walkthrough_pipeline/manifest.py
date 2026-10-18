@@ -76,6 +76,9 @@ class Room(BaseModel):
     #: Used to draw the room once floor splats are hidden for a replacement
     #: elsewhere in the flat. See docs/SPEC.md §4.
     originalFloorColor: str | None = None
+    #: The ceiling as scanned, piece by piece: 3D outlines, flat or sloped.
+    #: Where a slope comes down, a person cannot stand upright (canStand).
+    ceilings: list[list[Vec3]] = Field(default_factory=list)
 
     @field_validator("floorPolygon")
     @classmethod

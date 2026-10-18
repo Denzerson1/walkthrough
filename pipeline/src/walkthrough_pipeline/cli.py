@@ -10,20 +10,23 @@ pretending — docs/BRIEF.md §2.6.
 from __future__ import annotations
 
 import json
+import math
 import shutil
 import subprocess
 import time
 from pathlib import Path
 
+import numpy as np
 import typer
 from rich.console import Console
 
+from . import flat_geometry
 from . import frames as frames_mod
 from . import rebuild as rebuild_mod
 from . import roomplan as roomplan_mod
 from . import stray as stray_mod
 from . import train as train_mod
-from .manifest import Manifest
+from .manifest import Manifest, Waypoint
 from .paths import ProjectPaths, repo_root
 from .scene import AlignmentFailed, align_scene, export_scene, trained_ply
 
@@ -479,8 +482,8 @@ def rebuild(
     roomplan: Path | None = typer.Option(
         None, help="Floor-plan scan to rebuild from (.glb, .json, .usdz); else the manifest's"
     ),
-    floor: str = typer.Option("oak-plank-natural", help="Catalog floor id"),
-    wall_colour: str = typer.Option("#eeeae3", help="Wall paint as #rrggbb"),
+    floor: str = typer.Option("oak-plank-natural", help="Catalog floor id, unless dressed"),
+    wall_colour: str | None = typer.Option(None, help="Wall paint as #rrggbb (default: dressing)"),
     lightmap_size: int = typer.Option(2048, help="Baked-light atlas edge in pixels"),
     samples: int = typer.Option(1024, help="Cycles samples for the bake"),
     preview_only: bool = typer.Option(False, help="Only render a still, to judge the look"),
@@ -492,27 +495,58 @@ def rebuild(
         Manifest.load(paths.manifest) if paths.manifest.is_file()
         else Manifest(id=project, name=project)
     )
+    dressing_file = paths.input / "dressing.json"
+    dressing = (
+        json.loads(dressing_file.read_text(encoding="utf-8")) if dressing_file.is_file() else {}
+    )
     scan_file = _existing(roomplan, "Floor-plan scan") or roomplan_mod.find_export(
         paths.input / "roomplan"
     )
+    scan = None
     if scan_file is not None:
-        room, items, _ = roomplan_mod.to_rooms(roomplan_mod.load(scan_file))
+        loaded = roomplan_mod.load(scan_file)
+        room, items, floor_y = roomplan_mod.to_rooms(loaded)
         manifest.rooms, manifest.items = [room], items
+        scan = {
+            "ceilings": flat_geometry.merge_ceilings(roomplan_mod.ceilings(loaded, floor_y)),
+            "partitions": roomplan_mod.partitions(loaded, np.array(room.floorPolygon), floor_y),
+            "zones": [(label, poly.tolist()) for label, poly in roomplan_mod.floor_zones(loaded)],
+        }
+        # The viewer keeps a standing person's head under a slope.
+        room.ceilings = [[tuple(p) for p in piece] for piece in scan["ceilings"]]
+        if dressing.get("hero"):
+            # Open where the preview stands: the view chosen to show the flat.
+            (ex, _, ez), (tx, _, tz) = dressing["hero"]["eye"], dressing["hero"]["target"]
+            room.waypoint = Waypoint(
+                position=(ex, roomplan_mod.EYE_HEIGHT, ez),
+                yaw=round(math.degrees(math.atan2(-(tx - ex), -(tz - ez))) % 360, 1),
+            )
     if not manifest.rooms:
         raise typer.BadParameter("No rooms: pass --roomplan with a Polycam Floorplan export.")
 
-    floors = {f["id"]: f for f in _catalog("floors")}
-    if floor not in floors:
-        raise typer.BadParameter(f"Unknown floor {floor!r}. Known: {', '.join(sorted(floors))}")
+    catalog = {f["id"]: f for f in _catalog("floors")}
+    if floor not in catalog:
+        raise typer.BadParameter(f"Unknown floor {floor!r}. Known: {', '.join(sorted(catalog))}")
+    floors = {"main": rebuild_mod.catalog_floor(catalog[floor])}
+    for name, entry in dressing.get("floors", {}).items():
+        floors[name] = rebuild_mod.photo_floor(paths, name, entry)
+        console.print(f"  floor {name}: re-laid from {entry['photo']}, {floors[name]['colour']}")
     spec = rebuild_mod.scene_spec(
-        paths, manifest, floors[floor], _catalog("furniture"), wall_colour, lightmap_size, samples
+        paths, manifest, floors, _catalog("furniture"),
+        wall_colour or dressing.get("wallColour", "#eeeae3"), lightmap_size, samples,
+        scan=scan, dressing=dressing,
     )
+    finished = sum(1 for i in spec["items"] if i["finish"])
     stand_ins = sum(1 for i in spec["items"] if not i["own"] and i["model"])
-    blocks = sum(1 for i in spec["items"] if not i["model"])
+    blocks = sum(1 for i in spec["items"] if not i["model"] and not i["finish"])
     console.print(
         f"Rebuilding {len(manifest.rooms)} room(s), {len(spec['items'])} pieces "
-        f"({stand_ins} catalog stand-ins, {blocks} blocks until their own models exist) ..."
+        f"({finished} drawn from their finish, {stand_ins} catalog stand-ins, {blocks} blocks), "
+        f"{len(spec['skylights'])} roof window(s) ..."
     )
+    if spec["sun"]:
+        console.print(f"  sun at bearing {spec['sun']['bearing']}, "
+                      f"{spec['sun']['elevation']} degrees up")
     started = time.time()
     try:
         rebuild_mod.run(spec, paths.work / "rebuild_spec.json", preview_only)

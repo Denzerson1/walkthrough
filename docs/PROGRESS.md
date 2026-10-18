@@ -7,6 +7,54 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-10-18 — The owner's flat rebuilt 1:1 in Blender
+
+Direction changed after comparing with an X post of an Airbnb modelled in
+Blender: instead of training splats on footage, the flat is **rebuilt** from
+its Polycam Floorplan scan and the photos, lit with Cycles, and the light is
+baked so any phone shows it (`pipeline rebuild`, see PIPELINE.md).
+
+### Verified by running it
+
+- The owner's attic flat (`flat-01`, 34 m², Vienna, roof windows facing
+  147°): scan read into an 8-corner outline with the passage open, 3 doors,
+  4 floor zones, 7 ceiling pieces merged to a flat ceiling and one slope,
+  2 partitions, 13 furniture boxes. Rebuilt and baked in 4.3 min on the
+  2080 Super; `flat.glb` 1.3 MB; loads in Chrome with no console errors.
+- Floors re-laid from the owner's photos: oak planks measured at 19.5 cm
+  (a lattice fit across the rectified shot lands on every seam), the hall's
+  tiles at 60 × 40 cm.
+- Walking under the slope stops where the ceiling drops to 1.8 m (camera
+  held at z = 2.863 against a knee wall at 3.71).
+- Tests: 311 Python, 79 web, all lint clean.
+
+### Bugs found and fixed on the way
+
+- Light map saved linear into an 8-bit image: ~15× too dark in the browser.
+- Light map normalised to the sunlit window linings: the walls got a few
+  dozen levels and JPEG blotches; now normalised to the room, sun clipped.
+- Blotchy bake noise at interior exposure: denoised with OIDN.
+- "Baked" texels marked by alpha, which a new image has everywhere.
+- A gable missed its bend because the scanned ceiling stops 1.3 mm short of
+  the wall line; the crossing test now reaches 2 cm.
+- Union of floor zones left a spike where corners rounded 1 cm apart.
+- Coplanar overlaps at the passage's inside corner (mitred wall ends now),
+  glowing slope edges (hidden faces kept for the bake), light under doors.
+- The A4 sheet is no white reference: optical brighteners read it blue and
+  turned the oak orange; used for scale, perspective and exposure only.
+
+### Not right yet
+
+- Roof window size (78 × 118 cm) and positions are read off photos, not
+  measured. Built-ins the scan missed (niche wardrobe, air conditioner,
+  pendant) are placed by eye.
+- Movable pieces are drawn from parts (blocks) until their own models
+  exist; the bed's box runs head-to-foot along the slope, which the photos
+  do not obviously confirm.
+- The dressing is written by hand; nothing yet writes it from photos.
+
+---
+
 ## 2026-10-04 — First real captures, and the move to Stray Scanner
 
 ### The owner's bedroom, filmed twice

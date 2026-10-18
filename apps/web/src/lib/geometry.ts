@@ -7,7 +7,7 @@
  * unit-tested directly.
  */
 
-import type { Vec2 } from './manifest';
+import type { Vec2, Vec3 } from './manifest';
 
 export const DEG = Math.PI / 180;
 
@@ -279,10 +279,46 @@ export interface WalkableRoom {
   floorPolygon: Vec2[];
   walls: WallSegment[];
   openings: Array<{ type: 'door' | 'window'; wallIndex: number; offset: number; width: number }>;
+  ceilings?: Vec3[][];
 }
 
 /** Shoulder radius of the person being simulated, in metres. */
 export const BODY_RADIUS = 0.24;
+
+/**
+ * The lowest ceiling a person stands under: the 1.6 m eye height plus a head.
+ * Under a roof slope, the camera would otherwise walk up to the knee wall
+ * with the slope cutting through its view.
+ */
+export const HEADROOM = 1.8;
+
+/**
+ * How high the ceiling is over a floor point: the plane of the scanned
+ * ceiling piece above it, or undefined where none is.
+ */
+export function ceilingHeight(p: Vec2, ceilings: Vec3[][]): number | undefined {
+  let best: number | undefined;
+  for (const piece of ceilings) {
+    if (piece.length < 3) continue;
+    if (!pointInPolygon(p, piece.map(([x, , z]) => [x, z] as Vec2))) continue;
+    // Newell's method: the plane's normal, robust for any planar polygon.
+    let nx = 0;
+    let ny = 0;
+    let nz = 0;
+    for (let i = 0; i < piece.length; i++) {
+      const [ax, ay, az] = piece[i];
+      const [bx, by, bz] = piece[(i + 1) % piece.length];
+      nx += (ay - by) * (az + bz);
+      ny += (az - bz) * (ax + bx);
+      nz += (ax - bx) * (ay + by);
+    }
+    if (Math.abs(ny) < 1e-9) continue; // a vertical piece covers no floor
+    const [px, py, pz] = piece[0];
+    const y = py - (nx * (p[0] - px) + nz * (p[1] - pz)) / ny;
+    best = best === undefined ? y : Math.max(best, y);
+  }
+  return best;
+}
 
 /**
  * Distance from a wall's start to the point on it nearest `p`, clamped to the
@@ -323,9 +359,9 @@ export function inDoorway(p: Vec2, room: WalkableRoom, wallIndex: number): boole
  *
  * Standing is allowed inside any room's floor polygon, provided the point is
  * not within `radius` of a wall — unless that wall has a door there, which is
- * what lets someone walk from one room into the next. Rooms are tested
- * independently and the first that accepts wins, so a point in a shared
- * doorway is reachable from both sides.
+ * what lets someone walk from one room into the next — and the ceiling there
+ * clears HEADROOM. Rooms are tested independently and the first that accepts
+ * wins, so a point in a shared doorway is reachable from both sides.
  */
 export function canStand(p: Vec2, rooms: WalkableRoom[], radius = BODY_RADIUS): boolean {
   for (const room of rooms) {
@@ -339,7 +375,9 @@ export function canStand(p: Vec2, rooms: WalkableRoom[], radius = BODY_RADIUS): 
       blocked = true;
       break;
     }
-    if (!blocked) return true;
+    if (blocked) continue;
+    const ceiling = room.ceilings?.length ? ceilingHeight(p, room.ceilings) : undefined;
+    if (ceiling === undefined || ceiling >= HEADROOM) return true;
   }
   return false;
 }
