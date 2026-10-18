@@ -19,6 +19,7 @@ import typer
 from rich.console import Console
 
 from . import frames as frames_mod
+from . import rebuild as rebuild_mod
 from . import roomplan as roomplan_mod
 from . import stray as stray_mod
 from . import train as train_mod
@@ -465,6 +466,66 @@ def floor_cmd(
         "`pipeline export` splits the floor out geometrically from the aligned plane "
         "and the room outline."
     )
+
+
+def _catalog(kind: str) -> list[dict]:
+    folder = repo_root() / "catalog" / kind
+    return [json.loads(p.read_text(encoding="utf-8")) for p in sorted(folder.glob("*.json"))]
+
+
+@app.command()
+def rebuild(
+    project: str = typer.Option(..., "--project", "-p"),
+    roomplan: Path | None = typer.Option(
+        None, help="Floor-plan scan to rebuild from (.glb, .json, .usdz); else the manifest's"
+    ),
+    floor: str = typer.Option("oak-plank-natural", help="Catalog floor id"),
+    wall_colour: str = typer.Option("#eeeae3", help="Wall paint as #rrggbb"),
+    lightmap_size: int = typer.Option(2048, help="Baked-light atlas edge in pixels"),
+    samples: int = typer.Option(1024, help="Cycles samples for the bake"),
+    preview_only: bool = typer.Option(False, help="Only render a still, to judge the look"),
+) -> None:
+    """Rebuild the flat 1:1 from its floor-plan scan in Blender, with baked light."""
+    paths = _paths(project)
+    paths.ensure()
+    manifest = (
+        Manifest.load(paths.manifest) if paths.manifest.is_file()
+        else Manifest(id=project, name=project)
+    )
+    scan_file = _existing(roomplan, "Floor-plan scan") or roomplan_mod.find_export(
+        paths.input / "roomplan"
+    )
+    if scan_file is not None:
+        room, items, _ = roomplan_mod.to_rooms(roomplan_mod.load(scan_file))
+        manifest.rooms, manifest.items = [room], items
+    if not manifest.rooms:
+        raise typer.BadParameter("No rooms: pass --roomplan with a Polycam Floorplan export.")
+
+    floors = {f["id"]: f for f in _catalog("floors")}
+    if floor not in floors:
+        raise typer.BadParameter(f"Unknown floor {floor!r}. Known: {', '.join(sorted(floors))}")
+    spec = rebuild_mod.scene_spec(
+        paths, manifest, floors[floor], _catalog("furniture"), wall_colour, lightmap_size, samples
+    )
+    stand_ins = sum(1 for i in spec["items"] if not i["own"] and i["model"])
+    blocks = sum(1 for i in spec["items"] if not i["model"])
+    console.print(
+        f"Rebuilding {len(manifest.rooms)} room(s), {len(spec['items'])} pieces "
+        f"({stand_ins} catalog stand-ins, {blocks} blocks until their own models exist) ..."
+    )
+    started = time.time()
+    try:
+        rebuild_mod.run(spec, paths.work / "rebuild_spec.json", preview_only)
+    except rebuild_mod.BlenderMissing as exc:
+        raise ToolMissing(str(exc)) from exc
+    console.print(f"  preview: {spec['out']['preview']}")
+    if not preview_only:
+        manifest.assets.model = Path(spec["out"]["glb"]).name
+        manifest.assets.lightmap = Path(spec["out"]["lightmap"]).name
+        meta = json.loads(Path(spec["out"]["meta"]).read_text())
+        manifest.assets.lightmapScale = meta["lightmapScale"]
+        manifest.write(paths.manifest)
+    console.print(f"[green]Rebuilt[/green] in {(time.time() - started) / 60:.1f} min")
 
 
 @app.command(name="run-all")

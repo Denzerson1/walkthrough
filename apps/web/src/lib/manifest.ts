@@ -47,6 +47,11 @@ export interface Opening {
   offset: number;
   width: number;
   height: number;
+  /**
+   * Height of the lower edge above the floor. Absent when unknown: a door
+   * then starts at the floor and a window at 0.9 m (manifest.py DEFAULT_SILL_M).
+   */
+  sill?: number | null;
 }
 
 export interface Room {
@@ -79,6 +84,8 @@ export interface ManifestItem {
   roomId: string;
   box: ItemBox;
   source: 'roomplan' | 'editor';
+  /** The piece's own model (scene/models/*.glb), fitted into `box`. */
+  model?: string | null;
 }
 
 export interface PrivacyMask {
@@ -104,6 +111,11 @@ export interface Manifest {
     sceneNoFloor?: string;
     floor?: string;
     floorShading?: Record<string, string>;
+    /** The rebuilt flat with baked lighting; shown instead of the splat. */
+    model?: string | null;
+    /** Its baked light: an 8-bit atlas on the model's second UV set, holding light / lightmapScale. */
+    lightmap?: string | null;
+    lightmapScale?: number;
   };
 }
 

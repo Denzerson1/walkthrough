@@ -241,6 +241,15 @@ export function Viewer() {
             // Prefer the body-without-floor so floor replacement can work.
             manifest.assets?.sceneNoFloor ?? manifest.assets?.scene ?? 'scene.ply',
           )}
+          model={
+            manifest.assets?.model && manifest.assets.lightmap
+              ? {
+                  url: fileUrl(projectId, manifest.assets.model),
+                  lightmapUrl: fileUrl(projectId, manifest.assets.lightmap),
+                  lightmapScale: manifest.assets.lightmapScale ?? 1,
+                }
+              : undefined
+          }
           floorUrl={
             manifest.assets?.sceneNoFloor && manifest.assets?.floor
               ? fileUrl(projectId, manifest.assets.floor)

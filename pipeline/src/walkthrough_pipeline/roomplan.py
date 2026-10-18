@@ -463,6 +463,7 @@ def to_rooms(
                 offset=round(offset, 3),
                 width=round(float(e.dimensions[0]), 3),
                 height=round(float(e.dimensions[1]), 3),
+                sill=round(max(0.0, float(e.centre[1] - e.dimensions[1] / 2 - floor_y)), 3),
             )
         )
 

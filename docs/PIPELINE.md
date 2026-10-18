@@ -243,3 +243,31 @@ circles in `docs/CAPTURE.md` exist to cover.
 | Out of memory in training | 8 GB VRAM | Lower `--max-splats` or `frames --long-edge` |
 | Download over 60 MB | Too many splats or SH bands | `export --sh-degree 2`, or lower `--max-splats` |
 | Window views missing | Cropped at the walls on purpose | `export --no-crop` |
+
+## Rebuild: the flat 1:1 with baked light
+
+```bash
+pnpm run pipeline rebuild --project flat-01 --roomplan "C:\captures\room.glb" [--floor oak-plank-natural] [--wall-colour "#eeeae3"]
+```
+
+Instead of showing the capture's pixels, rebuild the flat from its
+floor-plan scan (Polycam Floorplan glTF, RoomPlan JSON or USDZ) in Blender
+and bake its light with Cycles on the GPU, the way the X-post apartments
+were made, but automatic and viewable on a phone.
+
+- **Geometry, exact from the scan:** walls with real door and window
+  openings, floor and ceiling slabs, skirting, door and window frames.
+- **Furniture:** every scanned piece in its exact box. A piece's own model
+  (`items[].model`, a `.glb` made from a photo of it, e.g. with Higgsfield)
+  when it exists, a catalog piece of the same kind, or a plain block.
+- **Light:** sky plus a warm sun through the largest window, positioned so
+  the sun patch lands in the room. Baked (diffuse, direct + indirect) into a
+  2048 atlas on a second UV set, 8-bit sRGB plus a scale (~0.3 MB).
+- **Viewer:** shows `flat.glb` unlit (colour × baked light) instead of the
+  splat. Floor swaps change only the texture, so the baked light and
+  shadows stay.
+- `work/rebuild_preview.png` is a Cycles still from the hero view, for
+  judging the look without opening the viewer.
+
+About 4 minutes per room on the 2080 Super. `--preview-only` takes under a
+minute.

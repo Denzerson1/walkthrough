@@ -68,3 +68,15 @@ cd "$REPO"
 UV_PROJECT_ENVIRONMENT="$HOME/.venvs/walkthrough" uv sync --python 3.12 --extra pipeline
 "$HOME/.venvs/walkthrough/bin/python" -c "import pycolmap; \
 print('pipeline ok: pycolmap', pycolmap.__version__, 'cuda', pycolmap.has_cuda)"
+
+# Blender, for `pipeline rebuild` (the 1:1 rebuilt flat with baked light).
+# Its bundled Python runs pipeline/blender/build_flat.py; no extra packages.
+BLENDER_VERSION=5.2.2
+if [ ! -x /opt/blender/blender ]; then
+  curl -sSfL -o /tmp/blender.tar.xz \
+    "https://download.blender.org/release/Blender${BLENDER_VERSION%.*}/blender-${BLENDER_VERSION}-linux-x64.tar.xz"
+  tar -xJf /tmp/blender.tar.xz -C /opt
+  ln -sfn "/opt/blender-${BLENDER_VERSION}-linux-x64" /opt/blender
+  apt-get install -y -q libxi6 libxxf86vm1 libxfixes3 libxrender1 libsm6 libxkbcommon0 libegl1
+fi
+/opt/blender/blender -b --factory-startup --python-expr "import bpy; print('blender ok:', bpy.app.version_string)"

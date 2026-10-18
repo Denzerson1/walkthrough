@@ -25,6 +25,9 @@ IDENTITY_TRANSFORM: Mat4 = [
     [0.0, 0.0, 0.0, 1.0],
 ]
 
+#: Window sill height when a scan does not say: a common European default.
+DEFAULT_SILL_M = 0.9
+
 RoomType = Literal[
     "living", "bedroom", "kitchen", "dining", "bathroom", "hallway", "office", "other"
 ]
@@ -50,6 +53,15 @@ class Opening(BaseModel):
     offset: float
     width: float
     height: float
+    #: Height of the lower edge above the floor. None when unknown: a door
+    #: then starts at the floor and a window at DEFAULT_SILL_M.
+    sill: float | None = None
+
+    @property
+    def bottom(self) -> float:
+        if self.sill is not None:
+            return self.sill
+        return 0.0 if self.type == "door" else DEFAULT_SILL_M
 
 
 class Room(BaseModel):
@@ -85,6 +97,10 @@ class ManifestItem(BaseModel):
     roomId: str
     box: ItemBox
     source: Literal["roomplan", "editor"] = "editor"
+    #: The piece's own 3D model (.glb under scene/models/, made from a photo
+    #: of it), fitted into `box`. None: a catalog piece of the same label
+    #: stands in.
+    model: str | None = None
 
 
 class PrivacyMask(BaseModel):
@@ -98,6 +114,13 @@ class SceneAssets(BaseModel):
     sceneNoFloor: str | None = None
     floor: str | None = None
     floorShading: dict[str, str] = Field(default_factory=dict)
+    #: The rebuilt flat: a glTF model with baked lighting (`pipeline rebuild`).
+    #: When present the viewer shows it instead of the splat.
+    model: str | None = None
+    #: Its baked light: an 8-bit atlas on the model's second UV set, holding
+    #: light / lightmapScale (see build_flat.save_lightmap).
+    lightmap: str | None = None
+    lightmapScale: float = 1.0
 
 
 class Manifest(BaseModel):

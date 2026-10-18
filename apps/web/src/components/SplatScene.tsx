@@ -8,7 +8,7 @@
  */
 
 import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import {
@@ -41,9 +41,19 @@ import type { PlacedItem, ViewerState } from '../lib/viewerState';
  */
 export const DEFAULT_ITEM_SIZE: [number, number, number] = [0.6, 0.6, 0.6];
 
+/** A flat rebuilt by `pipeline rebuild`: glTF plus its baked light. */
+export interface BakedModel {
+  url: string;
+  lightmapUrl: string;
+  /** The 8-bit lightmap holds light / lightmapScale (build_flat.save_lightmap). */
+  lightmapScale: number;
+}
+
 interface Props {
   manifest: Manifest;
   sceneUrl: string;
+  /** When present, shown instead of the splat. */
+  model?: BakedModel;
   /** Floor splats as a separate mesh, when the pipeline has split the scene. */
   floorUrl?: string;
   activeRoomId: string | null;
@@ -127,6 +137,7 @@ function glideDuration(from: Vec2, to: Vec2): number {
 export function SplatScene({
   manifest,
   sceneUrl,
+  model,
   floorUrl,
   activeRoomId,
   viewer,
@@ -198,7 +209,10 @@ export function SplatScene({
     walkCursor: THREE.Mesh;
     splat?: SplatMesh;
     floorSplat?: SplatMesh;
+    model?: THREE.Group;
   } | null>(null);
+  // Effects that touch the rebuilt flat must run again once it has loaded.
+  const [modelReady, setModelReady] = useState(false);
 
   // ---- one-time scene setup -------------------------------------------
   useEffect(() => {
@@ -262,6 +276,8 @@ export function SplatScene({
     scene.add(walkCursor);
 
     sceneRef.current = { scene, camera, renderer, floorGroup, furnitureGroup, walkCursor };
+    // Development only: lets tests and debugging inspect the live scene.
+    if (import.meta.env.DEV) (window as unknown as { __viewer?: unknown }).__viewer = sceneRef.current;
 
     let disposed = false;
     // No orientation flip anywhere below. Scenes reaching the viewer are
@@ -273,7 +289,7 @@ export function SplatScene({
     // When the pipeline has split the scene we load the body and the floor as
     // two meshes, so the floor can be hidden for a replacement. Otherwise we
     // load the single combined scene and floor replacement is unavailable.
-    let pending = floorUrl ? 2 : 1;
+    let pending = model ? 1 : floorUrl ? 2 : 1;
     const settle = () => {
       if (disposed) return;
       pending -= 1;
@@ -283,16 +299,31 @@ export function SplatScene({
       }
     };
 
-    const splat = new SplatMesh({ url: sceneUrl, onLoad: settle });
-    splat.quaternion.identity();
-    scene.add(splat);
-    sceneRef.current.splat = splat;
+    if (model) {
+      // The bake was graded in Blender with AgX at +1 stop; match it.
+      renderer.toneMapping = THREE.AgXToneMapping;
+      renderer.toneMappingExposure = 2;
+      loadBakedModel(model)
+        .then((group) => {
+          if (disposed || !sceneRef.current) return;
+          scene.add(group);
+          sceneRef.current.model = group;
+          setModelReady(true);
+          settle();
+        })
+        .catch(() => onError('Could not load this apartment.'));
+    } else {
+      const splat = new SplatMesh({ url: sceneUrl, onLoad: settle });
+      splat.quaternion.identity();
+      scene.add(splat);
+      sceneRef.current.splat = splat;
 
-    if (floorUrl) {
-      const floorSplat = new SplatMesh({ url: floorUrl, onLoad: settle });
-      floorSplat.quaternion.identity();
-      scene.add(floorSplat);
-      sceneRef.current.floorSplat = floorSplat;
+      if (floorUrl) {
+        const floorSplat = new SplatMesh({ url: floorUrl, onLoad: settle });
+        floorSplat.quaternion.identity();
+        scene.add(floorSplat);
+        sceneRef.current.floorSplat = floorSplat;
+      }
     }
 
     const onResize = () => {
@@ -438,8 +469,9 @@ export function SplatScene({
       disposeChildren(furnitureGroup);
       walkCursor.geometry.dispose();
       (walkCursor.material as THREE.Material).dispose();
-      splat.dispose?.();
+      sceneRef.current?.splat?.dispose?.();
       sceneRef.current?.floorSplat?.dispose?.();
+      if (sceneRef.current?.model) disposeChildren(sceneRef.current.model);
       scene.clear();
       renderer.dispose();
       // dispose() alone leaves the GL context alive. Browsers cap concurrent
@@ -454,7 +486,7 @@ export function SplatScene({
     };
     // sceneUrl identifies the scene; the callbacks are stable in practice.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sceneUrl, floorUrl]);
+  }, [sceneUrl, floorUrl, model?.url]);
 
   // ---- pointer, wheel and keyboard interaction -------------------------
   useEffect(() => {
@@ -877,6 +909,17 @@ export function SplatScene({
     const group = ctx.floorGroup;
     disposeChildren(group);
 
+    // A rebuilt flat swaps the floor's texture in place, keeping its baked
+    // light and shadows; drawing a separate floor over it would lose both.
+    if (ctx.model) {
+      for (const room of manifest.rooms) {
+        const floorId = showingOriginal ? undefined : viewer.floors[room.id];
+        const floor = floorId ? floorCatalog.find((f) => f.id === floorId) : undefined;
+        swapModelFloor(ctx.model, room.id, floor);
+      }
+      return;
+    }
+
     const anyReplaced = Object.keys(viewer.floors).length > 0;
     const hideFloorSplats = anyReplaced;
 
@@ -895,7 +938,8 @@ export function SplatScene({
       const floor = floorId ? floorCatalog.find((f) => f.id === floorId) : undefined;
       group.add(buildFloorMesh(room, floor));
     }
-  }, [viewer.floors, manifest, floorCatalog]);
+    // showingOriginal and modelReady only matter for a rebuilt flat (above).
+  }, [viewer.floors, manifest, floorCatalog, showingOriginal, modelReady]);
 
   // "Hold to compare" must not hitch: toggle visibility rather than
   // disposing and rebuilding every floor and furniture mesh twice per press.
@@ -1085,6 +1129,88 @@ function loadFloorMaps(
 }
 
 
+
+/**
+ * A rebuilt flat with its baked light.
+ *
+ * Every surface becomes an unlit material — its colour times the baked light
+ * — so phones draw what Cycles computed, and live lights (there for placed
+ * catalog furniture) cannot light the room a second time.
+ */
+async function loadBakedModel(model: BakedModel): Promise<THREE.Group> {
+  const [gltf, lightMap] = await Promise.all([
+    new GLTFLoader().loadAsync(model.url),
+    new THREE.TextureLoader().loadAsync(model.lightmapUrl),
+  ]);
+  // Same convention as the glTF's own textures, on its second UV set.
+  lightMap.flipY = false;
+  lightMap.colorSpace = THREE.SRGBColorSpace;
+  lightMap.channel = 1;
+  gltf.scene.traverse((node) => {
+    if (!(node instanceof THREE.Mesh)) return;
+    const source = node.material as THREE.MeshStandardMaterial;
+    const material = new THREE.MeshBasicMaterial({
+      name: source.name,
+      map: source.map,
+      color: source.color,
+      transparent: source.transparent,
+      opacity: source.opacity,
+    });
+    if (!source.transparent) {
+      material.lightMap = lightMap;
+      // MeshBasicMaterial divides the light map by pi (a Lambert BRDF).
+      material.lightMapIntensity = model.lightmapScale * Math.PI;
+    }
+    material.userData.originalMap = source.map;
+    material.userData.originalColor = source.color.clone();
+    source.dispose();
+    node.material = material;
+  });
+  return gltf.scene;
+}
+
+/**
+ * Put a catalog floor's texture on a rebuilt room's floor, or restore the
+ * scanned one when `floor` is undefined. The baked light stays: only the
+ * colour under it changes.
+ */
+function swapModelFloor(model: THREE.Group, roomId: string, floor: CatalogItem | undefined): void {
+  model.traverse((node) => {
+    if (!(node instanceof THREE.Mesh) || node.userData.roomId !== roomId) return;
+    const material = node.material as THREE.MeshBasicMaterial;
+    const swapped = material.userData.swapped as THREE.Texture | undefined;
+    if (swapped) {
+      swapped.dispose();
+      material.userData.swapped = undefined;
+    }
+    material.map = material.userData.originalMap ?? null;
+    material.color.copy(material.userData.originalColor);
+    material.needsUpdate = true;
+    // Only the latest request may land: an older download finishing late
+    // would otherwise put back a floor the user has already moved on from.
+    material.userData.request = floor?.id;
+    const albedo = floor?.maps?.albedo;
+    if (!floor || !albedo) return;
+    // The floor's UVs count tiles of the rebuild's floor; rescale to this one's.
+    const [baseW, baseH] = (node.userData.tileM as [number, number] | undefined) ?? [1, 1];
+    const [w, h] = floor.tileSizeM ?? [baseW, baseH];
+    new THREE.TextureLoader().load(apiUrl(albedo), (texture) => {
+      if (material.userData.request !== floor.id || !node.parent) {
+        texture.dispose();
+        return;
+      }
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.flipY = false;
+      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(baseW / w, baseH / h);
+      texture.anisotropy = 8;
+      material.map = texture;
+      material.color.set(floor.tintAlbedo ? floorColor(floor) : 0xffffff);
+      material.userData.swapped = texture;
+      material.needsUpdate = true;
+    });
+  });
+}
 
 /**
  * Loaded GLB scenes, keyed by URL.
