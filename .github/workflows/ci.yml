@@ -81,6 +81,10 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          # The API server Playwright starts with `uv run` can outlive the
+          # tests and hold uv's cache lock; the post-job prune then waits
+          # five minutes for it and fails a green run.
+          prune-cache: false
 
       - run: uv python install 3.11
       - run: uv sync --dev
