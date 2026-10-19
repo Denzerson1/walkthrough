@@ -1183,8 +1183,8 @@ const METER_KEY = 0.33;
 
 /** How much each surface reflects of the room around it (by material name). */
 const REFLECTIVITY: Record<string, number> = {
-  'surface-gloss': 0.12,
-  'surface-black': 0.22,
+  'surface-gloss': 0.07,
+  'surface-black': 0.16,
   'surface-steel': 0.3,
   steel: 0.3,
   'surface-alu': 0.22,
@@ -1206,7 +1206,7 @@ function addReflections(
   model: THREE.Object3D,
   at: [number, number, number] | undefined,
 ): void {
-  const target = new THREE.WebGLCubeRenderTarget(256, {
+  const target = new THREE.WebGLCubeRenderTarget(512, {
     generateMipmaps: true,
     minFilter: THREE.LinearMipmapLinearFilter,
   });
@@ -1269,6 +1269,8 @@ async function loadBakedModel(model: BakedModel, anisotropy: number): Promise<TH
       decodeLightMaps(material, single);
     }
     if (!baked && source.name !== "glass") material.toneMapped = false;
+    // A ceiling light that is on: as bright as a lit panel, whatever the exposure.
+    if (source.name === "lamp") material.color.setRGB(1.6, 1.55, 1.45);
     if (source.name === "sky") material.fog = false;
     // The neighbourhood carries its sunlight and shadows in its vertices.
     material.vertexColors = Boolean(node.geometry.getAttribute("color"));

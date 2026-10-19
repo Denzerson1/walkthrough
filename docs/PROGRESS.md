@@ -7,6 +7,24 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-10-19 — The hall clean, the ceiling joints sealed
+
+- **Grey spots on the door frames and hall walls:** two causes. The trim
+  had ~4 texels across a 7 cm frame at the walls' light-map density: it
+  now gets 6x the atlas share and smoothing of its own. And the hall is
+  lit only by bounce, the noisiest light to bake: its flush ceiling light
+  (in the owner's photos) is on now, soft and low (dressing `lights`), so
+  its light is direct and clean; the camera still keeps it darker than
+  the main room.
+- **White line at the wall-ceiling joint:** the scanned ceiling's outline
+  missed the walls by a few millimetres and the slab reached only 2 mm
+  past it: a crack the bake saw the sky through. Ceiling slabs now reach
+  over the walls' full thickness.
+- The bake's exposure is set on the walls and ceilings, not the whole
+  atlas (the trim's bigger share had darkened the room).
+- Forge 3D sheet for the owner (`forge3d-furniture-sheet-v2.pdf`): ten
+  models incl. kitchen and island, all photos per piece cropped, prompts.
+
 ## 2026-10-19 — The view is the owner's photos; a real sky; a clean hall
 
 - **View:** the photos out of the two windows, stood in 3D from their own

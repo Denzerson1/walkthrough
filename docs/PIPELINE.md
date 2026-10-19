@@ -286,6 +286,9 @@ cannot see; placed by hand from the capture photos):
   sheet in the shot gives scale and perspective (its corners rectify the
   floor plane) and the exposure; the plank or tile lattice is fitted and
   real planks or tile faces are cut out and laid again, seamlessly.
+- `lights`: the flat's own ceiling lights that are on (`at` x, y, z; `size`,
+  `power` in W, `colour`): a soft area light under a flush lit panel. A space
+  lit only by bounce bakes noisy; its own lamp makes its light clean.
 - `viewPhotos`: the owner's photos out of two windows (`photo`, the
   `window` it was taken from, `keep`: the part to use, as fractions, to cut
   the window's own frame away). They are the view: see "The view out" below.

@@ -276,9 +276,13 @@ def build_ceilings(b: Builder, room: dict, skylights: list[dict]) -> None:
     for c in ceilings:
         if is_flat(c):
             levels[round(sum(p[1] for p in c) / len(c), 3)].append([[p[0], p[2]] for p in c])
+    # Each slab reaches over the walls' full thickness. The scanned ceiling's
+    # outline misses the walls by millimetres to centimetres; reaching 2 mm
+    # past it left a crack along the hall's walls that lit up as a white line.
+    # Over the walls, the slab rests on their tops, out of sight.
     for y, plans in levels.items():
         outline = polygon_union(plans) if len(plans) > 1 else plans[0]
-        b.slab("ceiling", grow(outline, 0.002), y, y + SLAB_T)
+        b.slab("ceiling", grow(outline, WALL_T), y, y + SLAB_T)
     for index, c in enumerate(ceilings):
         if is_flat(c):
             continue
@@ -286,9 +290,9 @@ def build_ceilings(b: Builder, room: dict, skylights: list[dict]) -> None:
         if frame is None:
             frame = slope_frame(c)
         holes = [sk["hole"] for sk in skylights if sk["ceiling"] == index]
-        lu, lv, g = frame["lu"], frame["lv"], 0.002
+        lu, lv, g = frame["lu"], frame["lv"], WALL_T
         for u0, u1, v0, v1 in wall_cells(lu, lv, holes):
-            # Grown a hair past the piece's own edges, like the flat slabs.
+            # Grown over the walls past the piece's own edges, like the flat slabs.
             slope_box(b, "ceiling", frame,
                       u0 - g if u0 < 1e-6 else u0, u1 + g if u1 > lu - 1e-6 else u1,
                       v0 - g if v0 < 1e-6 else v0, v1 + g if v1 > lv - 1e-6 else v1,
@@ -1108,6 +1112,45 @@ def furniture(item: dict, surfaces: dict) -> bpy.types.Object:
 # --------------------------------------------------------------------------
 
 
+def ceiling_lights(spec: dict) -> list[bpy.types.Object]:
+    """
+    The flat's own ceiling lights that are on (the dressing's `lights`): a
+    soft square area light just under each fixture, and the fixture, a flush
+    white panel shown lit. A space lit only by light bounced in from
+    elsewhere (the hall) bakes noisy, as grey blotches; its own lamp gives
+    it clean direct light, as in the owner's photos.
+    """
+    fixtures = []
+    for i, lamp in enumerate(spec.get("lights") or []):
+        x, y, z = lamp["at"]
+        size = lamp.get("size", 0.25)
+        area = bpy.data.lights.new(f"lamp-light-{i}", "AREA")
+        area.shape, area.size = "SQUARE", size
+        area.energy = lamp.get("power", 15.0)
+        area.color = lamp.get("colour", (1.0, 0.86, 0.72))
+        obj = bpy.data.objects.new(area.name, area)
+        bpy.context.collection.objects.link(obj)
+        obj.location = P(x, y - 0.012, z)  # an area light shines down its -Z: down
+        bm = bmesh.new()
+        h = size / 2
+        verts = [bm.verts.new(P(x + dx, y - 0.008, z + dz))
+                 for dx, dz in ((-h, -h), (h, -h), (h, h), (-h, h))]
+        face = bm.faces.new(verts)
+        face.normal_update()
+        if face.normal.dot(P(0, -1, 0)) < 0:
+            face.normal_flip()
+        mesh = bpy.data.meshes.new(f"lamp-{i}")
+        bm.to_mesh(mesh)
+        bm.free()
+        mesh.materials.append(material("lamp", "#fffaf2", 0.5))
+        panel = bpy.data.objects.new(f"lamp-{i}", mesh)
+        bpy.context.collection.objects.link(panel)
+        # Seen, not in the way: the light shines past it, and the bake skips it.
+        panel.visible_shadow = False
+        fixtures.append(panel)
+    return fixtures
+
+
 def light(spec: dict, windows: list[dict]) -> tuple[float, float] | None:
     """Sky, sun and fallback lamps. Returns where the sun patch lands (x, z), if known."""
     world = bpy.context.scene.world or bpy.data.worlds.new("world")
@@ -1474,7 +1517,17 @@ def save_lightmap(baked: bpy.types.Image, path: str, scratch: Path) -> tuple[flo
     if covered.any():
         shade = np.median(rgb[covered], axis=0)
         rgb = rgb * (shade.mean() / np.maximum(shade, 1e-6)) ** WHITE_BALANCE
-    typical = float(np.median(rgb.max(axis=1)[covered])) if covered.any() else 1.0
+    # The room's typical light: on its walls and ceilings, which are what a
+    # camera exposes for. Over the whole atlas, the trim's larger share of
+    # it (ATLAS_WEIGHT) and a lit hall pulled the median up, the room down.
+    room = np.zeros((size, size), bool)
+    for name in ("wall", "ceiling"):
+        if name in CELLS:
+            cx, cy, side = CELLS[name]
+            room[int(cy * size) : int((cy + side) * size) + 1,
+                 int(cx * size) : int((cx + side) * size) + 1] = True
+    sample = covered & room.ravel() if (covered & room.ravel()).any() else covered
+    typical = float(np.median(rgb.max(axis=1)[sample])) if sample.any() else 1.0
     scale = float(max(min(np.percentile(rgb.max(axis=1), 99.9), CLIP * typical), 1e-6))
     # Mostly white walls and ceilings: albedo ~0.85 under the typical light.
     exposure = min(max(EXPOSE_TO / (0.85 * max(typical, 1e-6)), 1.0), 64.0)
@@ -1567,6 +1620,7 @@ def main() -> None:
     views = outside(spec)
     site = neighbourhood(spec)
     patch = light(spec, windows)
+    ceiling_lights(spec)
 
     out = spec["out"]
     if preview_only:

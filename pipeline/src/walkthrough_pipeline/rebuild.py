@@ -432,6 +432,7 @@ def scene_spec(
         "items": items,
         "floors": floors,
         "skylights": skylights,
+        "lights": dressing.get("lights", []),
         "outside": outside_view(paths, wanted),
         "site": surroundings,
         "surfaces": surfaces(paths, dressing.get("surfaces")),
