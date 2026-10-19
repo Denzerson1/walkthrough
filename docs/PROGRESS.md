@@ -7,6 +7,32 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-10-19 — Layout 1:1 with the photos, a warmer light
+
+Every capture photo was set beside a render from its own viewpoint (24 mm,
+71.6° vertical, from the EXIF) and the differences fixed:
+
+- **Bed** turned 90°: its head is at the knee wall under the slope, its
+  side along the gable wall (bed1-3). The scan's box ran along the slope.
+- **Wardrobe** is an L (garderobe1-3): along the gable wall the open
+  section (1.0 m) and one door (0.5 m), along the hall wall a second wing
+  whose door has the handle at the inner corner and whose oak side faces
+  the room. Measured off the frontal photo garderobe3.
+- **Hall doors** are concealed-frame doors, flush with the wall in a thin
+  dark gap, no architrave; only the entrance has a white frame. Every
+  handle is on the left seen from the hall (dressing `doors`).
+- **Hall niche**: rustic oak, one shelf, a rail of coats, a white
+  two-drawer unit (wall4). The open wardrobe's clothes are a jacket and a
+  coat at the right, as photographed, not a dark block.
+- **Light-map unwrap without aspect correction:** photo-textured pieces
+  (wardrobe, sofa, stools) had islands squashed up to 16x; a drawer front
+  baked black, the sofa striped. Furniture now gets the walls' density.
+- **Warmer:** a slight warm cast on the baked light (`WARMTH`).
+
+Not checked against a photo: the bathroom side of the hall doors (not
+modelled), and the electrical boxes and intercom on the hall walls (not
+built). Sofa, bed and stools are still drawn from parts.
+
 ## 2026-10-19 — The hall clean, the ceiling joints sealed
 
 - **Grey spots on the door frames and hall walls:** two causes. The trim

@@ -304,10 +304,15 @@ cannot see; placed by hand from the capture photos):
   own model exists: `kitchen-base` (fronts in `columns`, one tagged `sink`
   gets basin and tap), `kitchen-wall` (`rows`, `columns`), `kitchen-tall`,
   `oven`, `hob`, `island` (oak bar top overhanging `overhangEnd` and
-  `overhangBack`), `wardrobe` (`doors`), `open-wardrobe` (`drawers`), `bed`,
-  `sofa`, `stool`, `tv`; `min`/`max` correct a scanned box, `front` names
-  the side a piece faces. `extras`: what the scanner missed (panels,
-  shelves, the air conditioner, a pendant, more stools).
+  `overhangBack`), `wardrobe` (`doors`, or door widths as `columns`;
+  `handles` as fractions across the front, `[]` for none), `open-wardrobe`
+  (`drawers`), `coat-niche`, `bed`, `sofa`, `stool`, `tv`; `min`/`max`
+  correct a scanned box, `front` names the side a piece faces. `extras`:
+  what the scanner missed (panels, shelves, the air conditioner, a
+  pendant, more stools, the corner wardrobe's second wing).
+- `doors`: how each door is hung, by the index of its wall: `latch`
+  (`start` or `end` of the wall: the handle's side) and `frame` (false: a
+  concealed frame, the leaf flush with the wall in a 4 mm dark gap).
 - `hero`: the preview's view, also the walkthrough's start.
 
 **Light:** Cycles bakes diffuse light (direct and bounced) into one 2048
@@ -315,12 +320,16 @@ atlas at 2048 samples, with light portals in the roof windows, denoised
 with Open Image Denoise, stored with a gamma of 4 (steeper than sRGB: the
 dim hall, lit only by bounce, had too few of the 256 levels and showed grey
 blotches once brightened), white balanced like a camera (the shade's colour
-cast mostly taken out, so walls read white and sun stays warm) and
+cast mostly taken out, so walls read white and sun stays warm; then a
+slight warm cast over it all, `WARMTH`) and
 exposed against the owner's photos (sun spots clip, as they do in a
 photo). With `sun.times`, once per time of day: `flat_light-HHMM.jpg`
 each, listed in the manifest's `assets.lighting`; a camera's exposure
 follows each time halfway, so the evening stays darker. Faces nobody sees from inside stay in for the
-bake, so the room's solids block light, but get no atlas. Oak, worktop and
+bake, so the room's solids block light, but get no atlas. Each object is
+unwrapped on its own without aspect correction (with it, a photo
+texture's aspect squashed a piece's islands up to 16x and thin parts
+baked black). Oak, worktop and
 fabric carry generated textures (`photo_texture.surface_texture`).
 
 **Viewer:** shows `flat.glb` unlit (colour × baked light), antialiased,

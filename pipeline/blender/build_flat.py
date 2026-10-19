@@ -225,7 +225,7 @@ def build_room(b: Builder, room: dict, skylights: list[dict]) -> list[dict]:
         spans = opening_spans(wall, h)
         for o, (lo, hi, bottom, top) in zip(openings, spans, strict=True):
             if o["type"] == "door":
-                door(b, wall, lo, hi, top)
+                door(b, wall, lo, hi, top, o.get("frame", True), o.get("latch", "end"))
             else:
                 window(b, wall, lo, hi, bottom, top)
                 (dx, dz), (nx, nz), _ = wall_frame(wall["start"], wall["end"])
@@ -651,9 +651,24 @@ def bake_neighbourhood(objects: list[bpy.types.Object], label: str,
     return scale
 
 
-def door(b: Builder, wall: dict, lo: float, hi: float, top: float) -> None:
+def door(b: Builder, wall: dict, lo: float, hi: float, top: float, framed: bool = True,
+         latch: str = "end") -> None:
+    """
+    A door in the wall from lo to hi: its leaf, the handle at the `latch`
+    end of the wall ("start" or "end"), and either an architrave round it
+    (`framed`) or, for a concealed-frame door, the leaf flush with the wall
+    and only a 4 mm dark shadow gap round it.
+    """
     mid = WALL_T / 2
-    wall_box(b, "trim", wall, lo + 0.005, hi - 0.005, 0, top - 0.005, mid - 0.02, mid + 0.02)
+    if framed:
+        face = mid - 0.02
+        wall_box(b, "trim", wall, lo + 0.005, hi - 0.005, 0, top - 0.005, face, mid + 0.02)
+    else:
+        # The gap's dark back sits behind the leaf and a hair inside the
+        # opening's reveals, so no faces are coplanar.
+        face = 0.0
+        wall_box(b, "trim", wall, lo + 0.004, hi - 0.004, 0.006, top - 0.004, face, 0.04)
+        wall_box(b, "gap", wall, lo + 0.001, hi - 0.001, 0, top - 0.001, 0.006, 0.05)
     # What lies behind a door (a bathroom, the stairwell) is not modelled, so
     # back the doorway: its leaf's 5 mm gaps otherwise let the sky shine in.
     wall_box(b, "wall", wall, lo, hi, 0, top, WALL_T - 0.01, WALL_T)
@@ -663,10 +678,13 @@ def door(b: Builder, wall: dict, lo: float, hi: float, top: float) -> None:
     wall_box(b, "trim", wall, lo, hi, -SLAB_T, 0.003, 0, WALL_T)
     # A lever handle on the room side, at the latch edge: rose, neck, lever
     # pointing back towards the hinges.
-    face, hu = mid - 0.02, hi - 0.075
+    hu, back = (hi - 0.075, -1) if latch == "end" else (lo + 0.075, 1)
     wall_box(b, "steel", wall, hu - 0.025, hu + 0.025, 1.025, 1.075, face - 0.008, face)
     wall_box(b, "steel", wall, hu - 0.01, hu + 0.01, 1.04, 1.06, face - 0.058, face - 0.008)
-    wall_box(b, "steel", wall, hu - 0.14, hu + 0.01, 1.04, 1.06, face - 0.075, face - 0.058)
+    wall_box(b, "steel", wall, min(hu - 0.01 * back, hu + 0.14 * back),
+             max(hu - 0.01 * back, hu + 0.14 * back), 1.04, 1.06, face - 0.075, face - 0.058)
+    if not framed:
+        return
     # Sides stop where the head starts: overlapping coplanar boxes render black.
     wall_box(b, "trim", wall, lo - TRIM_W, lo, 0, top, -TRIM_D, 0)
     wall_box(b, "trim", wall, hi, hi + TRIM_W, 0, top, -TRIM_D, 0)
@@ -689,10 +707,11 @@ def window(b: Builder, wall: dict, lo: float, hi: float, bottom: float, top: flo
 def skirting(b: Builder, wall: dict, doors: list[dict], length: float) -> None:
     u = 0.0
     for o in doors:
-        lo = max(0.0, o["offset"] - o["width"] / 2 - TRIM_W)
+        trim = TRIM_W if o.get("frame", True) else 0.0
+        lo = max(0.0, o["offset"] - o["width"] / 2 - trim)
         if lo > u:
             wall_box(b, "trim", wall, u, lo, 0, SKIRTING_H, -SKIRTING_D, 0)
-        u = o["offset"] + o["width"] / 2 + TRIM_W
+        u = o["offset"] + o["width"] / 2 + trim
     if u < length:
         wall_box(b, "trim", wall, u, length, 0, SKIRTING_H, -SKIRTING_D, 0)
 
@@ -751,6 +770,14 @@ SOFTNESS = {"sofa": (0.06, 5), "bed": (0.025, 3), "stool": (0.006, 2), "air-con"
 Part = tuple[str, tuple[float, float, float, float, float, float]]
 
 
+def column_widths(x0: float, x1: float, columns: list) -> list[float]:
+    """The widths of a run of `columns` (see `fronts`), a width of 0 sharing what is left."""
+    fixed = sum(c[0] for c in columns if c[0])
+    free = sum(1 for c in columns if not c[0])
+    share = (x1 - x0 - fixed) / free if free else 0.0
+    return [c[0] or share for c in columns]
+
+
 def fronts(x0: float, x1: float, z0: float, z1: float, y: float, columns: list,
            surface: str = "gloss", grips: bool = True) -> list[Part]:
     """
@@ -759,13 +786,10 @@ def fronts(x0: float, x1: float, z0: float, z1: float, y: float, columns: list,
     left; each column's fronts are stacked with a recessed aluminium grip
     channel between them (`grips`), as on a handleless kitchen, or a plain gap.
     """
-    fixed = sum(c[0] for c in columns if c[0])
-    free = sum(1 for c in columns if not c[0])
-    share = (x1 - x0 - fixed) / free if free else 0.0
     parts: list[Part] = []
     x = x0
-    for column in columns:
-        width, count = column[0] or share, column[1]
+    for column, width in zip(columns, column_widths(x0, x1, columns), strict=True):
+        count = column[1]
         between = GRIP if grips else GAP
         height = (z1 - z0 - between * (count - 1)) / count
         for i in range(count):
@@ -781,12 +805,8 @@ def fronts(x0: float, x1: float, z0: float, z1: float, y: float, columns: list,
 
 def column_span(x0: float, x1: float, columns: list, tag: str) -> tuple[float, float] | None:
     """Where along a run of `columns` (see `fronts`) the one tagged `tag` lies."""
-    fixed = sum(c[0] for c in columns if c[0])
-    free = sum(1 for c in columns if not c[0])
-    share = (x1 - x0 - fixed) / free if free else 0.0
     x = x0
-    for column in columns:
-        width = column[0] or share
+    for column, width in zip(columns, column_widths(x0, x1, columns), strict=True):
         if tag in column[2:]:
             return x, x + width
         x += width
@@ -900,23 +920,27 @@ def finish_parts(finish: str, w: float, h: float, d: float, opts: dict) -> list[
                                        h + 0.45, h + 0.462))]
         return parts
     if finish == "wardrobe":
-        doors = opts.get("doors", 2)
+        # Doors left to right as `columns` (see `fronts`), else `doors` equal
+        # ones. Bar handles beside each meeting edge, or where `handles` puts
+        # them: fractions across the front from its left. A corner unit's
+        # door hidden behind the other wing gets none.
+        columns = opts.get("columns") or [[0, 1]] * opts.get("doors", 2)
         parts = [("oak", (x0, x1, y0 + FRONT_T, y1, 0, h)),
-                 *fronts(x0, x1, 0.06, h - 0.004, y0, [[0, 1]] * doors, surface="oak",
-                         grips=False)]
-        width = w / doors
-        for i in range(doors - 1):  # bar handles beside each meeting edge
-            edge = x0 + width * (i + 1)
-            for hx in (edge - 0.05, edge + 0.035):
-                parts += [("steel", (hx, hx + 0.015, y0 - 0.035, y0 - 0.02, 0.95, 1.35)),
-                          ("steel", (hx, hx + 0.015, y0 - 0.02, y0, 0.96, 0.98)),
-                          ("steel", (hx, hx + 0.015, y0 - 0.02, y0, 1.32, 1.34))]
+                 *fronts(x0, x1, 0.06, h - 0.004, y0, columns, surface="oak", grips=False)]
+        widths = column_widths(x0, x1, columns)
+        edges = [x0 + sum(widths[: i + 1]) for i in range(len(widths) - 1)]
+        spots = ([x0 + f * w for f in opts["handles"]] if "handles" in opts
+                 else [hx for edge in edges for hx in (edge - 0.05, edge + 0.035)])
+        for hx in spots:
+            parts += [("steel", (hx, hx + 0.015, y0 - 0.035, y0 - 0.02, 0.95, 1.35)),
+                      ("steel", (hx, hx + 0.015, y0 - 0.02, y0, 0.96, 0.98)),
+                      ("steel", (hx, hx + 0.015, y0 - 0.02, y0, 1.32, 1.34))]
         return parts
     if finish == "open-wardrobe":
         # An open wardrobe section: both sides full height, top, plinth and
         # back, two shelves at the top, a rail with clothes, a glass shelf
         # with boxes, drawers and a wire basket below.
-        ym = (y0 + y1) / 2
+        ym, inner = (y0 + y1) / 2, xi1 - xi0
         drawers = opts.get("drawers", 3)
         parts = [("oak", (x0, xi0, y0, y1, 0, h)), ("oak", (xi1, x1, y0, y1, 0, h)),
                  ("oak", (xi0, xi1, y0, y1, h - 0.018, h)),
@@ -925,10 +949,12 @@ def finish_parts(finish: str, w: float, h: float, d: float, opts: dict) -> list[
                  ("oak", (xi0, xi1, y0 + 0.01, y1 - 0.008, h - 0.38, h - 0.362)),
                  ("oak", (xi0, xi1, y0 + 0.01, y1 - 0.008, h - 0.2, h - 0.182)),
                  ("steel", (xi0, xi1, ym - 0.01, ym + 0.01, h - 0.46, h - 0.44)),
-                 ("coats", (xi0 + 0.06, xi0 + 0.55 * (xi1 - xi0), ym - 0.2, ym + 0.2,
-                            1.08, h - 0.47)),
-                 ("wenge", (xi0 + 0.58 * (xi1 - xi0), xi1 - 0.05, ym - 0.18, ym + 0.18,
-                            1.25, h - 0.47))]
+                 # As photographed (garderobe3): a leather jacket and a pale
+                 # coat at the right, the oak back open beside them.
+                 ("wenge", (xi0 + 0.66 * inner, xi0 + 0.89 * inner, ym - 0.17, ym + 0.17,
+                            1.23, h - 0.47)),
+                 ("coat-light", (xi0 + 0.9 * inner, xi1 - 0.01, ym - 0.15, ym + 0.15,
+                                 1.15, h - 0.47))]
         if drawers:
             parts += [("glass-shelf", (xi0, xi1, y0 + 0.02, y1 - 0.01, 0.98, 0.99)),
                       ("boxes", (xi0 + 0.03, xi0 + 0.3, y0 + 0.05, y0 + 0.36, 0.99, 1.13)),
@@ -940,6 +966,28 @@ def finish_parts(finish: str, w: float, h: float, d: float, opts: dict) -> list[
                 parts += [("oak", (xi0 + GAP, xi1 - GAP, y0, y0 + FRONT_T, za, za + height)),
                           ("oak", (xi0 + 0.01, xi1 - 0.01, y0 + FRONT_T, y1 - 0.02,
                                    za + 0.02, za + height - 0.02))]
+        return parts
+    if finish == "coat-niche":
+        # The hall's coat niche (photo wall4), a wall on its left and a
+        # partition on its right, both outside the box: rustic oak lining and
+        # a shelf near the top, a rail under it with coats hanging down to a
+        # white two-drawer unit with an oak top, on a plinth.
+        ym, top = (y0 + y1) / 2, h - 0.40
+        parts = [("oak-warm", (x0, xi0, y0, y1, 0, h)),
+                 ("oak-warm", (xi0, x1, y1 - 0.018, y1, 0, h)),
+                 ("oak-warm", (xi0, x1, y0 + 0.01, y1 - 0.018, h - 0.32, h - 0.30)),
+                 ("steel", (xi0, x1, ym - 0.01, ym + 0.01, top, top + 0.02)),
+                 ("plinth", (xi0, x1, y0 + 0.05, y1 - 0.018, 0, 0.08)),
+                 ("white", (xi0, x1, y0 + FRONT_T, y1 - 0.018, 0.08, 0.5)),
+                 ("oak-warm", (xi0, x1, y0, y1 - 0.018, 0.5, 0.518)),
+                 *fronts(xi0, x1, 0.08 + GAP, 0.5 - GAP, y0, [[0, 2]], surface="white")]
+        # Coats side by side, long dark ones and a pale trench.
+        x = xi0 + 0.02
+        for share, bottom, surface in ((0.42, 0.6, "coats"), (0.18, 0.88, "coat-light"),
+                                       (0.4, 0.66, "coats")):
+            width = share * (x1 - 0.04 - (xi0 + 0.02))
+            parts.append((surface, (x, x + width - 0.01, ym - 0.2, ym + 0.2, bottom, top - 0.02)))
+            x += width
         return parts
     if finish == "bed":
         base = min(0.26, h * 0.4)
@@ -1382,7 +1430,11 @@ def layout_lightmap(objects: list[bpy.types.Object], margin: float = 0.006) -> N
         obj.select_set(True)
         bpy.context.view_layer.objects.active = obj
         bpy.ops.object.mode_set(mode="EDIT")
-        bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.02)
+        # Not corrected for a texture's aspect: that squashed the islands of
+        # pieces with a photo texture (the wardrobe's oak, 1:4) up to 16x
+        # across, and a drawer front's light came out black.
+        bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.02,
+                                 correct_aspect=False)
         bpy.ops.object.mode_set(mode="OBJECT")
         # Unseen faces shrink to a point: in the bake, but on no texels.
         uv = obj.data.uv_layers["lightmap"].data
@@ -1475,6 +1527,9 @@ EXPOSE_TO, CLIP = 0.22, 16.0
 #: balance: the shade's colour is made neutral (walls white, as in the
 #: photos), sun patches stay warmer than it. 1 would neutralise it fully.
 WHITE_BALANCE = 0.6
+#: Then a slight warm cast over it all, like a camera set a little below
+#: daylight: the owner found the neutral room a touch cool.
+WARMTH = (1.05, 1.0, 0.91)
 #: The light map holds (light / scale) ** (1 / LIGHTMAP_GAMMA): steeper than
 #: sRGB, so dim light (a hall lit only by bounce) gets enough of the 256
 #: levels. With sRGB, the hall's few levels showed as grey blotches and JPEG
@@ -1517,6 +1572,7 @@ def save_lightmap(baked: bpy.types.Image, path: str, scratch: Path) -> tuple[flo
     if covered.any():
         shade = np.median(rgb[covered], axis=0)
         rgb = rgb * (shade.mean() / np.maximum(shade, 1e-6)) ** WHITE_BALANCE
+    rgb = rgb * np.array(WARMTH, dtype=np.float32)
     # The room's typical light: on its walls and ceilings, which are what a
     # camera exposes for. Over the whole atlas, the trim's larger share of
     # it (ATLAS_WEIGHT) and a lit hall pulled the median up, the room down.
@@ -1594,6 +1650,7 @@ def main() -> None:
         "ceiling": material("ceiling", "#f4f2ee", 0.95),
         "trim": trim,
         "skylight": trim,
+        "gap": material("gap", "#1c1b1a", 0.8),
         "floor": floor_material("floor", spec["floors"]["main"]),
         "glass": glass_material(),
     }

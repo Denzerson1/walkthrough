@@ -65,6 +65,7 @@ SURFACES: dict[str, tuple[str, float, str | None]] = {
     "boucle": ("#e8e3d9", 1.0, "boucle"),
     "fabric": ("#a8a39d", 0.9, "boucle"),    # bar stools
     "coats": ("#2e2b2c", 0.95, None),
+    "coat-light": ("#b3a792", 0.95, None),  # a trench in the hall niche
     "shade": ("#f3efe5", 0.8, None),
     "glass-shelf": ("#dfe7e6", 0.05, None),
     "frame": ("#6b5038", 0.5, None),
@@ -356,6 +357,10 @@ def scene_spec(
                                 "width": o.width,
                                 "height": o.height,
                                 "bottom": o.bottom,
+                                # How the door is hung (`latch` side, `frame`),
+                                # from the photos: the scan cannot tell.
+                                **(dressing.get("doors", {}).get(str(i), {})
+                                   if o.type == "door" else {}),
                             }
                             for o in room.openings
                             if o.wallIndex == i
