@@ -1170,12 +1170,15 @@ async function loadBakedModel(model: BakedModel, anisotropy: number): Promise<TH
       opacity: source.opacity,
     });
     // Only what was baked has the second UV set; the views outside the
-    // windows are photos, shown as they are.
-    if (!source.transparent && node.geometry.getAttribute("uv1")) {
+    // windows are photos, shown as they are: not tone mapped either, which
+    // grades a photo's blue sky to grey.
+    const baked = Boolean(node.geometry.getAttribute("uv1"));
+    if (!source.transparent && baked) {
       material.lightMap = lightMap;
       // MeshBasicMaterial divides the light map by pi (a Lambert BRDF).
       material.lightMapIntensity = model.lightmapScale * Math.PI;
     }
+    if (!baked && source.name !== "glass") material.toneMapped = false;
     material.userData.originalMap = source.map;
     material.userData.originalColor = source.color.clone();
     source.dispose();
