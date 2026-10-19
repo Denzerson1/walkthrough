@@ -270,15 +270,30 @@ cannot see; placed by hand from the capture photos):
 
 - `roofWindows`: windows in a slope (Floorplan mode only finds windows in
   upright walls), with plumb and level linings as built. The first one's
-  `view` photo (cropped by `viewCrop`) has its sky cut out and stands a
-  street width out; behind it a sky dome in the photo's own sky colours,
-  and the colour of its foot below the horizon.
+  `view` photo (cropped by `viewCrop`) gives the sky dome its colours.
+- `site`: the real neighbourhood out of the windows (`site.py`). An
+  OpenStreetMap export of the buildings around (`osm`, Overpass JSON,
+  ODbL: credit "© OpenStreetMap contributors"), the flat's `origin`
+  (lat, lon), its own `building` (way id, left out) and `floorHeight`
+  (the flat's floor above the street). Every house within 160 m is raised
+  from its footprint to its `building:levels` (4.2 m ground floor, 3.7 m
+  upper ones, 3 when untagged) with a hipped tile roof for its
+  `roof:levels`, Viennese bays drawn on the facades, the street at street
+  level. The side of the house facing `windowsFace` is the window wall;
+  its true bearing then also aims the sun. The neighbourhood's light is
+  baked into its vertex colours, one set per time of day.
 - `floors`: each floor re-laid from its photo (`photo_texture.py`). The A4
   sheet in the shot gives scale and perspective (its corners rectify the
   floor plane) and the exposure; the plank or tile lattice is fitted and
   real planks or tile faces are cut out and laid again, seamlessly.
-- `windowsFace` (compass bearing), `location`, `sun` (date, time): the real
-  sun position for that moment.
+- `windowsFace` (compass bearing), `location`, `sun` (date, `time`, and
+  `times` for the viewer's daylight slider): the real sun for each moment,
+  warmer and weaker as it sinks, the sky dimming and warming into dusk.
+- `surfaces`: materials cut from the capture photos (`photo_patch`): a
+  `box` of the photo (fractions), the `size` it spans in metres, and a
+  `wall` box of white wall in the same light (85% albedo) or a `colour`
+  to set its brightness; light falloff is divided out and the patch made
+  seamless. Surfaces without one are generated around their colour.
 - `items`: a finish per scanned piece, drawn from parts until the piece's
   own model exists: `kitchen-base` (fronts in `columns`, one tagged `sink`
   gets basin and tap), `kitchen-wall` (`rows`, `columns`), `kitchen-tall`,
@@ -291,12 +306,23 @@ cannot see; placed by hand from the capture photos):
 
 **Light:** Cycles bakes diffuse light (direct and bounced) into one 2048
 atlas at 2048 samples, with light portals in the roof windows, denoised
-with Open Image Denoise and exposed like a camera for the room (sun spots
-clip, as they do in a photo). Faces nobody sees from inside stay in for the
+with Open Image Denoise, white balanced like a camera (the shade's colour
+cast mostly taken out, so walls read white and sun stays warm) and
+exposed against the owner's photos (sun spots clip, as they do in a
+photo). With `sun.times`, once per time of day: `flat_light-HHMM.jpg`
+each, listed in the manifest's `assets.lighting`; a camera's exposure
+follows each time halfway, so the evening stays darker. Faces nobody sees from inside stay in for the
 bake, so the room's solids block light, but get no atlas. Oak, worktop and
 fabric carry generated textures (`photo_texture.surface_texture`).
 
-**Viewer:** shows `flat.glb` unlit (colour × baked light), antialiased.
+**Viewer:** shows `flat.glb` unlit (colour × baked light), antialiased,
+with neutral tone mapping (AgX greyed colours into a render's look),
+reflections of the room on gloss, glass, steel and the floor, haze over
+the distant houses, a lens's corner falloff, and auto exposure like a
+phone camera (it meters the view and follows it most of the way: the
+bounce-lit hall opens up, a view into a window stops down). The daylight slider
+blends the two nearest baked times (light maps in the shader, the
+neighbourhood's vertex light on the CPU, the sky's tint).
 Floor swaps change only the texture under the light. The walk stops where a
 slope drops below 1.8 m (the manifest's `ceilings`) and keeps out of every
 piece standing on the floor (its `obstacles`, written by the bake).

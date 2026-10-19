@@ -9,6 +9,7 @@ import { RoomStrip } from '../components/RoomStrip';
 import { SplatScene } from '../components/SplatScene';
 import { StagedBadge } from '../components/StagedBadge';
 import { apiUrl, fileUrl, getJson, postEvent, sessionId } from '../lib/api';
+import { formatMinutes, toMinutes } from '../lib/daylight';
 import type { Manifest } from '../lib/manifest';
 import { type CatalogItem, stagedRoomIds, useStore } from '../lib/store';
 import { isStaged } from '../lib/viewerState';
@@ -37,6 +38,20 @@ export function Viewer() {
   } = useStore();
 
   const [ready, setReady] = useState(false);
+  // The time of day shown, for a rebuilt flat baked at several; it opens at
+  // the time the pipeline made the default.
+  const daylightRange = useMemo((): [number, number] | null => {
+    const times = manifest?.assets?.lighting?.map((l) => toMinutes(l.time)) ?? [];
+    return times.length > 1 ? [Math.min(...times), Math.max(...times)] : null;
+  }, [manifest]);
+  const opening = useMemo(() => {
+    const lighting = manifest?.assets?.lighting;
+    if (!lighting?.length) return null;
+    const first = lighting.find((l) => l.lightmap === manifest?.assets?.lightmap) ?? lighting[0];
+    return toMinutes(first.time);
+  }, [manifest]);
+  const [chosen, setDaylight] = useState<number | null>(null);
+  const daylight = chosen ?? opening;
   const [showHint, setShowHint] = useState(true);
   const [pose, setPose] = useState<{ x: number; z: number; yaw: number } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -247,9 +262,18 @@ export function Viewer() {
                   url: fileUrl(projectId, manifest.assets.model),
                   lightmapUrl: fileUrl(projectId, manifest.assets.lightmap),
                   lightmapScale: manifest.assets.lightmapScale ?? 1,
+                  // The bake order is the order of the neighbourhood's colour sets.
+                  lighting: manifest.assets.lighting?.map((l, i) => ({
+                    minutes: toMinutes(l.time),
+                    lightmapUrl: fileUrl(projectId, l.lightmap),
+                    lightmapScale: l.lightmapScale,
+                    skyTint: l.skyTint,
+                    colourSet: i,
+                  })),
                 }
               : undefined
           }
+          daylight={daylight ?? undefined}
           floorUrl={
             manifest.assets?.sceneNoFloor && manifest.assets?.floor
               ? fileUrl(projectId, manifest.assets.floor)
@@ -268,6 +292,16 @@ export function Viewer() {
           selectedUid={selectedUid}
           onSelectItem={selectItem}
           onMoveItem={moveItem}
+        />
+      )}
+
+      {/* A lens's falloff at the corners: without it the rebuilt flat reads as a render. */}
+      {manifest?.assets?.model && (
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background: 'radial-gradient(ellipse at center, transparent 58%, rgba(20,16,12,0.22) 100%)',
+          }}
         />
       )}
 
@@ -309,6 +343,34 @@ export function Viewer() {
           />
         </div>
       </header>
+
+      {/*
+        The time of day, for a rebuilt flat baked at several: how the light
+        falls in the morning, at noon, in the evening.
+      */}
+      {manifest && ready && daylightRange && daylight !== null && (
+        <div
+          className="panel absolute right-3 w-[min(220px,46vw)] px-3 py-2"
+          style={{ top: 'calc(5.5rem + var(--safe-top))' }}
+        >
+          <label className="flex items-baseline justify-between text-[11px]" htmlFor="daylight">
+            <span className="opacity-65">Daylight</span>
+            <span className="font-medium tabular-nums" data-testid="daylight-time">
+              {formatMinutes(daylight)}
+            </span>
+          </label>
+          <input
+            id="daylight"
+            type="range"
+            className="mt-1 w-full accent-[var(--accent)]"
+            min={daylightRange[0]}
+            max={daylightRange[1]}
+            step={5}
+            value={daylight}
+            onChange={(e) => setDaylight(Number(e.target.value))}
+          />
+        </div>
+      )}
 
       {/* Floor plan */}
       {manifest && ready && (

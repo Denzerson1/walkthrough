@@ -28,7 +28,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import flat_geometry, photo_texture
+from . import flat_geometry, photo_texture, site
 from .manifest import Manifest, ManifestItem, Room
 from .paths import ProjectPaths, repo_root
 
@@ -60,8 +60,8 @@ SURFACES: dict[str, tuple[str, float, str | None]] = {
     "basin": ("#f3f3f1", 0.25, None),
     "oak": ("#d3c0a5", 0.55, "veneer"),      # the wardrobe: pale oak
     "oak-warm": ("#a98b6b", 0.5, "veneer"),  # kitchen backsplash, island, shelves
-    "wenge": ("#3c2b24", 0.5, "veneer"),     # the bed base
-    "linen": ("#f2f0eb", 0.9, None),
+    "wenge": ("#2f231e", 0.5, "veneer"),     # the bed base
+    "linen": ("#f2f1ee", 0.9, "linen"),
     "boucle": ("#e8e3d9", 1.0, "boucle"),
     "fabric": ("#a8a39d", 0.9, "boucle"),    # bar stools
     "coats": ("#2e2b2c", 0.95, None),
@@ -75,16 +75,32 @@ SURFACES: dict[str, tuple[str, float, str | None]] = {
 }
 
 
-def surfaces(paths: ProjectPaths) -> dict[str, dict]:
-    """The surfaces as build_flat.py takes them, textures written into the scene folder."""
+def surfaces(paths: ProjectPaths, photos: dict | None = None) -> dict[str, dict]:
+    """
+    The surfaces as build_flat.py takes them, textures written into the
+    scene folder. A surface the dressing gives a photo patch for is cut from
+    the customer's photo of it (photo_texture.photo_patch); the rest get a
+    generated texture or a plain colour. `tile` is the metres one texture
+    repeat spans.
+    """
+    photos = photos or {}
     out = {}
     for i, (name, (colour, roughness, kind)) in enumerate(SURFACES.items()):
-        texture = None
-        if kind:
-            path = paths.scene / f"surface-{name}.jpg"
+        texture, tile = None, [1.0, 1.0]
+        path = paths.scene / f"surface-{name}.jpg"
+        if name in photos:
+            spec = photos[name]
+            image, size = photo_texture.photo_patch(
+                repo_root() / spec["photo"], tuple(spec["box"]), tuple(spec["size"]),
+                tuple(spec["wall"]) if spec.get("wall") else None,
+                spec.get("colour"), spec.get("rotate", False),
+            )
+            image.save(path, quality=92)
+            texture, tile = str(path), list(size)
+        elif kind:
             photo_texture.surface_texture(kind, colour, seed=i).save(path, quality=90)
             texture = str(path)
-        out[name] = {"colour": colour, "roughness": roughness, "texture": texture}
+        out[name] = {"colour": colour, "roughness": roughness, "texture": texture, "tile": tile}
     return out
 
 
@@ -100,6 +116,34 @@ def outside_view(paths: ProjectPaths, wanted: list[dict]) -> dict | None:
     out = paths.scene / "view.png"
     image.save(out)
     return {"view": str(out), "zenith": zenith, "horizon": horizon, "below": below}
+
+
+#: Plaster colours the neighbours are painted in (Viennese cream, ochre,
+#: grey), and their clay roofs.
+FACADE_COLOURS = ("#e6dcc6", "#d8c8a6", "#cfcbc3", "#e3d0a0", "#ebe7de")
+ROOF_TILES = "#8c4c3c"
+
+
+def site_spec(paths: ProjectPaths, dressing: dict, knee_wall_z: float) -> dict | None:
+    """The buildings around the flat from OpenStreetMap, with their textures (see site.py)."""
+    place = dressing.get("site")
+    if not place:
+        return None
+    data = site.surroundings(
+        repo_root() / place["osm"], tuple(place["origin"]), place["building"],
+        dressing["windowsFace"], place["floorHeight"], knee_wall_z,
+        place.get("facadeOffset", 0.45), place.get("along", 0.0),
+    )
+    facades = []
+    for i, colour in enumerate(FACADE_COLOURS):
+        path = paths.scene / f"facade-{i}.jpg"
+        photo_texture.facade_texture(colour, seed=i).save(path, quality=88)
+        facades.append(str(path))
+    tiles = paths.scene / "roof-tiles.jpg"
+    photo_texture.roof_tile_texture(ROOF_TILES).save(tiles, quality=88)
+    return {**data, "facades": facades, "tiles": str(tiles),
+            "bay": [photo_texture.BAY_M, photo_texture.STOREY_M],
+            "groundFloor": site.GROUND_FLOOR_M}
 
 
 class BlenderMissing(RuntimeError):
@@ -238,21 +282,39 @@ def roof_windows(ceilings: list, wanted: list[dict]) -> list[dict]:
     return out
 
 
-def sun(dressing: dict, facing_dir: tuple[float, float]) -> dict | None:
-    """Where the sun stands at the dressing's date and time, as a scene direction towards it."""
+def sun(dressing: dict, facing_dir: tuple[float, float], bearing: float | None = None,
+        time: str | None = None) -> dict | None:
+    """
+    The sun at the dressing's date and `time` (default its "time"): a scene
+    direction towards it, its colour and strength, the sky's strength, and
+    a tint for the sky dome. `bearing` is the true bearing of the windows'
+    side, when the map gives it; else the dressing's compass reading.
+
+    Sunlight warms as the sun sinks, through more air: warm white high up,
+    gold near the horizon, gone below it, the sky dimming into dusk.
+    """
     place, when = dressing.get("location"), dressing.get("sun")
     if not place or not when or "windowsFace" not in dressing:
         return None
+    facing = dressing["windowsFace"] if bearing is None else bearing
+    time = time or when["time"]
     year, month, day = (int(v) for v in when["date"].split("-"))
-    hours, minutes = (int(v) for v in when["time"].split(":"))
+    hours, minutes = (int(v) for v in time.split(":"))
     bearing, elevation = flat_geometry.sun_position(
         year, month, day, hours + minutes / 60, place["utcOffset"],
         place["latitude"], place["longitude"],
     )
-    x, z = flat_geometry.compass_to_scene(bearing, dressing["windowsFace"], facing_dir)
+    x, z = flat_geometry.compass_to_scene(bearing, facing, facing_dir)
     e = math.radians(elevation)
-    return {"bearing": round(bearing, 1), "elevation": round(elevation, 1),
-            "direction": [x * math.cos(e), math.sin(e), z * math.cos(e)]}
+    high = min(max((elevation - 2) / 40, 0.0), 1.0) ** 0.7
+    colour = [1.0, 0.56 + (0.84 - 0.56) * high, 0.30 + (0.66 - 0.30) * high]
+    energy = 5.5 * min(max((elevation + 1) / 12, 0.0), 1.0) * (0.75 + 0.25 * high)
+    dusk = min(max((elevation + 6) / 16, 0.12), 1.0)
+    tint = [1.0, 0.8 + 0.2 * high, 0.68 + 0.32 * high]
+    return {"time": time, "bearing": round(bearing, 1), "elevation": round(elevation, 1),
+            "direction": [x * math.cos(e), math.sin(e), z * math.cos(e)],
+            "colour": [round(c, 3) for c in colour], "energy": round(energy, 3),
+            "sky": round(0.5 * dusk, 3), "tint": [round(c * dusk, 3) for c in tint]}
 
 
 def scene_spec(
@@ -351,19 +413,27 @@ def scene_spec(
 
     wanted = dressing.get("roofWindows", [])
     skylights = roof_windows(rooms[0]["ceilings"], wanted) if rooms else []
-    light = None
+    surroundings = (site_spec(paths, dressing, max(p[1] for p in rooms[0]["polygon"]))
+                    if rooms else None)
+    light, suns = None, []
     if skylights:
         n = skylights[0]["frame"]["n"]
         across = math.hypot(n[0], n[2])
-        light = sun(dressing, (n[0] / across, n[2] / across))
+        facing_dir = (n[0] / across, n[2] / across)
+        true_bearing = surroundings["facing"] if surroundings else None
+        light = sun(dressing, facing_dir, true_bearing)
+        times = (dressing.get("sun") or {}).get("times", [])
+        suns = [sun(dressing, facing_dir, true_bearing, t) for t in times]
     return {
         "rooms": rooms,
         "items": items,
         "floors": floors,
         "skylights": skylights,
         "outside": outside_view(paths, wanted),
-        "surfaces": surfaces(paths),
+        "site": surroundings,
+        "surfaces": surfaces(paths, dressing.get("surfaces")),
         "sun": light,
+        "suns": suns,
         "hero": dressing.get("hero"),
         "wall_colour": wall_colour,
         "lightmap_size": lightmap_size,

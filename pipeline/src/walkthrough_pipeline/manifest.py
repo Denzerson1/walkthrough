@@ -121,6 +121,19 @@ class PrivacyMask(BaseModel):
     box: ItemBox
 
 
+class Lighting(BaseModel):
+    """The rebuilt flat's light at one time of day (rebuild bakes several)."""
+
+    time: str  # "17:30"
+    lightmap: str
+    lightmapScale: float
+    exposure: float = 1.0
+    #: Multiplies the sky dome's colours: warm and dim towards dusk.
+    skyTint: list[float] | None = None
+    #: The vertex colour set holding the neighbourhood's light at this time.
+    colours: str | None = None
+
+
 class SceneAssets(BaseModel):
     scene: str | None = None
     sceneNoFloor: str | None = None
@@ -133,6 +146,8 @@ class SceneAssets(BaseModel):
     #: light / lightmapScale (see build_flat.save_lightmap).
     lightmap: str | None = None
     lightmapScale: float = 1.0
+    #: The same at other times of day, for the viewer's daylight slider.
+    lighting: list[Lighting] = Field(default_factory=list)
 
 
 class Manifest(BaseModel):

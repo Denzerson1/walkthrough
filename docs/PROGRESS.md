@@ -7,6 +7,32 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-10-19 — Real views, a daylight slider, the photos' look
+
+- **Views:** the houses really outside: 76 buildings from OpenStreetMap
+  raised to their floor counts, Viennese facades and tile roofs, the
+  flat's own roof below the windows. The windows face Malzgasse (324°),
+  as the owner corrected; across it at 16 m a 2+2 house, a 4+2 and a 5+1
+  behind.
+- **Daylight slider:** 08:00 to 20:00, from five bakes (08, 12, 15, 17:30,
+  20). The sun warms and weakens as it sinks; the sky dims into dusk.
+- **Less like a render:** materials cut from the owner's photos (the
+  wardrobe's and bar's oak, the sofa's bouclé); a camera's exposure and
+  white balance set against the photos (it was too bright and cream);
+  neutral tone mapping; auto exposure as a phone camera does it (the hall
+  is lit only by bounce and went near black at one exposure for the flat);
+  reflections on gloss fronts, glass and steel;
+  haze; a crumpled duvet and dark base on the bed as photographed.
+
+Verified: screenshots at 08:00, 12:00, 17:30 and 20:00 from the same
+spots in Chrome, no console errors; site, sun, photo-patch and daylight
+blending tests.
+
+Not verified: how the blend between two bakes looks halfway on a phone
+(checked on desktop Chrome only).
+
+---
+
 ## 2026-10-19 — The flat made true to the photos
 
 The owner's review of the first rebuild, worked through:

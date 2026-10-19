@@ -338,9 +338,10 @@ def outside(spec: dict) -> list[bpy.types.Object]:
     cx = sum(p[0] for p in room["polygon"]) / len(room["polygon"])
     cz = sum(p[1] for p in room["polygon"]) / len(room["polygon"])
     objects = [sky_dome(view, (cx, cz))]
-    skylights = spec["skylights"]
-    if skylights:
-        objects.append(view_card(view, skylights))
+    # Without the real buildings around, the photo out of the window stands
+    # in for them; with them, it would sit in front of them.
+    if spec["skylights"] and not spec.get("site"):
+        objects.append(view_card(view, spec["skylights"]))
     for obj in objects:
         # Seen by the camera only: to light, the dome would be a shell
         # around the flat shutting out the sun and the sky.
@@ -442,6 +443,208 @@ def view_card(view: dict, skylights: list[dict]) -> bpy.types.Object:
     obj = bpy.data.objects.new("view", mesh)
     bpy.context.collection.objects.link(obj)
     return obj
+
+
+
+# --------------------------------------------------------------------------
+# The neighbourhood
+# --------------------------------------------------------------------------
+
+
+ROOF_INSET = 2.5  # how far a roof steps in from the eaves to its top (a steep Viennese roof)
+
+
+class SiteMesh:
+    """One mesh of the neighbourhood: faces placed with a direction they should face, so
+    an open shell (walls without floors) still gets its normals right."""
+
+    def __init__(self, name: str) -> None:
+        self.name, self.bm = name, bmesh.new()
+        self.uv = self.bm.loops.layers.uv.verify()
+
+    def quad(self, corners: list, uvs: list, outward) -> None:
+        verts = [self.bm.verts.new(P(*c)) for c in corners]
+        face = self.bm.faces.new(verts)
+        face.normal_update()
+        if face.normal.dot(P(*outward)) < 0:
+            face.normal_flip()
+        uv_of = dict(zip(verts, uvs, strict=True))  # by vertex: a flip reorders the loops
+        for loop in face.loops:
+            loop[self.uv].uv = uv_of[loop.vert]
+
+    def finish(self, mat: bpy.types.Material) -> bpy.types.Object:
+        mesh = bpy.data.meshes.new(self.name)
+        self.bm.to_mesh(mesh)
+        self.bm.free()
+        mesh.materials.append(mat)
+        obj = bpy.data.objects.new(self.name, mesh)
+        bpy.context.collection.objects.link(obj)
+        return obj
+
+
+def textured(name: str, image_path: str | None, colour: str, roughness: float = 0.8):
+    mat = material(name, colour, roughness)
+    if image_path:
+        nodes, links = mat.node_tree.nodes, mat.node_tree.links
+        tex = nodes.new("ShaderNodeTexImage")
+        tex.image = bpy.data.images.load(image_path)
+        links.new(tex.outputs["Color"], nodes["Principled BSDF"].inputs["Base Color"])
+    return mat
+
+
+def neighbourhood(spec: dict) -> list[bpy.types.Object]:
+    """
+    The buildings around the flat (site.py), as walls with Viennese facades
+    and steep tiled roofs with a tin top, the street they stand on, and a
+    tiled roof over the flat's own slope as seen out of its windows. They
+    shade the room in the bake like the real ones do; their own light is
+    baked into their vertices afterwards (bake_neighbourhood).
+    """
+    s = spec.get("site")
+    if not s:
+        return []
+    bay, storey = s["bay"]
+    walls = [SiteMesh(f"site-facade-{i}") for i in range(len(s["facades"]))]
+    roofs, tops = SiteMesh("site-roof"), SiteMesh("site-tin")
+    for b in s["buildings"]:
+        poly = b["polygon"]
+        base, eaves, top = b["base"], b["eaves"], b["top"]
+        mesh = walls[b["colour"] % len(walls)]
+        rows = max(1, math.ceil((eaves - base) / storey))
+        u = (b["id"] % 7) * 0.37  # each house starts its window rhythm elsewhere
+        for i in range(len(poly)):
+            a, c = poly[i], poly[(i + 1) % len(poly)]
+            length = math.hypot(c[0] - a[0], c[1] - a[1])
+            if length < 0.05:
+                continue
+            cols = max(1, math.ceil(length / bay))
+            out = (c[1] - a[1], 0.0, -(c[0] - a[0]))  # outward of a counter-clockwise outline
+            for j in range(cols):
+                t0, t1 = j / cols, (j + 1) / cols
+                p0 = (a[0] + (c[0] - a[0]) * t0, a[1] + (c[1] - a[1]) * t0)
+                p1 = (a[0] + (c[0] - a[0]) * t1, a[1] + (c[1] - a[1]) * t1)
+                for k in range(rows):
+                    y0 = base + (eaves - base) * k / rows
+                    y1 = base + (eaves - base) * (k + 1) / rows
+                    # Floors line up with the texture: a floor level every
+                    # `storey` above the tall ground floor.
+                    v0 = (y0 - base - s["groundFloor"]) / storey
+                    v1 = (y1 - base - s["groundFloor"]) / storey
+                    ua, ub = (u + length * t0) / bay, (u + length * t1) / bay
+                    mesh.quad([(p0[0], y0, p0[1]), (p1[0], y0, p1[1]), (p1[0], y1, p1[1]),
+                               (p0[0], y1, p0[1])],
+                              [(ua, v0), (ub, v0), (ub, v1), (ua, v1)], out)
+            u += length
+        area = flat_area(poly)
+        perimeter = sum(math.hypot(poly[i][0] - poly[i - 1][0], poly[i][1] - poly[i - 1][1])
+                        for i in range(len(poly)))
+        inner = None
+        if not b["flat"] and top - eaves > 0.7:
+            inset = min(ROOF_INSET, 0.8 * area / perimeter)
+            candidate = grow(poly, -inset)
+            if flat_area(candidate) > 0.15 * area:
+                inner = candidate
+        if inner is None:  # a flat roof, or one too narrow to step in
+            cap(tops, poly, eaves)
+            continue
+        for i in range(len(poly)):
+            a, c = poly[i], poly[(i + 1) % len(poly)]
+            ai, ci = inner[i], inner[(i + 1) % len(inner)]
+            run = math.hypot(c[0] - a[0], c[1] - a[1])
+            slope = math.hypot(math.hypot(ai[0] - a[0], ai[1] - a[1]), top - eaves)
+            out = (c[1] - a[1], (run * 0.8), -(c[0] - a[0]))
+            roofs.quad([(a[0], eaves, a[1]), (c[0], eaves, c[1]), (ci[0], top, ci[1]),
+                        (ai[0], top, ai[1])],
+                       [(0, 0), (run, 0), (run, slope), (0, slope)], out)
+        cap(tops, inner, top)
+    ground = SiteMesh("site-ground")
+    room = spec["rooms"][0]
+    gx = sum(p[0] for p in room["polygon"]) / len(room["polygon"])
+    gz = sum(p[1] for p in room["polygon"]) / len(room["polygon"])
+    ring = [(gx + 220 * math.cos(a), gz + 220 * math.sin(a))
+            for a in (2 * math.pi * i / 48 for i in range(48))]
+    cap(ground, ring, s["street"] - 0.02)
+    skin = SiteMesh("site-roof-own")
+    own_roof(skin, spec)
+
+    objects = [m.finish(textured(m.name, path, "#d8c8a6"))
+               for m, path in zip(walls, s["facades"], strict=True)]
+    objects.append(roofs.finish(textured("site-roof", s["tiles"], "#8c4c3c")))
+    objects.append(skin.finish(bpy.data.materials["site-roof"]))
+    objects.append(tops.finish(material("site-tin", "#80848a", 0.5)))
+    objects.append(ground.finish(material("site-ground", "#7c7a76", 0.9)))
+    return objects
+
+
+def flat_area(poly) -> float:
+    return 0.5 * sum(poly[i - 1][0] * poly[i][1] - poly[i][0] * poly[i - 1][1]
+                     for i in range(len(poly)))
+
+
+def cap(mesh: SiteMesh, poly, y: float) -> None:
+    """A level polygon at height y facing up, textured in metres."""
+    verts = [mesh.bm.verts.new(P(x, y, z)) for x, z in poly]
+    face = mesh.bm.faces.new(verts)
+    face.normal_update()
+    if face.normal.dot(P(0, 1, 0)) < 0:
+        face.normal_flip()
+    for loop in face.loops:
+        loop[mesh.uv].uv = (loop.vert.co.x, loop.vert.co.y)
+
+
+def own_roof(mesh: SiteMesh, spec: dict) -> None:
+    """Tiles over the flat's own slope, down past the knee wall to the eaves, open at its
+    roof windows: what one sees of one's own roof looking out of them."""
+    room = spec["rooms"][0]
+    for index, c in enumerate(room.get("ceilings") or []):
+        if is_flat(c):
+            continue
+        frame = next((sk["frame"] for sk in spec["skylights"] if sk["ceiling"] == index), None)
+        frame = frame or slope_frame(c)
+        holes = [sk["hole"] for sk in spec["skylights"] if sk["ceiling"] == index]
+        eaves = 0.6
+        n = SLAB_T + 0.03
+        for u0, u1, v0, v1 in wall_cells(frame["lu"], frame["lv"] + eaves,
+                                          [(a, b_, lo + eaves, hi + eaves)
+                                           for a, b_, lo, hi in holes]):
+            corners = [slope_point(frame, u, v - eaves, n) for u, v in
+                       ((u0, v0), (u1, v0), (u1, v1), (u0, v1))]
+            mesh.quad(corners, [(u0, v0), (u1, v0), (u1, v1), (u0, v1)], frame["n"])
+
+
+def bake_neighbourhood(objects: list[bpy.types.Object], label: str,
+                       scale: float | None = None) -> float:
+    """
+    The neighbourhood's light (sun, sky, shadows, bounce) into its vertices,
+    scaled so a sunlit wall shows its plaster at full strength: the viewer
+    shows it unlit as texture x vertex colour, at an outdoor exposure, so
+    the view stays visible from a room exposed for its inside.
+    """
+    import numpy as np
+
+    name = f"light-{label}"
+    for obj in objects:
+        attr = obj.data.color_attributes.new(name, "FLOAT_COLOR", "CORNER")
+        obj.data.color_attributes.active_color = attr
+    bpy.ops.object.select_all(action="DESELECT")
+    for obj in objects:
+        obj.select_set(True)
+    bpy.context.view_layer.objects.active = objects[0]
+    bpy.ops.object.bake(type="DIFFUSE", pass_filter={"DIRECT", "INDIRECT"},
+                        target="VERTEX_COLORS")
+    values = []
+    for obj in objects:
+        data = np.empty(len(obj.data.color_attributes[name].data) * 4, np.float32)
+        obj.data.color_attributes[name].data.foreach_get("color", data)
+        values.append(data.reshape(-1, 4))
+    if scale is None:  # the first time of day sets the scale for all of them
+        every = np.concatenate([v[:, :3].max(axis=1) for v in values])
+        scale = 0.95 / max(float(np.percentile(every, 95)), 1e-6)
+    for obj, data in zip(objects, values, strict=True):
+        data[:, :3] = np.clip(data[:, :3] * scale, 0.0, 1.0)
+        data[:, 3] = 1.0
+        obj.data.color_attributes[name].data.foreach_set("color", data.ravel())
+    return scale
 
 
 def door(b: Builder, wall: dict, lo: float, hi: float, top: float) -> None:
@@ -735,8 +938,11 @@ def finish_parts(finish: str, w: float, h: float, d: float, opts: dict) -> list[
                                    za + 0.02, za + height - 0.02))]
         return parts
     if finish == "bed":
-        return [("wenge", (x0, x1, y0, y1, 0, 0.28)),
-                ("linen", (x0 + 0.02, x1 - 0.02, y0 + 0.02, y1 - 0.02, 0.28, h))]
+        base = min(0.26, h * 0.4)
+        return [("wenge", (x0, x1, y0, y1, 0.02, base)),
+                ("wenge", (x0 + 0.04, x1 - 0.04, y0 + 0.04, y1 - 0.04, 0, 0.02)),
+                ("linen", (x0 + 0.03, x1 - 0.03, y0 + 0.03, y1 - 0.03, base, h - 0.08)),
+                ("linen", (x0 - 0.02, x1 + 0.01, y0 - 0.02, y1 + 0.02, h - 0.14, h))]
     if finish == "sofa":
         return [("boucle", (x0, x1, y0, y1, 0, 0.42)),
                 ("boucle", (x0, x1, y1 - 0.26, y1, 0.42, h)),
@@ -775,9 +981,10 @@ def surface_material(name: str, surface: dict) -> bpy.types.Material:
     return mat
 
 
-def box_uvs(bm: bmesh.types.BMesh, faces, size: tuple[float, float, float]) -> None:
-    """Texture coordinates in metres on a box's faces, running along each face's longer
-    side, so a veneer's grain follows a board's length."""
+def box_uvs(bm: bmesh.types.BMesh, faces, size: tuple[float, float, float],
+            tile: tuple[float, float] = (1.0, 1.0)) -> None:
+    """Texture coordinates on a box's faces, one repeat per `tile` metres, running along
+    each face's longer side, so a veneer's grain follows a board's length."""
     layer = bm.loops.layers.uv.verify()
     for face in faces:
         axis = max(range(3), key=lambda i: abs(face.normal[i]))
@@ -785,7 +992,7 @@ def box_uvs(bm: bmesh.types.BMesh, faces, size: tuple[float, float, float]) -> N
         if size[b] > size[a]:
             a, b = b, a
         for loop in face.loops:
-            loop[layer].uv = (loop.vert.co[a], loop.vert.co[b])
+            loop[layer].uv = (loop.vert.co[a] / tile[0], loop.vert.co[b] / tile[1])
 
 
 def finished(item: dict, surfaces: dict) -> bpy.types.Object:
@@ -819,7 +1026,7 @@ def finished(item: dict, surfaces: dict) -> bpy.types.Object:
             faces = {f for v in cube["verts"] for f in v.link_faces}
             for face in faces:
                 face.material_index = slots.index(surface)
-            box_uvs(bm, faces, size)
+            box_uvs(bm, faces, size, surfaces[surface].get("tile", (1.0, 1.0)))
     bm.to_mesh(mesh)
     bm.free()
     for surface in slots:
@@ -974,16 +1181,33 @@ def light(spec: dict, windows: list[dict]) -> tuple[float, float] | None:
         reach = wy / math.tan(elevation)
         across_t = math.hypot(tx, tz)
         patch = (wx - tx / across_t * reach, wz - tz / across_t * reach)
-    travel = P(-tx, -ty, -tz)
     sun = bpy.data.lights.new("sun", "SUN")
     sun.energy, sun.angle = 5.5, math.radians(1.2)
-    sun.color = (1.0, 0.87, 0.72)
+    sun.color = (1.0, 0.85, 0.68)
     obj = bpy.data.objects.new("sun", sun)
     bpy.context.collection.objects.link(obj)
-    obj.rotation_euler = travel.to_track_quat("-Z", "Y").to_euler()
-    sky.sun_elevation = elevation
-    sky.sun_rotation = math.atan2(-travel.x, -travel.y)
+    set_sun(spec.get("sun") or {"direction": [tx, ty, tz]})
     return patch
+
+
+def set_sun(entry: dict) -> None:
+    """
+    Put the sun where `entry` (rebuild.sun) says, in its colour and
+    strength, and the sky to match: between bakes, this is what moves the
+    time of day. A sun below the horizon gives no light; the sky dims.
+    """
+    tx, ty, tz = entry["direction"]
+    travel = P(-tx, -ty, -tz)
+    obj = bpy.data.objects["sun"]
+    obj.rotation_euler = travel.to_track_quat("-Z", "Y").to_euler()
+    if "colour" in entry:
+        obj.data.color = entry["colour"]
+        obj.data.energy = entry["energy"]
+    world = bpy.context.scene.world.node_tree.nodes
+    sky = next(n for n in world if n.type == "TEX_SKY")
+    sky.sun_elevation = max(math.asin(max(-1.0, min(1.0, ty))), 0.0)
+    sky.sun_rotation = math.atan2(-travel.x, -travel.y)
+    world["Background"].inputs["Strength"].default_value = entry.get("sky", 0.5)
 
 
 def setup_cycles(samples: int) -> None:
@@ -1186,8 +1410,14 @@ def smooth_within_islands(rgb, covered, sigma: float = 1.6):
 
 #: Exposure, like a camera's: the room's typical surface lands at this
 #: (linear, before tone mapping), and what is brighter than CLIP times it
-#: clips — sun on a window lining, which a photograph blows out too.
-EXPOSE_TO, CLIP = 0.38, 16.0
+#: clips — sun on a window lining, which a photograph blows out too. Set
+#: against the owner's photos: white walls in shade read grey, as a phone
+#: exposing for the window shows them; brighter read as a render.
+EXPOSE_TO, CLIP = 0.22, 16.0
+#: How far the light's colour cast is taken out, like a camera's white
+#: balance: the shade's colour is made neutral (walls white, as in the
+#: photos), sun patches stay warmer than it. 1 would neutralise it fully.
+WHITE_BALANCE = 0.6
 
 
 def save_lightmap(baked: bpy.types.Image, path: str, scratch: Path) -> tuple[float, float]:
@@ -1215,6 +1445,9 @@ def save_lightmap(baked: bpy.types.Image, path: str, scratch: Path) -> tuple[flo
     # last grain off; outside the islands stays empty.
     rgb = smooth_within_islands(clean, covered, sigma=1.0).reshape(-1, 3)
     covered = covered.ravel()
+    if covered.any():
+        shade = np.median(rgb[covered], axis=0)
+        rgb = rgb * (shade.mean() / np.maximum(shade, 1e-6)) ** WHITE_BALANCE
     typical = float(np.median(rgb.max(axis=1)[covered])) if covered.any() else 1.0
     scale = float(max(min(np.percentile(rgb.max(axis=1), 99.9), CLIP * typical), 1e-6))
     # Mostly white walls and ceilings: albedo ~0.85 under the typical light.
@@ -1238,10 +1471,10 @@ def save_lightmap(baked: bpy.types.Image, path: str, scratch: Path) -> tuple[flo
 def bake(objects: list[bpy.types.Object], size: int, path: str,
          scratch: Path) -> tuple[float, float]:
     """
-    All objects' diffuse light (no colour) into one atlas on a second UV set.
-    Returns the scale save_lightmap stored it at and the room's exposure.
+    All objects' diffuse light (no colour) into one atlas on their second UV
+    set (laid out by layout_lightmap). Returns the scale save_lightmap
+    stored it at and the exposure the room wants in this light.
     """
-    layout_lightmap(objects)
     bpy.ops.object.select_all(action="DESELECT")
     for obj in objects:
         obj.select_set(True)
@@ -1308,6 +1541,7 @@ def main() -> None:
             plain_uvs(obj)
     pieces = [furniture(item, spec["surfaces"]) for item in spec["items"]]
     views = outside(spec)
+    site = neighbourhood(spec)
     patch = light(spec, windows)
 
     out = spec["out"]
@@ -1321,20 +1555,48 @@ def main() -> None:
     glass = [o for o in shell if o.name == "glass"]
     for obj in glass + views:
         obj.hide_render = True  # let the sun and sky through the openings while baking
-    scale, exposure = bake([o for o in shell if o not in glass] + pieces,
-                           spec["lightmap_size"], out["lightmap"], Path(out["meta"]).parent)
+    lit = [o for o in shell if o not in glass] + pieces
+    layout_lightmap(lit)
+    # One bake per time of day, the default first: its exposure is the
+    # reference, and its neighbourhood light sets the scale for the others.
+    default = spec.get("sun")
+    times = [default] + [t for t in spec.get("suns") or [] if t != default] if default else [None]
+    lighting, reference, site_scale = [], None, None
+    for entry in times:
+        if entry:
+            set_sun(entry)
+        label = entry["time"].replace(":", "") if entry else "default"
+        path = out["lightmap"].replace(".jpg", f"-{label}.jpg")
+        scale, auto = bake(lit, spec["lightmap_size"], path, Path(out["meta"]).parent)
+        # A camera adjusts to the light, but only halfway: evenings stay darker.
+        reference = reference or auto
+        exposure_t = math.sqrt(reference * auto)
+        lighting.append({"time": entry["time"] if entry else None, "lightmap": Path(path).name,
+                         "lightmapScale": scale * exposure_t, "exposure": exposure_t,
+                         "skyTint": entry.get("tint") if entry else None,
+                         "colours": f"light-{label}" if site else None})
+        if site:
+            site_scale = bake_neighbourhood(site, label, site_scale)
+    if default:
+        set_sun(default)
+    for obj in site:  # the default time's light is the one the file opens with
+        obj.data.color_attributes.active_color = obj.data.color_attributes[lighting[0]["colours"]]
+    exposure = lighting[0]["exposure"]
     # The viewer shows colour x light x lightmapScale, so the exposure rides
     # on the scale; the views out of the windows carry no baked light and
     # so stay as photographed.
-    Path(out["meta"]).write_text(json.dumps({"lightmapScale": scale * exposure,
+    Path(out["meta"]).write_text(json.dumps({"lightmapScale": lighting[0]["lightmapScale"],
+                                             "lightmap": lighting[0]["lightmap"],
                                              "exposure": exposure,
+                                             "lighting": lighting,
                                              "obstacles": obstacles(pieces)}))
     for obj in glass + views:
         obj.hide_render = False
     expose(exposure, views)
     preview(spec, windows, patch, out["preview"])
     bpy.ops.export_scene.gltf(filepath=out["glb"], export_format="GLB", export_apply=True,
-                              export_lights=False, export_cameras=False, export_extras=True)
+                              export_lights=False, export_cameras=False, export_extras=True,
+                              export_vertex_color="ACTIVE", export_all_vertex_colors=True)
 
 
 main()

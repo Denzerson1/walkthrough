@@ -32,6 +32,8 @@ import {
 import type { Manifest, Room, Vec2 } from '../lib/manifest';
 import { FLOOR_DEFAULT_COLOR, floorColor } from '../lib/floorColors';
 import { apiUrl } from '../lib/api';
+import { type Daylight, type DaylightKey, loadDaylight } from '../lib/daylight';
+import { AutoExposure } from '../lib/exposure';
 import type { CatalogItem } from '../lib/store';
 import type { PlacedItem, ViewerState } from '../lib/viewerState';
 
@@ -47,6 +49,8 @@ export interface BakedModel {
   lightmapUrl: string;
   /** The 8-bit lightmap holds light / lightmapScale (build_flat.save_lightmap). */
   lightmapScale: number;
+  /** The light at other times of day, when the flat was baked at several. */
+  lighting?: DaylightKey[];
 }
 
 interface Props {
@@ -54,6 +58,8 @@ interface Props {
   sceneUrl: string;
   /** When present, shown instead of the splat. */
   model?: BakedModel;
+  /** Time of day for a rebuilt flat baked at several, in minutes after midnight. */
+  daylight?: number;
   /** Floor splats as a separate mesh, when the pipeline has split the scene. */
   floorUrl?: string;
   activeRoomId: string | null;
@@ -138,6 +144,7 @@ export function SplatScene({
   manifest,
   sceneUrl,
   model,
+  daylight,
   floorUrl,
   activeRoomId,
   viewer,
@@ -210,9 +217,17 @@ export function SplatScene({
     splat?: SplatMesh;
     floorSplat?: SplatMesh;
     model?: THREE.Group;
+    daylight?: Daylight;
+    exposure?: AutoExposure;
   } | null>(null);
   // Effects that touch the rebuilt flat must run again once it has loaded.
   const [modelReady, setModelReady] = useState(false);
+  // The latest slider value, for the async model load to start from.
+  const daylightRef = useRef(daylight);
+  useEffect(() => {
+    daylightRef.current = daylight;
+    if (daylight !== undefined) sceneRef.current?.daylight?.set(daylight);
+  }, [daylight, modelReady]);
 
   // ---- one-time scene setup -------------------------------------------
   useEffect(() => {
@@ -310,15 +325,27 @@ export function SplatScene({
     };
 
     if (model) {
-      // Graded in Blender with AgX; the room's exposure is already in the
-      // light map's scale, so the views out of the windows stay as shot.
-      renderer.toneMapping = THREE.AgXToneMapping;
+      // Neutral tone mapping keeps colours as a photo has them, where AgX
+      // greys them into the look of a render; the room's exposure is in the
+      // light map's scale already.
+      renderer.toneMapping = THREE.NeutralToneMapping;
       renderer.toneMappingExposure = 1;
+      // Haze over the neighbourhood: distance is what makes a view read as
+      // real. Nothing inside the flat is near the fog's start.
+      scene.fog = new THREE.Fog(0xd6e0e8, 40, 420);
       loadBakedModel(model, renderer.capabilities.getMaxAnisotropy())
-        .then((group) => {
+        .then(async (group) => {
           if (disposed || !sceneRef.current) return;
           scene.add(group);
           sceneRef.current.model = group;
+          if (model.lighting && model.lighting.length > 1) {
+            const rig = await loadDaylight(model.lighting, group);
+            if (disposed || !sceneRef.current) return;
+            sceneRef.current.daylight = rig;
+            rig.set(daylightRef.current ?? rig.keys[0].minutes);
+          }
+          addReflections(scene, renderer, group, manifest.rooms[0]?.waypoint.position);
+          sceneRef.current.exposure = new AutoExposure(METER_KEY);
           setModelReady(true);
           settle();
         })
@@ -467,6 +494,7 @@ export function SplatScene({
         camera.fov = st.fov;
         camera.updateProjectionMatrix();
       }
+      sceneRef.current?.exposure?.update(renderer, scene, camera, dt);
       renderer.render(scene, camera);
     };
     tick();
@@ -483,6 +511,7 @@ export function SplatScene({
       sceneRef.current?.splat?.dispose?.();
       sceneRef.current?.floorSplat?.dispose?.();
       if (sceneRef.current?.model) disposeChildren(sceneRef.current.model);
+      sceneRef.current?.exposure?.dispose();
       scene.clear();
       renderer.dispose();
       // dispose() alone leaves the GL context alive. Browsers cap concurrent
@@ -1142,6 +1171,57 @@ function loadFloorMaps(
 
 
 /**
+ * The metered brightness (log-average linear luminance) of a view that
+ * needs no exposure change: the living room as the bake exposed it, which
+ * matches the owner's photos. Darker views open up, brighter stop down.
+ */
+const METER_KEY = 0.33;
+
+/** How much each surface reflects of the room around it (by material name). */
+const REFLECTIVITY: Record<string, number> = {
+  'surface-gloss': 0.12,
+  'surface-black': 0.22,
+  'surface-steel': 0.3,
+  steel: 0.3,
+  'surface-alu': 0.22,
+  'surface-basin': 0.08,
+  'surface-glass-shelf': 0.4,
+  floor: 0.035,
+  glass: 0.45,
+};
+
+/**
+ * Reflections: the baked room seen from its middle, once, as a cube map on
+ * the high-gloss fronts, the black glass, the steel and a little on the
+ * oiled floor. Without them gloss reads as matte plastic, the look of a
+ * render rather than a photo.
+ */
+function addReflections(
+  scene: THREE.Scene,
+  renderer: THREE.WebGLRenderer,
+  model: THREE.Object3D,
+  at: [number, number, number] | undefined,
+): void {
+  const target = new THREE.WebGLCubeRenderTarget(256, {
+    generateMipmaps: true,
+    minFilter: THREE.LinearMipmapLinearFilter,
+  });
+  const camera = new THREE.CubeCamera(0.05, 300, target);
+  camera.position.set(at?.[0] ?? 0, at?.[1] ?? 1.6, at?.[2] ?? 0);
+  camera.update(renderer, scene);
+  model.traverse((node) => {
+    if (!(node instanceof THREE.Mesh)) return;
+    const material = node.material as THREE.MeshBasicMaterial;
+    const amount = REFLECTIVITY[material.name];
+    if (amount === undefined) return;
+    material.envMap = target.texture;
+    material.combine = THREE.MixOperation;
+    material.reflectivity = amount;
+    material.needsUpdate = true;
+  });
+}
+
+/**
  * A rebuilt flat with its baked light.
  *
  * Every surface becomes an unlit material — its colour times the baked light
@@ -1179,6 +1259,9 @@ async function loadBakedModel(model: BakedModel, anisotropy: number): Promise<TH
       material.lightMapIntensity = model.lightmapScale * Math.PI;
     }
     if (!baked && source.name !== "glass") material.toneMapped = false;
+    if (source.name === "sky") material.fog = false;
+    // The neighbourhood carries its sunlight and shadows in its vertices.
+    material.vertexColors = Boolean(node.geometry.getAttribute("color"));
     material.userData.originalMap = source.map;
     material.userData.originalColor = source.color.clone();
     source.dispose();

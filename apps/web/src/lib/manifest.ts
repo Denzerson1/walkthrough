@@ -83,6 +83,19 @@ export interface Obstacle {
   footprint: Vec2[];
 }
 
+/** A rebuilt flat's light at one time of day. */
+export interface Lighting {
+  /** "17:30" */
+  time: string;
+  lightmap: string;
+  lightmapScale: number;
+  exposure?: number;
+  /** Multiplies the sky dome's colours: warm and dim towards dusk. */
+  skyTint?: number[] | null;
+  /** The vertex colour set holding the neighbourhood's light at this time. */
+  colours?: string | null;
+}
+
 export interface ItemBox {
   center: Vec3;
   size: Vec3;
@@ -128,6 +141,8 @@ export interface Manifest {
     /** Its baked light: an 8-bit atlas on the model's second UV set, holding light / lightmapScale. */
     lightmap?: string | null;
     lightmapScale?: number;
+    /** The same at other times of day, in the order they were baked. */
+    lighting?: Lighting[];
   };
 }
 

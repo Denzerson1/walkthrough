@@ -26,7 +26,7 @@ from . import rebuild as rebuild_mod
 from . import roomplan as roomplan_mod
 from . import stray as stray_mod
 from . import train as train_mod
-from .manifest import Manifest, Obstacle, Waypoint
+from .manifest import Lighting, Manifest, Obstacle, Waypoint
 from .paths import ProjectPaths, repo_root
 from .scene import AlignmentFailed, align_scene, export_scene, trained_ply
 
@@ -555,9 +555,10 @@ def rebuild(
     console.print(f"  preview: {spec['out']['preview']}")
     if not preview_only:
         manifest.assets.model = Path(spec["out"]["glb"]).name
-        manifest.assets.lightmap = Path(spec["out"]["lightmap"]).name
         meta = json.loads(Path(spec["out"]["meta"]).read_text())
+        manifest.assets.lightmap = meta["lightmap"]
         manifest.assets.lightmapScale = meta["lightmapScale"]
+        manifest.assets.lighting = [Lighting(**t) for t in meta["lighting"] if t["time"]]
         manifest.rooms[0].obstacles = [Obstacle(**o) for o in meta.get("obstacles", [])]
         manifest.write(paths.manifest)
     console.print(f"[green]Rebuilt[/green] in {(time.time() - started) / 60:.1f} min")

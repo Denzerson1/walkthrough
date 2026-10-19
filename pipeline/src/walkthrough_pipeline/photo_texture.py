@@ -384,7 +384,8 @@ def surface_texture(kind: str, colour: str, px: int = 1024, seed: int = 0) -> Im
     """
     A seamless texture for one metre of a surface, around its colour:
     `veneer` (oak: long fibres and growth bands along x), `stone` (a
-    concrete-look worktop: soft mottling) or `boucle` (nubbly fabric).
+    concrete-look worktop: soft mottling), `boucle` (nubbly fabric) or
+    `linen` (bedding: soft creases over a fine weave).
     Plain colour read as plastic on big oak and fabric surfaces; this is
     the grain a camera sees at walking distance, not a scan of the piece.
     """
@@ -404,6 +405,15 @@ def surface_texture(kind: str, colour: str, px: int = 1024, seed: int = 0) -> Im
     elif kind == "boucle":
         value = 0.7 * _tiling_noise(rng, (300, 300), px) + 0.3 * _tiling_noise(rng, (40, 40), px)
         spread = 0.18
+    elif kind == "linen":
+        # Crumpled cloth: a height field of ridges (folds), lit from one
+        # side, so each fold is light on one flank and shaded on the other.
+        height = sum(w * (1 - np.abs(2 * _tiling_noise(rng, (c, c), px) - 1))
+                     for w, c in ((1.0, 6), (0.5, 13), (0.25, 27)))
+        slope = (np.roll(height, -2, axis=1) - np.roll(height, 2, axis=1)
+                 + np.roll(height, -2, axis=0) - np.roll(height, 2, axis=0))
+        value = slope + 0.15 * slope.std() * _tiling_noise(rng, (400, 400), px)
+        spread = 0.06
     else:
         raise ValueError(f"Unknown surface texture {kind!r}")
     value = (value - value.mean()) / max(float(value.std()), 1e-6)
@@ -411,3 +421,123 @@ def surface_texture(kind: str, colour: str, px: int = 1024, seed: int = 0) -> Im
     base = srgb_to_linear(np.array([int(hexcode[i : i + 2], 16) / 255 for i in (0, 2, 4)]))
     lin = base[None, None, :] * (1 + spread * np.clip(value, -2.5, 2.5))[..., None] / 1.0
     return Image.fromarray((linear_to_srgb(lin) * 255).astype(np.uint8))
+
+
+# --------------------------------------------------------------------------
+# The neighbourhood: Viennese facades and tiled roofs
+# --------------------------------------------------------------------------
+
+BAY_M, STOREY_M = 3.2, 3.7  # one window bay, one floor of a Gründerzeit house
+
+
+def facade_texture(colour: str, px_per_m: int = 160, seed: int = 0) -> Image.Image:
+    """
+    One bay of one floor of a Viennese apartment house, tiling sideways and
+    upwards: rendered plaster in `colour`, a tall double window with white
+    frames, its surround, a sill and a hood moulding, and the floor's cornice
+    band. Its bottom edge is a floor level.
+    """
+    rng = np.random.default_rng(seed)
+    w, h = round(BAY_M * px_per_m), round(STOREY_M * px_per_m)
+
+    def box(img, x0, y0, x1, y1, c):  # metres, y up from the floor line
+        img[h - round(y1 * px_per_m) : h - round(y0 * px_per_m),
+            round(x0 * px_per_m) : round(x1 * px_per_m)] = c
+
+    hexcode = colour.lstrip("#")
+    plaster = srgb_to_linear(np.array([int(hexcode[i : i + 2], 16) / 255 for i in (0, 2, 4)]))
+    light, dark = np.minimum(plaster * 1.12, 1.0), plaster * 0.78
+    frame, glass_top, glass_low = (srgb_to_linear(np.array(c)) for c in
+                                   ((0.91, 0.90, 0.88), (0.36, 0.40, 0.45), (0.17, 0.19, 0.22)))
+    img = np.empty((h, w, 3), np.float32)
+    img[:] = plaster
+    cx, ww, wh, sill = BAY_M / 2, 1.25, 2.05, 0.95
+    # The window's surround, the hood moulding over it, its sill, its frame.
+    box(img, cx - ww / 2 - 0.12, sill - 0.04, cx + ww / 2 + 0.12, sill + wh + 0.12, light)
+    box(img, cx - ww / 2 - 0.25, sill + wh + 0.2, cx + ww / 2 + 0.25, sill + wh + 0.34, light)
+    box(img, cx - ww / 2 - 0.25, sill + wh + 0.17, cx + ww / 2 + 0.25, sill + wh + 0.2, dark)
+    box(img, cx - ww / 2 - 0.18, sill - 0.1, cx + ww / 2 + 0.18, sill - 0.02, light)
+    box(img, cx - ww / 2, sill, cx + ww / 2, sill + wh, frame)
+    # The panes: dark glass catching a little sky at the top.
+    for x0, x1 in ((cx - ww / 2 + 0.07, cx - 0.03), (cx + 0.03, cx + ww / 2 - 0.07)):
+        for y0, y1 in ((sill + 0.07, sill + wh * 0.68), (sill + wh * 0.72, sill + wh - 0.07)):
+            r0, r1 = h - round(y1 * px_per_m), h - round(y0 * px_per_m)
+            t = np.linspace(1, 0, r1 - r0)[:, None]
+            img[r0:r1, round(x0 * px_per_m) : round(x1 * px_per_m)] = (
+                glass_low + (glass_top - glass_low) * t[..., None] ** 2)
+    box(img, 0, STOREY_M - 0.2, BAY_M, STOREY_M - 0.12, light)  # cornice band
+    box(img, 0, STOREY_M - 0.12, BAY_M, STOREY_M - 0.09, dark)
+    grain = cv2.GaussianBlur(rng.normal(0, 1, (h, w)).astype(np.float32), (0, 0), 1.2)
+    img *= (1 + 0.035 * grain)[..., None]
+    return Image.fromarray((linear_to_srgb(img) * 255).astype(np.uint8))
+
+
+def roof_tile_texture(colour: str, px: int = 512, seed: int = 0) -> Image.Image:
+    """One metre of a clay tile roof in `colour`: courses 0.18 m apart, tiles 0.25 m wide,
+    each a little different; courses run along x."""
+    rng = np.random.default_rng(seed)
+    hexcode = colour.lstrip("#")
+    base = srgb_to_linear(np.array([int(hexcode[i : i + 2], 16) / 255 for i in (0, 2, 4)]))
+    courses, per_course = 6, 4  # 1 m / 0.167 m and 1 m / 0.25 m, so it tiles
+    img = np.empty((px, px, 3), np.float32)
+    ch, tw = px // courses, px // per_course
+    for r in range(courses):
+        shift = (tw // 2) * (r % 2)
+        for c in range(per_course + 1):
+            tone = base * rng.uniform(0.8, 1.15) * np.array([1, rng.uniform(0.92, 1.05), 1])
+            x0 = (c * tw + shift) % px
+            for x in range(x0, x0 + tw):
+                img[r * ch : (r + 1) * ch, x % px] = tone
+        rows = np.linspace(1.0, 0.7, ch)[:, None, None]  # each course darkens to its lower lap
+        img[r * ch : (r + 1) * ch] *= rows
+    return Image.fromarray((linear_to_srgb(img) * 255).astype(np.uint8))
+
+
+# --------------------------------------------------------------------------
+# Materials cut from the capture photos
+# --------------------------------------------------------------------------
+
+
+def photo_patch(path: Path, box: tuple[float, float, float, float], size_m: tuple[float, float],
+                wall: tuple[float, float, float, float] | None = None,
+                colour: str | None = None, rotate: bool = False,
+                px_per_m: int = 600) -> tuple[Image.Image, tuple[float, float]]:
+    """
+    A seamless texture of a material cut from a capture photo: the patch
+    `box` (fractions of the photo: left, top, right, bottom), `size_m` across
+    and down in reality. Light falloff across the patch is divided out; its
+    brightness is set against `wall`, a patch of white wall in the same light
+    (taken as 85% albedo), or else to `colour`. `rotate` turns it a quarter,
+    so a grain that runs down the photo runs along x, as box UVs expect.
+    Returns the image and the metres it spans (x, y).
+    """
+    image = ImageOps.exif_transpose(Image.open(path)).convert("RGB")
+    rgb = srgb_to_linear(np.asarray(image, np.float32) / 255)
+    h, w = rgb.shape[:2]
+
+    def cut(b):
+        return rgb[round(b[1] * h) : round(b[3] * h), round(b[0] * w) : round(b[2] * w)]
+
+    patch = cut(box)
+    if rotate:
+        patch, size_m = np.ascontiguousarray(np.rot90(patch)), (size_m[1], size_m[0])
+    out_w, out_h = round(size_m[0] * px_per_m), round(size_m[1] * px_per_m)
+    patch = cv2.resize(patch, (out_w, out_h), interpolation=cv2.INTER_AREA)
+    lum = patch.mean(axis=2)
+    shade = cv2.GaussianBlur(lum, (0, 0), max(out_w, out_h) / 4)
+    patch = patch * (lum.mean() / np.maximum(shade, 1e-6))[..., None]
+    if wall is not None:
+        white = cut(wall).reshape(-1, 3).mean(axis=0)
+        patch = patch * (0.85 / max(float(white @ np.array([0.2126, 0.7152, 0.0722])), 1e-6))
+    elif colour is not None:
+        hexcode = colour.lstrip("#")
+        target = srgb_to_linear(np.array([int(hexcode[i : i + 2], 16) / 255 for i in (0, 2, 4)]))
+        patch = patch * (target / np.maximum(patch.reshape(-1, 3).mean(axis=0), 1e-6))
+    # Seamless: half-shifted copy blended in where the original's edges are,
+    # so every edge of the tile continues into its opposite one.
+    shifted = np.roll(patch, (out_h // 2, out_w // 2), axis=(0, 1))
+    wy = np.sin(np.linspace(0, np.pi, out_h))[:, None] ** 0.6
+    wx = np.sin(np.linspace(0, np.pi, out_w))[None, :] ** 0.6
+    weight = (wy * wx)[..., None]
+    seamless = patch * weight + shifted * (1 - weight)
+    return Image.fromarray((linear_to_srgb(seamless) * 255).astype(np.uint8)), size_m

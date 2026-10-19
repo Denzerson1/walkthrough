@@ -51,7 +51,7 @@ def test_window_view_cuts_out_the_sky_above_the_buildings(tmp_path):
 
 
 def test_surface_textures_keep_their_colour_and_tile():
-    for kind in ("veneer", "stone", "boucle"):
+    for kind in ("veneer", "stone", "boucle", "linen"):
         tex = np.asarray(pt.surface_texture(kind, "#a98b6b", px=256)).astype(float)
         assert tex.shape == (256, 256, 3)
         mean = pt.linear_to_srgb(pt.srgb_to_linear(tex / 255).mean(axis=(0, 1))) * 255
@@ -60,3 +60,29 @@ def test_surface_textures_keep_their_colour_and_tile():
         wrap = np.abs(tex[:, 0] - tex[:, -1]).mean()
         inside = np.abs(np.diff(tex, axis=1)).mean()
         assert wrap < 3 * inside + 1
+
+
+def test_photo_patch_evens_the_light_sets_brightness_and_tiles(tmp_path):
+    # A grained board under light that falls off left to right, next to a
+    # white wall in the same light, photographed at half brightness.
+    rng = np.random.default_rng(1)
+    h, w = 400, 600
+    grain = 0.25 + 0.05 * np.sin(np.arange(w) / 3)[None, :] + 0.02 * rng.random((h, w))
+    falloff = np.linspace(1.0, 0.5, w)[None, :]
+    lin = np.zeros((h, w, 3))
+    lin[:, :400] = (grain[:, :400] * falloff[:, :400] * 0.5)[..., None]
+    lin[:, 400:] = 0.85 * 0.5 * falloff[:, 400:][..., None]
+    photo = tmp_path / "photo.png"
+    cv2.imwrite(str(photo), (pt.linear_to_srgb(lin) * 255).astype(np.uint8)[..., ::-1])
+
+    image, size = pt.photo_patch(photo, (0.0, 0.0, 0.6, 1.0), (0.6, 0.4),
+                                 wall=(0.7, 0.0, 1.0, 1.0), px_per_m=500)
+    assert size == (0.6, 0.4) and image.size == (300, 200)
+    tex = np.asarray(image).astype(float)
+    lum = pt.srgb_to_linear(tex / 255).mean(axis=2)
+    # The falloff is gone: left and right halves are equally bright.
+    assert abs(lum[:, :150].mean() - lum[:, 150:].mean()) < 0.02
+    # Against the wall the board comes out near its true albedo, not half of it.
+    assert 0.2 < lum.mean() < 0.4
+    wrap = np.abs(tex[:, 0] - tex[:, -1]).mean()
+    assert wrap < 3 * np.abs(np.diff(tex, axis=1)).mean() + 1
