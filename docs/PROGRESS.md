@@ -24,8 +24,10 @@ verified, it says so.** A milestone is not "done" because its code exists.
   reflections on gloss fronts, glass and steel;
   haze; a crumpled duvet and dark base on the bed as photographed.
 
-Verified: screenshots at 08:00, 12:00, 17:30 and 20:00 from the same
-spots in Chrome, no console errors; site, sun, photo-patch and daylight
+Verified: baked in 26.8 min (five times of day, 2048 samples each);
+screenshots at 08:00, 12:00, 17:30 and 20:00 from the same spots in
+Chrome, no console errors; a 60 s walkthrough filmed with
+`apps/web/scripts/record-tour.mjs`; site, sun, photo-patch and daylight
 blending tests.
 
 Not verified: how the blend between two bakes looks halfway on a phone

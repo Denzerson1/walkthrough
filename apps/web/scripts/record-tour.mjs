@@ -1,14 +1,14 @@
 // Film a walkthrough of a rebuilt flat, frame by frame, in the real viewer.
 //
 //   node scripts/record-tour.mjs <project> <tour.json> <frames dir> [fps] [width] [height]
+//   ffmpeg -framerate 30 -i <frames dir>/frame-%05d.jpg -c:v libx264 -crf 22 -pix_fmt yuv420p tour.mp4
 //
 // The tour is a list of keyframes: {"t": seconds, "at": [x, z], "yaw": deg,
 // "pitch": deg, "daylight": "HH:MM" (optional)}. The camera glides through
 // them on a smooth curve; each frame is a screenshot, so the video is as
 // smooth as the frame rate asks, however slow the machine. Needs the dev
 // servers running (the dev-only window.__viewer hook places the camera).
-import { mkdirSync } from 'node:fs';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { chromium } from '@playwright/test';
 
 const [project, tourPath, outDir, fpsArg = '30', w = '1920', h = '1080'] = process.argv.slice(2);
@@ -84,7 +84,8 @@ for (let f = 0; f <= frames; f++) {
     lastDaylight = p.daylight;
   }
   await page.waitForTimeout(f === 0 ? 500 : 40);
-  await page.screenshot({ path: `${outDir}/frame-${String(f).padStart(5, '0')}.png` });
+  // JPEG: a minute of 1080p frames as PNG is gigabytes.
+  await page.screenshot({ path: `${outDir}/frame-${String(f).padStart(5, '0')}.jpg`, quality: 92 });
   if (f % 100 === 0) console.log(`frame ${f}/${frames}`);
 }
 await browser.close();
