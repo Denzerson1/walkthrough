@@ -286,6 +286,9 @@ cannot see; placed by hand from the capture photos):
   sheet in the shot gives scale and perspective (its corners rectify the
   floor plane) and the exposure; the plank or tile lattice is fitted and
   real planks or tile faces are cut out and laid again, seamlessly.
+- `viewPhotos`: the owner's photos out of two windows (`photo`, the
+  `window` it was taken from, `keep`: the part to use, as fractions, to cut
+  the window's own frame away). They are the view: see "The view out" below.
 - `windowsFace` (compass bearing), `location`, `sun` (date, `time`, and
   `times` for the viewer's daylight slider): the real sun for each moment,
   warmer and weaker as it sinks, the sky dimming and warming into dusk.
@@ -306,7 +309,9 @@ cannot see; placed by hand from the capture photos):
 
 **Light:** Cycles bakes diffuse light (direct and bounced) into one 2048
 atlas at 2048 samples, with light portals in the roof windows, denoised
-with Open Image Denoise, white balanced like a camera (the shade's colour
+with Open Image Denoise, stored with a gamma of 4 (steeper than sRGB: the
+dim hall, lit only by bounce, had too few of the 256 levels and showed grey
+blotches once brightened), white balanced like a camera (the shade's colour
 cast mostly taken out, so walls read white and sun stays warm) and
 exposed against the owner's photos (sun spots clip, as they do in a
 photo). With `sun.times`, once per time of day: `flat_light-HHMM.jpg`
@@ -326,6 +331,35 @@ neighbourhood's vertex light on the CPU, the sky's tint).
 Floor swaps change only the texture under the light. The walk stops where a
 slope drops below 1.8 m (the manifest's `ceilings`) and keeps out of every
 piece standing on the floor (its `obstacles`, written by the bake).
+
+**The view out** (`outside.py`, also on its own: `pnpm run pipeline outside
+--project flat-01`, a few seconds, no bake). Generated houses read as a
+render however they are textured, so what the windows show is the owner's
+own photos out of them, stood in 3D (`view_photo.py`):
+
+- The two photos, taken out of two windows 2.4 m apart, are a stereo
+  pair: SIFT features matched between them (RANSAC on the essential
+  matrix) triangulate to metres.
+- The camera's tilt comes from where the photo's verticals meet; its turn
+  from the street front's horizontal lines (it runs parallel to the flat's
+  own facade).
+- The houses are walls parallel to the street, at the distances where the
+  features cluster (here 12 m for the street front, 30-70 m for the blocks
+  behind). Each part of the photo goes on the wall its features vote for.
+- The sky is cut away along the roofs and chimneys; the mesh is drawn in
+  front of the generated houses (distances drawn in towards the camera, so
+  from where the photo was taken it is the photo, pixel for pixel).
+- Glass dust and drops are painted out.
+
+The sky (`sky.py`): per baked time, sunlight scattered by air, haze and
+ozone along each line of sight (single scattering, Nishita), the low sky
+paled for what multiple scattering adds, matched row by row to the photo's
+sky, and the photo's own sky (its blue, its contrails) faded in where it
+has one, shifted to the time of day by the model's change since the photo
+was taken. Equirectangular `sky-HHMM.jpg`, u = 0.5 along -z, zenith on top.
+
+Outside the photos the generated houses remain: OpenStreetMap footprints,
+in the photos' colours.
 
 `work/rebuild_preview.png` is a Cycles still from the hero view. About 4
 minutes per room on the 2080 Super; `--preview-only` about 1 minute.

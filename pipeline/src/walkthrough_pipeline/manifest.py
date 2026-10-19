@@ -132,6 +132,15 @@ class Lighting(BaseModel):
     skyTint: list[float] | None = None
     #: The vertex colour set holding the neighbourhood's light at this time.
     colours: str | None = None
+    #: The sky at this time, an equirectangular panorama (sky.py).
+    sky: str | None = None
+
+
+class ViewPhoto(BaseModel):
+    """The view out of the windows, from the owner's photos of it (view_photo.py)."""
+
+    model: str  # a .glb: the photo on the walls it shows, shown unlit
+    time: str  # "15:38", when it was taken: the light it shows
 
 
 class SceneAssets(BaseModel):
@@ -148,6 +157,7 @@ class SceneAssets(BaseModel):
     lightmapScale: float = 1.0
     #: The same at other times of day, for the viewer's daylight slider.
     lighting: list[Lighting] = Field(default_factory=list)
+    viewPhoto: ViewPhoto | None = None
 
 
 class Manifest(BaseModel):

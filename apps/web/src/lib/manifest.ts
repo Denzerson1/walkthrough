@@ -94,6 +94,8 @@ export interface Lighting {
   skyTint?: number[] | null;
   /** The vertex colour set holding the neighbourhood's light at this time. */
   colours?: string | null;
+  /** The sky at this time: an equirectangular panorama, u = 0.5 along -z, zenith at the top. */
+  sky?: string | null;
 }
 
 export interface ItemBox {
@@ -143,6 +145,8 @@ export interface Manifest {
     lightmapScale?: number;
     /** The same at other times of day, in the order they were baked. */
     lighting?: Lighting[];
+    /** The view out of the windows from the owner's photos: a .glb, and when it was taken. */
+    viewPhoto?: { model: string; time: string } | null;
   };
 }
 

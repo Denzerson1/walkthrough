@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { approach, meter, targetExposure } from '../src/lib/exposure';
+import { MAX_EXPOSURE, approach, meter, targetExposure } from '../src/lib/exposure';
 
 describe('auto exposure', () => {
   it('opens up in the dark and stops down in the bright, only partly', () => {
@@ -9,7 +9,7 @@ describe('auto exposure', () => {
     // Partial: the darker view still ends up darker than the reference.
     expect(0.1 * hall).toBeLessThan(0.33);
     expect(targetExposure(0.9, 0.33)).toBeLessThan(1);
-    expect(targetExposure(0, 0.33)).toBe(4); // clamped, as a camera's range is
+    expect(targetExposure(0, 0.33)).toBe(MAX_EXPOSURE); // clamped, as a camera's range is
   });
 
   it('eases towards the goal without overshooting', () => {

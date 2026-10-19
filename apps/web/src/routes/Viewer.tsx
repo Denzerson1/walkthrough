@@ -268,8 +268,15 @@ export function Viewer() {
                     lightmapUrl: fileUrl(projectId, l.lightmap),
                     lightmapScale: l.lightmapScale,
                     skyTint: l.skyTint,
+                    skyUrl: l.sky ? fileUrl(projectId, l.sky) : null,
                     colourSet: i,
                   })),
+                  viewPhoto: manifest.assets.viewPhoto
+                    ? {
+                        url: fileUrl(projectId, manifest.assets.viewPhoto.model),
+                        minutes: toMinutes(manifest.assets.viewPhoto.time),
+                      }
+                    : undefined,
                 }
               : undefined
           }

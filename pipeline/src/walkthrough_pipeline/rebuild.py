@@ -120,8 +120,10 @@ def outside_view(paths: ProjectPaths, wanted: list[dict]) -> dict | None:
 
 #: Plaster colours the neighbours are painted in (Viennese cream, ochre,
 #: grey), and their clay roofs.
-FACADE_COLOURS = ("#e6dcc6", "#d8c8a6", "#cfcbc3", "#e3d0a0", "#ebe7de")
-ROOF_TILES = "#8c4c3c"
+# Sampled from the owner's photos out of the windows (shade lifted to
+# albedo): pale stone, grey render, a cream, an ochre; weathered dark tiles.
+FACADE_COLOURS = ("#d3cbb7", "#bfb9a8", "#e0dccb", "#cdc3a6", "#a9a596")
+ROOF_TILES = "#5e4b43"
 
 
 def site_spec(paths: ProjectPaths, dressing: dict, knee_wall_z: float) -> dict | None:
@@ -415,7 +417,7 @@ def scene_spec(
     skylights = roof_windows(rooms[0]["ceilings"], wanted) if rooms else []
     surroundings = (site_spec(paths, dressing, max(p[1] for p in rooms[0]["polygon"]))
                     if rooms else None)
-    light, suns = None, []
+    light, suns, windows_face = None, [], None
     if skylights:
         n = skylights[0]["frame"]["n"]
         across = math.hypot(n[0], n[2])
@@ -424,6 +426,7 @@ def scene_spec(
         light = sun(dressing, facing_dir, true_bearing)
         times = (dressing.get("sun") or {}).get("times", [])
         suns = [sun(dressing, facing_dir, true_bearing, t) for t in times]
+        windows_face = {"dir": list(facing_dir), "bearing": true_bearing}
     return {
         "rooms": rooms,
         "items": items,
@@ -434,6 +437,7 @@ def scene_spec(
         "surfaces": surfaces(paths, dressing.get("surfaces")),
         "sun": light,
         "suns": suns,
+        "facing": windows_face,
         "hero": dressing.get("hero"),
         "wall_colour": wall_colour,
         "lightmap_size": lightmap_size,

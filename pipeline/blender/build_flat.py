@@ -1303,6 +1303,18 @@ def preview(spec: dict, windows: list[dict], patch: tuple[float, float] | None,
     bpy.ops.render.render(write_still=True)
 
 
+#: Atlas share per object, as a multiple of its surface: the trim (door
+#: frames, leaves, skirtings, window frames) gets 6x, 2.5x the texels per
+#: metre. At the walls' density a 7 cm architrave was 4 texels wide and its
+#: light came out in grey blotches.
+ATLAS_WEIGHT = {"trim": 6.0}
+#: Where each object's light lies in the atlas, (x, y, side) in UV units.
+CELLS: dict[str, tuple[float, float, float]] = {}
+#: Extra smoothing for an object's light: painted trim's light is smooth,
+#: and on few texels the denoiser leaves blotches.
+SMOOTH = {"trim": 2.5}
+
+
 def layout_lightmap(objects: list[bpy.types.Object], margin: float = 0.006) -> None:
     """
     A second UV set laid out so no two objects share atlas space.
@@ -1335,9 +1347,11 @@ def layout_lightmap(objects: list[bpy.types.Object], margin: float = 0.006) -> N
             if is_hidden:
                 for i in poly.loop_indices:
                     uv[i].uv = (0.0, 0.0)
-        areas.append(sum(p.area for p, h in zip(obj.data.polygons, hidden, strict=True) if not h))
+        areas.append(ATLAS_WEIGHT.get(obj.name, 1.0)
+                     * sum(p.area for p, h in zip(obj.data.polygons, hidden, strict=True) if not h))
     corners, sides = atlas_cells(areas, margin)
     for obj, side, (cx, cy) in zip(objects, sides, corners, strict=True):
+        CELLS[obj.name] = (cx, cy, side)
         for loop in obj.data.uv_layers["lightmap"].data:
             loop.uv = (cx + loop.uv[0] * side, cy + loop.uv[1] * side)
 
@@ -1418,11 +1432,16 @@ EXPOSE_TO, CLIP = 0.22, 16.0
 #: balance: the shade's colour is made neutral (walls white, as in the
 #: photos), sun patches stay warmer than it. 1 would neutralise it fully.
 WHITE_BALANCE = 0.6
+#: The light map holds (light / scale) ** (1 / LIGHTMAP_GAMMA): steeper than
+#: sRGB, so dim light (a hall lit only by bounce) gets enough of the 256
+#: levels. With sRGB, the hall's few levels showed as grey blotches and JPEG
+#: blocks once the viewer brightened it. daylight.ts LIGHT_MAP_GAMMA matches.
+LIGHTMAP_GAMMA = 4.0
 
 
 def save_lightmap(baked: bpy.types.Image, path: str, scratch: Path) -> tuple[float, float]:
     """
-    The float bake as an 8-bit sRGB JPEG, plus the scale that undoes it and
+    The float bake as an 8-bit JPEG (light ** 1/LIGHTMAP_GAMMA), plus the scale that undoes it and
     the exposure the room wants.
 
     A float EXR of a 2048 atlas is ~50 MB; light is smooth, so 8 bits in a
@@ -1443,7 +1462,14 @@ def save_lightmap(baked: bpy.types.Image, path: str, scratch: Path) -> tuple[flo
     clean = denoise(baked, scratch)[..., :3]
     # A light smoothing after, kept inside each island, takes the denoiser's
     # last grain off; outside the islands stays empty.
-    rgb = smooth_within_islands(clean, covered, sigma=1.0).reshape(-1, 3)
+    rgb = smooth_within_islands(clean, covered, sigma=1.0)
+    for name, sigma in SMOOTH.items():
+        if name in CELLS:  # rows run up from v = 0, like the pixels
+            cx, cy, side = CELLS[name]
+            rows = slice(int(cy * size), min(size, int((cy + side) * size) + 1))
+            cols = slice(int(cx * size), min(size, int((cx + side) * size) + 1))
+            rgb[rows, cols] = smooth_within_islands(clean[rows, cols], covered[rows, cols], sigma)
+    rgb = rgb.reshape(-1, 3)
     covered = covered.ravel()
     if covered.any():
         shade = np.median(rgb[covered], axis=0)
@@ -1453,13 +1479,11 @@ def save_lightmap(baked: bpy.types.Image, path: str, scratch: Path) -> tuple[flo
     # Mostly white walls and ceilings: albedo ~0.85 under the typical light.
     exposure = min(max(EXPOSE_TO / (0.85 * max(typical, 1e-6)), 1.0), 64.0)
     out = bpy.data.images.new("lightmap-8bit", size, size)
-    out.colorspace_settings.name = "sRGB"
+    out.colorspace_settings.name = "Non-Color"
     linear = np.clip(rgb / scale, 0.0, 1.0)
     encoded = np.ones((size * size, 4), dtype=np.float32)
-    # An 8-bit image's pixels are stored already encoded, so apply the sRGB
-    # curve here: handing it linear values made the light ~15x too dark.
-    encoded[:, :3] = np.where(linear <= 0.0031308, linear * 12.92,
-                              1.055 * np.power(linear, 1 / 2.4) - 0.055)
+    # An 8-bit image's pixels are stored as given: encoded here.
+    encoded[:, :3] = np.power(linear, 1 / LIGHTMAP_GAMMA)
     out.pixels.foreach_set(encoded.ravel())
     out.filepath_raw = path
     out.file_format = "JPEG"

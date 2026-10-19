@@ -309,6 +309,23 @@ def mean_albedo(path: Path) -> str:
 # --------------------------------------------------------------------------
 
 
+def sky_mask(rgb: np.ndarray) -> np.ndarray:
+    """
+    Where a photo out of a window shows sky: the blue or bright, unsaturated
+    region joined to its top edge (rgb as floats 0..1). Contrails, birds and
+    specks inside the sky count as sky.
+    """
+    hsv = cv2.cvtColor(rgb.astype(np.float32), cv2.COLOR_RGB2HSV)  # H in degrees, S, V 0..1
+    hue, sat, val = hsv[..., 0], hsv[..., 1], hsv[..., 2]
+    sky = ((hue > 185) & (hue < 250) & (val > 0.45)) | ((sat < 0.12) & (val > 0.82))
+    sky = cv2.morphologyEx(sky.astype(np.uint8), cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
+    _, labels = cv2.connectedComponents(sky)
+    touching = set(np.unique(labels[0][sky[0] > 0]).tolist())
+    mask = np.isin(labels, list(touching)) & (sky > 0)
+    mask = cv2.morphologyEx(mask.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((15, 15), np.uint8))
+    return mask > 0
+
+
 def window_view(path: Path, crop: tuple[float, float, float, float] = (0.0, 0.0, 1.0, 1.0),
                 max_side: int = 1600) -> tuple[Image.Image, str, str, str]:
     """
@@ -330,15 +347,7 @@ def window_view(path: Path, crop: tuple[float, float, float, float] = (0.0, 0.0,
                         round(crop[2] * w), round(crop[3] * h)))
     image.thumbnail((max_side, max_side))
     rgb = np.asarray(image, np.float32) / 255
-    hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)  # H in degrees, S and V in 0..1
-    hue, sat, val = hsv[..., 0], hsv[..., 1], hsv[..., 2]
-    sky = ((hue > 185) & (hue < 250) & (val > 0.45)) | ((sat < 0.12) & (val > 0.82))
-    sky = cv2.morphologyEx(sky.astype(np.uint8), cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
-    _, labels = cv2.connectedComponents(sky)
-    touching = set(np.unique(labels[0][sky[0] > 0]).tolist())
-    mask = np.isin(labels, list(touching)) & (sky > 0)
-    # Contrails, birds and specks inside the sky are sky too.
-    mask = cv2.morphologyEx(mask.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((15, 15), np.uint8))
+    mask = sky_mask(rgb).astype(np.uint8)
     alpha = 1.0 - cv2.GaussianBlur(mask.astype(np.float32), (0, 0), 1.5)
     rows = np.flatnonzero(mask.any(axis=1))
     lin = srgb_to_linear(rgb)

@@ -7,6 +7,24 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-10-19 — The view is the owner's photos; a real sky; a clean hall
+
+- **View:** the photos out of the two windows, stood in 3D from their own
+  stereo (street front 12 m, blocks behind 30-70 m), sky cut away along
+  the roofs. From where they were taken they are the photo; walking about,
+  near and far move against each other.
+- **Sky:** physically scattered sunlight per time of day, matched to the
+  photo's sky, which is kept (contrails and all) where it has one.
+- **Hall:** clean and darker: light maps stored with a gamma of 4 (the
+  grey spots were the hall's light squeezed into a few 8-bit levels), and
+  the auto exposure opens up to x2.2 at most.
+- Generated houses at the edges in the photos' colours, darker tiles.
+
+Not verified: the stereo distances against a measurement (the street
+front came out 12.0 m from one photo, 10.6 m from the other).
+
+---
+
 ## 2026-10-19 — Real views, a daylight slider, the photos' look
 
 - **Views:** the houses really outside: 76 buildings from OpenStreetMap

@@ -14,14 +14,17 @@ const W = 32;
 const H = 18;
 
 /** How far the camera follows the light: 0 never, 1 to the same brightness everywhere. */
-export const ADAPT = 0.7;
+export const ADAPT = 0.6;
+
+/** How far it opens up at most: the hall, lit only by bounce, stays a darker room. */
+export const MAX_EXPOSURE = 2.2;
 
 /**
  * The exposure for a view whose log-average linear luminance is `mean`,
  * where a view of `key` needs none. Clamped, as a camera's range is.
  */
 export function targetExposure(mean: number, key: number, adapt = ADAPT): number {
-  return Math.min(Math.max((key / Math.max(mean, 1e-4)) ** adapt, 0.6), 4);
+  return Math.min(Math.max((key / Math.max(mean, 1e-4)) ** adapt, 0.6), MAX_EXPOSURE);
 }
 
 /** Ease `current` towards `target` with a time constant of `seconds`. */

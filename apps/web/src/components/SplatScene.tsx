@@ -32,7 +32,7 @@ import {
 import type { Manifest, Room, Vec2 } from '../lib/manifest';
 import { FLOOR_DEFAULT_COLOR, floorColor } from '../lib/floorColors';
 import { apiUrl } from '../lib/api';
-import { type Daylight, type DaylightKey, loadDaylight } from '../lib/daylight';
+import { type Daylight, type DaylightKey, decodeLightMaps, loadDaylight } from '../lib/daylight';
 import { AutoExposure } from '../lib/exposure';
 import type { CatalogItem } from '../lib/store';
 import type { PlacedItem, ViewerState } from '../lib/viewerState';
@@ -51,6 +51,8 @@ export interface BakedModel {
   lightmapScale: number;
   /** The light at other times of day, when the flat was baked at several. */
   lighting?: DaylightKey[];
+  /** The view out of the windows from the owner's photos, and when they were taken. */
+  viewPhoto?: { url: string; minutes: number };
 }
 
 interface Props {
@@ -336,10 +338,12 @@ export function SplatScene({
       loadBakedModel(model, renderer.capabilities.getMaxAnisotropy())
         .then(async (group) => {
           if (disposed || !sceneRef.current) return;
+          if (model.viewPhoto) group.add(await loadViewPhoto(model.viewPhoto.url));
+          if (disposed || !sceneRef.current) return;
           scene.add(group);
           sceneRef.current.model = group;
           if (model.lighting && model.lighting.length > 1) {
-            const rig = await loadDaylight(model.lighting, group);
+            const rig = await loadDaylight(model.lighting, group, model.viewPhoto?.minutes);
             if (disposed || !sceneRef.current) return;
             sceneRef.current.daylight = rig;
             rig.set(daylightRef.current ?? rig.keys[0].minutes);
@@ -1233,10 +1237,17 @@ async function loadBakedModel(model: BakedModel, anisotropy: number): Promise<TH
     new GLTFLoader().loadAsync(model.url),
     new THREE.TextureLoader().loadAsync(model.lightmapUrl),
   ]);
-  // Same convention as the glTF's own textures, on its second UV set.
+  // Same convention as the glTF's own textures, on its second UV set;
+  // its encoding is undone in the shader (decodeLightMaps).
   lightMap.flipY = false;
-  lightMap.colorSpace = THREE.SRGBColorSpace;
+  lightMap.colorSpace = THREE.NoColorSpace;
   lightMap.channel = 1;
+  const single = {
+    lightMap2: { value: lightMap },
+    lightMix: { value: 0 },
+    lightScale1: { value: model.lightmapScale },
+    lightScale2: { value: model.lightmapScale },
+  };
   gltf.scene.traverse((node) => {
     if (!(node instanceof THREE.Mesh)) return;
     const source = node.material as THREE.MeshStandardMaterial;
@@ -1255,8 +1266,7 @@ async function loadBakedModel(model: BakedModel, anisotropy: number): Promise<TH
     const baked = Boolean(node.geometry.getAttribute("uv1"));
     if (!source.transparent && baked) {
       material.lightMap = lightMap;
-      // MeshBasicMaterial divides the light map by pi (a Lambert BRDF).
-      material.lightMapIntensity = model.lightmapScale * Math.PI;
+      decodeLightMaps(material, single);
     }
     if (!baked && source.name !== "glass") material.toneMapped = false;
     if (source.name === "sky") material.fog = false;
@@ -1266,6 +1276,28 @@ async function loadBakedModel(model: BakedModel, anisotropy: number): Promise<TH
     material.userData.originalColor = source.color.clone();
     source.dispose();
     node.material = material;
+  });
+  return gltf.scene;
+}
+
+/**
+ * The view out of the windows as the owner photographed it (view_photo.py):
+ * shown as the photo is, neither lit nor tone mapped nor hazed, as the
+ * camera already saw all that.
+ */
+async function loadViewPhoto(url: string): Promise<THREE.Object3D> {
+  const gltf = await new GLTFLoader().loadAsync(url);
+  gltf.scene.traverse((node) => {
+    if (!(node instanceof THREE.Mesh)) return;
+    const source = node.material as THREE.MeshBasicMaterial;
+    node.material = new THREE.MeshBasicMaterial({
+      name: 'view-photo',
+      map: source.map,
+      side: THREE.DoubleSide,
+      toneMapped: false,
+      fog: false,
+    });
+    source.dispose();
   });
   return gltf.scene;
 }

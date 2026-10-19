@@ -22,6 +22,7 @@ from rich.console import Console
 
 from . import flat_geometry
 from . import frames as frames_mod
+from . import outside as outside_mod
 from . import rebuild as rebuild_mod
 from . import roomplan as roomplan_mod
 from . import stray as stray_mod
@@ -560,8 +561,28 @@ def rebuild(
         manifest.assets.lightmapScale = meta["lightmapScale"]
         manifest.assets.lighting = [Lighting(**t) for t in meta["lighting"] if t["time"]]
         manifest.rooms[0].obstacles = [Obstacle(**o) for o in meta.get("obstacles", [])]
+        _outside(paths, manifest, spec, dressing)
         manifest.write(paths.manifest)
     console.print(f"[green]Rebuilt[/green] in {(time.time() - started) / 60:.1f} min")
+
+
+def _outside(paths: ProjectPaths, manifest: Manifest, spec: dict, dressing: dict) -> None:
+    result = outside_mod.build(paths, spec, dressing, [t.time for t in manifest.assets.lighting])
+    outside_mod.apply(manifest, result)
+    for info in result["views"]:
+        console.print(f"  view from a photo: {info}")
+    console.print(f"  {len(result['skies'])} skies")
+
+
+@app.command()
+def outside(project: str = typer.Option(..., "--project", "-p")) -> None:
+    """The view out of the windows and the skies again, without baking the flat again."""
+    paths = _paths(project)
+    manifest = Manifest.load(paths.manifest)
+    dressing = json.loads((paths.input / "dressing.json").read_text(encoding="utf-8"))
+    spec = json.loads((paths.work / "rebuild_spec.json").read_text(encoding="utf-8"))
+    _outside(paths, manifest, spec, dressing)
+    manifest.write(paths.manifest)
 
 
 @app.command(name="run-all")
