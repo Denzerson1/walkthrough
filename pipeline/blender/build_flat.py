@@ -764,8 +764,7 @@ BLOCK_COLOURS = {"bed": "#e9e4dc", "sofa": "#8d9390", "tv": "#1b1c1e", "applianc
 FRONT_T, GAP, GRIP = 0.019, 0.003, 0.03  # front thickness, gap between fronts, grip channel
 
 #: Rounded edges, for the pieces that have them: (bevel width, segments).
-SOFTNESS = {"sofa": (0.06, 5), "bed": (0.025, 3), "stool": (0.006, 2), "air-con": (0.02, 3),
-            "tv": (0.003, 1)}
+SOFTNESS = {"sofa": (0.06, 5), "bed": (0.025, 3), "air-con": (0.02, 3), "tv": (0.003, 1)}
 
 Part = tuple[str, tuple[float, float, float, float, float, float]]
 
@@ -842,9 +841,10 @@ def finish_parts(finish: str, w: float, h: float, d: float, opts: dict) -> list[
     """
     A piece drawn from boxes, in its own frame: x across, y depth with the
     front at -d/2, z up from 0. Built as the photos show it: handleless high
-    gloss fronts with grip channels, a worktop with its sink, the bar's oak
-    top overhanging where the stools go, an open wardrobe with its shelves,
-    rail and drawers. Parts may reach outside the scanned box (an overhang).
+    gloss fronts with grip channels, a worktop with its sink, an open
+    wardrobe with its shelves, rail and drawers. Parts may reach outside the
+    scanned box (an overhang). The island's top and the stools are not boxes:
+    island_top, stool.
     """
     x0, x1, y0, y1 = -w / 2, w / 2, -d / 2, d / 2
     plinth = ("plinth", (x0, x1, y0 + 0.06, y1, 0, 0.1))
@@ -902,18 +902,14 @@ def finish_parts(finish: str, w: float, h: float, d: float, opts: dict) -> list[
                 ("vent", (x0 + 0.05, x1 - 0.05, y0 - 0.002, y0 + 0.03, 0.02, 0.07))]
     if finish == "island":
         # Drawers face the kitchen (-y); the free end is +x, the bar side +y.
-        out_end, out_back = opts.get("overhangEnd", 0.42), opts.get("overhangBack", 0.27)
-        bar = opts.get("barWidth", 0.3)
+        # The top is one piece: island_top.
         parts = [("plinth", (x0 + 0.05, x1 - 0.05, y0 + 0.06, y1 - 0.06, 0, 0.1)),
                  ("white", (x0, x1 - 0.025, y0 + FRONT_T, y1 - 0.02, 0.1, h - 0.04)),
                  ("alu", (x0, x1 - 0.025, y0 + 0.004, y0 + FRONT_T + 0.01,
                           h - 0.04 - GRIP + 0.001, h - 0.041)),
                  *fronts(x0, x1 - 0.025, 0.1 + GAP, h - 0.04 - GRIP, y0, [[0, 3]] * 3),
                  ("oak-warm", (x1 - 0.025, x1, y0, y1 - 0.02, 0, h - 0.04)),
-                 ("oak-warm", (x0, x1, y1 - 0.02, y1, 0, h - 0.04)),
-                 ("stone", (x0, x1 - 0.25, y0 - 0.02, y1 - bar, h - 0.04, h)),
-                 ("oak-warm", (x0, x1 + out_end, y1 - bar, y1 + out_back, h - 0.04, h)),
-                 ("oak-warm", (x1 - 0.25, x1 + out_end, y0 - 0.02, y1 - bar, h - 0.04, h))]
+                 ("oak-warm", (x0, x1, y1 - 0.02, y1, 0, h - 0.04))]
         if opts.get("backPanel", True):
             parts += [("oak-warm", (x0, x0 + 0.03, y0, y1, h, h + 0.75)),
                       ("glass-shelf", (x0 + 0.03, x0 + 0.2, y0 + 0.08, y1 - 0.08,
@@ -1005,18 +1001,166 @@ def finish_parts(finish: str, w: float, h: float, d: float, opts: dict) -> list[
     if finish == "tv":
         return [("black", (x0, x1, y0, y0 + 0.012, 0, h)),
                 ("vent", (x0 + 0.08, x1 - 0.08, y0 + 0.012, y1, 0.08, h - 0.08))]
-    if finish == "stool":
-        seat = h * 0.65
-        parts = [("oak-warm", (x, x + 0.03, y, y + 0.03, 0, seat))
-                 for x in (x0 + 0.05, x1 - 0.08) for y in (y0 + 0.05, y1 - 0.08)]
-        parts += [("oak-warm", (x0 + 0.08, x1 - 0.08, y0 + 0.055, y0 + 0.075, 0.29, 0.31)),
-                  ("oak-warm", (x0 + 0.08, x1 - 0.08, y1 - 0.075, y1 - 0.055, 0.29, 0.31)),
-                  ("oak-warm", (x0 + 0.055, x0 + 0.075, y0 + 0.08, y1 - 0.08, 0.33, 0.35)),
-                  ("oak-warm", (x1 - 0.075, x1 - 0.055, y0 + 0.08, y1 - 0.08, 0.33, 0.35)),
-                  ("fabric", (x0 + 0.02, x1 - 0.02, y0 + 0.02, y1 - 0.04, seat, seat + 0.07)),
-                  ("fabric", (x0 + 0.04, x1 - 0.04, y1 - 0.07, y1 - 0.02, seat + 0.07, h))]
-        return parts
     raise ValueError(f"Unknown finish {finish!r}")
+
+
+#: A top in one piece: cut lines `xs` and `ys` across the plan, each cell of
+#: the grid its own surface (None: no cell), between z0 and z1. The cells
+#: share their edges, so no hidden faces lie between them: two boards laid
+#: side by side baked a dark seam, the bake spreading the hidden faces'
+#: darkness over the joint.
+Slab = tuple[list[float], list[float], float, float, list[list[str | None]]]
+
+
+def island_top(w: float, h: float, d: float, opts: dict) -> Slab:
+    """The island's top as photographed: oak round the stone inset, the bar
+    along the back and the end overhanging where the stools go."""
+    x0, x1, y0, y1 = -w / 2, w / 2, -d / 2, d / 2
+    out_end, out_back = opts.get("overhangEnd", 0.42), opts.get("overhangBack", 0.27)
+    bar = opts.get("barWidth", 0.3)
+    return ([x0, x1 - 0.25, x1 + out_end], [y0 - 0.02, y1 - bar, y1 + out_back], h - 0.04, h,
+            [["stone", "oak-warm"], ["oak-warm", "oak-warm"]])
+
+
+def add_slab(bm: bmesh.types.BMesh, slab: Slab, slot, surfaces: dict) -> None:
+    """A Slab into `bm`, its faces given their surface's material by `slot`."""
+    xs, ys, z0, z1, cells = slab
+    verts: dict[tuple[int, int, int], bmesh.types.BMVert] = {}
+
+    def vert(i: int, j: int, k: int) -> bmesh.types.BMVert:
+        if (i, j, k) not in verts:
+            verts[i, j, k] = bm.verts.new((xs[i], ys[j], (z0, z1)[k]))
+        return verts[i, j, k]
+
+    def filled(i: int, j: int) -> bool:
+        return 0 <= j < len(cells) and 0 <= i < len(cells[j]) and cells[j][i] is not None
+
+    size = (xs[-1] - xs[0], ys[-1] - ys[0], z1 - z0)
+    for j, row in enumerate(cells):
+        for i, surface in enumerate(row):
+            if surface is None:
+                continue
+            corners = [(i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1)]
+            faces = [bm.faces.new([vert(a, b, 1) for a, b in corners]),
+                     bm.faces.new([vert(a, b, 0) for a, b in reversed(corners)])]
+            # Sides only on the outline, counter-clockwise from the front.
+            for n, (di, dj) in enumerate(((0, -1), (1, 0), (0, 1), (-1, 0))):
+                if not filled(i + di, j + dj):
+                    a, b = corners[n], corners[(n + 1) % 4]
+                    faces.append(bm.faces.new([vert(*a, 0), vert(*b, 0), vert(*b, 1),
+                                               vert(*a, 1)]))
+            for face in faces:
+                face.material_index = slot(surface)
+                face.normal_update()  # a new face has none, and box_uvs goes by it
+            box_uvs(bm, faces, size, surfaces[surface].get("tile", (1.0, 1.0)))
+
+
+def tube(bm: bmesh.types.BMesh, a, b, r0: float, r1: float,
+         segments: int = 16) -> list[bmesh.types.BMFace]:
+    """A round rod from a (radius r0) to b (radius r1), shaded smooth round its side."""
+    a, b = Vector(a), Vector(b)
+    axis = b - a
+    cone = bmesh.ops.create_cone(bm, cap_ends=True, segments=segments, radius1=r0,
+                                 radius2=r1, depth=axis.length)
+    turn = Vector((0, 0, 1)).rotation_difference(axis.normalized()).to_matrix().to_4x4()
+    bmesh.ops.transform(bm, matrix=Matrix.Translation((a + b) / 2) @ turn, verts=cone["verts"])
+    faces = list({f for v in cone["verts"] for f in v.link_faces})
+    for face in faces:
+        face.normal_update()  # still the upright cone's
+        face.smooth = abs(face.normal.dot(axis.normalized())) < 0.9
+    return faces
+
+
+def stool_shell(w: float, h: float, d: float) -> bpy.types.Mesh:
+    """
+    The bar stools' upholstered shell, as photographed: a thin seat with a
+    soft rolled front, rising at the back into a curved back that widens to
+    its rounded top. A coarse cage of sections along the shell's profile,
+    smoothed by subdivision into one rounded piece.
+    """
+    k, seat = min(w, d) / 0.46, h * 0.64
+    # Along the profile, front lip to the top of the back: y, z, width, thickness.
+    sections = [(-0.20, seat - 0.03, 0.34, 0.035), (-0.17, seat - 0.005, 0.41, 0.05),
+                (-0.04, seat + 0.005, 0.44, 0.055), (0.09, seat, 0.43, 0.055),
+                (0.155, seat + 0.05, 0.34, 0.05), (0.175, seat + 0.17, 0.32, 0.045),
+                (0.195, seat + 0.28, 0.37, 0.045), (0.21, h + 0.01, 0.39, 0.04)]
+    across = (-1.0, -0.6, 0.0, 0.6, 1.0)
+    points = []
+    for i, (y, z, width, _) in enumerate(sections):
+        # The seat's sides lift a little; the back wraps round the sitter.
+        lift, wrap = (0.012, 0.0) if i < 4 else (0.0, 0.05 if i > 4 else 0.03)
+        points.append([Vector((u * width * k / 2, y * k - wrap * u * u, z + lift * u * u))
+                       for u in across])
+    bm = bmesh.new()
+    top: list[list[bmesh.types.BMVert]] = []
+    under: list[list[bmesh.types.BMVert]] = []
+    rows, cols = len(points), len(across)
+    for i, row in enumerate(points):
+        t = sections[i][3] / 2
+        top.append([])
+        under.append([])
+        for j, p in enumerate(row):
+            along = points[min(i + 1, rows - 1)][j] - points[max(i - 1, 0)][j]
+            side = row[min(j + 1, cols - 1)] - row[max(j - 1, 0)]
+            n = side.cross(along).normalized()
+            top[i].append(bm.verts.new(p + n * t))
+            under[i].append(bm.verts.new(p - n * t))
+    for i in range(rows - 1):
+        for j in range(cols - 1):
+            bm.faces.new([top[i][j], top[i][j + 1], top[i + 1][j + 1], top[i + 1][j]])
+            bm.faces.new([under[i][j], under[i + 1][j], under[i + 1][j + 1], under[i][j + 1]])
+        bm.faces.new([top[i][0], top[i + 1][0], under[i + 1][0], under[i][0]])
+        bm.faces.new([top[i][-1], under[i][-1], under[i + 1][-1], top[i + 1][-1]])
+    for j in range(cols - 1):
+        bm.faces.new([top[0][j], under[0][j], under[0][j + 1], top[0][j + 1]])
+        bm.faces.new([top[-1][j], top[-1][j + 1], under[-1][j + 1], under[-1][j]])
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    cage = bpy.data.meshes.new("shell-cage")
+    bm.to_mesh(cage)
+    bm.free()
+    obj = bpy.data.objects.new("shell-cage", cage)
+    bpy.context.collection.objects.link(obj)
+    smooth = obj.modifiers.new("smooth", "SUBSURF")
+    smooth.levels = smooth.render_levels = 2
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    shell = bpy.data.meshes.new_from_object(obj.evaluated_get(depsgraph))
+    bpy.data.objects.remove(obj)
+    bpy.data.meshes.remove(cage)
+    return shell
+
+
+def stool(bm: bmesh.types.BMesh, w: float, h: float, d: float, slot, surfaces: dict) -> None:
+    """A bar stool as photographed: the shell (stool_shell) on four splayed,
+    tapering round legs in a wood finish with steel glides, and round
+    stretchers, the front and back ones lower than the sides'."""
+    k, seat = min(w, d) / 0.46, h * 0.64
+    before = set(bm.faces)
+    shell = stool_shell(w, h, d)
+    bm.from_mesh(shell)
+    bpy.data.meshes.remove(shell)
+    faces = [f for f in bm.faces if f not in before]
+    for face in faces:
+        face.material_index, face.smooth = slot("fabric"), True
+    box_uvs(bm, faces, (w, d, h - seat), surfaces["fabric"].get("tile", (1.0, 1.0)))
+    glide, under = 0.012, seat - 0.01  # the legs' tops sunk into the shell
+    feet = [Vector((sx * 0.195 * k, sy * 0.185 * k, 0)) for sy in (-1, 1) for sx in (-1, 1)]
+    tops = [Vector((sx * 0.13 * k, sy * 0.10 * k, under)) for sy in (-1, 1) for sx in (-1, 1)]
+
+    def on_leg(n: int, z: float) -> Vector:
+        return feet[n].lerp(tops[n], z / under)
+
+    wood = []
+    for n in range(4):
+        steel = tube(bm, feet[n], on_leg(n, glide), 0.009, 0.010)
+        for face in steel:
+            face.material_index = slot("steel")
+        wood += tube(bm, on_leg(n, glide), tops[n], 0.010, 0.017)
+    # Front and back stretchers, then the sides', between the legs' axes.
+    for a, b, z in ((0, 1, 0.27), (2, 3, 0.27), (0, 2, 0.37), (1, 3, 0.37)):
+        wood += tube(bm, on_leg(a, z), on_leg(b, z), 0.008, 0.008, segments=10)
+    for face in wood:
+        face.material_index = slot("beech")
+    box_uvs(bm, wood, (0.03, 0.03, seat), surfaces["beech"].get("tile", (1.0, 1.0)))
 
 
 def surface_material(name: str, surface: dict) -> bpy.types.Material:
@@ -1053,7 +1197,16 @@ def finished(item: dict, surfaces: dict) -> bpy.types.Object:
     mesh = bpy.data.meshes.new(item["id"])
     bm = bmesh.new()
     slots: list[str] = []
-    if item["finish"] == "pendant":
+
+    def slot(surface: str) -> int:
+        if surface not in slots:
+            slots.append(surface)
+        return slots.index(surface)
+
+    opts = item.get("options") or {}
+    if item["finish"] == "stool":
+        stool(bm, w, h, d, slot, surfaces)
+    elif item["finish"] == "pendant":
         # A drum shade on a cable from the ceiling.
         radius, shade = min(w, d) / 2, 0.28
         cone = bmesh.ops.create_cone(bm, cap_ends=True, segments=40, radius1=radius,
@@ -1063,13 +1216,9 @@ def finished(item: dict, surfaces: dict) -> bpy.types.Object:
         bmesh.ops.scale(bm, verts=cable["verts"], vec=(0.008, 0.008, h - shade))
         bmesh.ops.translate(bm, verts=cable["verts"], vec=(0, 0, shade + (h - shade) / 2))
         for face in bm.faces:
-            face.material_index = 0
-        slots = ["shade"]
+            face.material_index = slot("shade")
     else:
-        parts = finish_parts(item["finish"], w, h, d, item.get("options") or {})
-        for surface, (px0, px1, py0, py1, pz0, pz1) in parts:
-            if surface not in slots:
-                slots.append(surface)
+        for surface, (px0, px1, py0, py1, pz0, pz1) in finish_parts(item["finish"], w, h, d, opts):
             cube = bmesh.ops.create_cube(bm, size=1.0)
             size = (px1 - px0, py1 - py0, pz1 - pz0)
             bmesh.ops.scale(bm, verts=cube["verts"], vec=size)
@@ -1077,8 +1226,10 @@ def finished(item: dict, surfaces: dict) -> bpy.types.Object:
                                 vec=((px0 + px1) / 2, (py0 + py1) / 2, (pz0 + pz1) / 2))
             faces = {f for v in cube["verts"] for f in v.link_faces}
             for face in faces:
-                face.material_index = slots.index(surface)
+                face.material_index = slot(surface)
             box_uvs(bm, faces, size, surfaces[surface].get("tile", (1.0, 1.0)))
+        if item["finish"] == "island":
+            add_slab(bm, island_top(w, h, d, opts), slot, surfaces)
     bm.to_mesh(mesh)
     bm.free()
     for surface in slots:

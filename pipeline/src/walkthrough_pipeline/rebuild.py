@@ -63,7 +63,8 @@ SURFACES: dict[str, tuple[str, float, str | None]] = {
     "wenge": ("#2f231e", 0.5, "veneer"),     # the bed base
     "linen": ("#f2f1ee", 0.9, "linen"),
     "boucle": ("#e8e3d9", 1.0, "boucle"),
-    "fabric": ("#a8a39d", 0.9, "boucle"),    # bar stools
+    "fabric": ("#8c8884", 0.9, None),        # bar stools: a smooth grey suede
+    "beech": ("#c4915f", 0.45, None),        # the stools' legs
     "coats": ("#2e2b2c", 0.95, None),
     "coat-light": ("#b3a792", 0.95, None),  # a trench in the hall niche
     "shade": ("#f3efe5", 0.8, None),
@@ -265,6 +266,41 @@ def box_from_corners(lo, hi, front) -> tuple[list[float], list[float]]:
     centre = [(a + b) / 2 for a, b in zip(lo, hi, strict=True)]
     dx, dy, dz = (abs(b - a) for a, b in zip(lo, hi, strict=True))
     return centre, [dz, dy, dx] if abs(front[0]) > abs(front[1]) else [dx, dy, dz]
+
+
+def widen(room: Room, items: list[ManifestItem], scan: dict, at: float, by: float) -> None:
+    """
+    Let a strip `by` metres deep into the scanned plan at z = `at`, where the
+    owner knows the flat is roomier than it came out: all past it moves on
+    by `by` (walls, slopes, pieces, whole, by their centre) and the walls
+    across it grow longer, their openings staying where they were.
+    """
+
+    def z(v: float) -> float:
+        return v + by if v > at else v
+
+    def plan(p) -> tuple[float, float]:
+        return (p[0], z(p[1]))
+
+    before = [(w.start, w.end) for w in room.walls]
+    room.floorPolygon = [plan(p) for p in room.floorPolygon]
+    for w in room.walls:
+        w.start, w.end = plan(w.start), plan(w.end)
+    for o in room.openings:
+        (sx, sz), (ex, ez) = before[o.wallIndex]
+        t = o.offset / math.hypot(ex - sx, ez - sz)
+        cx, cz = plan((sx + (ex - sx) * t, sz + (ez - sz) * t))
+        (sx, sz), (ex, ez) = room.walls[o.wallIndex].start, room.walls[o.wallIndex].end
+        o.offset = ((cx - sx) * (ex - sx) + (cz - sz) * (ez - sz)) / math.hypot(ex - sx, ez - sz)
+    x, y, wz = room.waypoint.position
+    room.waypoint.position = (x, y, z(wz))
+    for item in items:
+        x, y, iz = item.box.center
+        item.box.center = (x, y, z(iz))
+    scan["ceilings"] = [[[x, y, z(v)] for x, y, v in piece] for piece in scan["ceilings"]]
+    scan["partitions"] = [{**p, "start": list(plan(p["start"])), "end": list(plan(p["end"]))}
+                          for p in scan["partitions"]]
+    scan["zones"] = [(label, [list(plan(p)) for p in polygon]) for label, polygon in scan["zones"]]
 
 
 def roof_windows(ceilings: list, wanted: list[dict]) -> list[dict]:

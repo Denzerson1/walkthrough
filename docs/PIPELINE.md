@@ -304,9 +304,13 @@ cannot see; placed by hand from the capture photos):
   own model exists: `kitchen-base` (fronts in `columns`, one tagged `sink`
   gets basin and tap), `kitchen-wall` (`rows`, `columns`), `kitchen-tall`,
   `oven`, `hob`, `island` (oak bar top overhanging `overhangEnd` and
-  `overhangBack`), `wardrobe` (`doors`, or door widths as `columns`;
+  `overhangBack`, one piece with the stone inset: cells of one slab that
+  share their edges, since two boards side by side baked a dark seam),
+  `wardrobe` (`doors`, or door widths as `columns`;
   `handles` as fractions across the front, `[]` for none), `open-wardrobe`
-  (`drawers`), `coat-niche`, `bed`, `sofa`, `stool`, `tv`; `min`/`max`
+  (`drawers`), `coat-niche`, `bed`, `sofa`, `stool` (an upholstered shell
+  smoothed by subdivision from a cage of sections, on splayed tapering
+  round legs with stretchers), `tv`; `min`/`max`
   correct a scanned box, `front` names the side a piece faces. `extras`:
   what the scanner missed (panels, shelves, the air conditioner, a
   pendant, more stools, the corner wardrobe's second wing).
@@ -314,6 +318,10 @@ cannot see; placed by hand from the capture photos):
   (`start` or `end` of the wall: the handle's side) and `frame` (false: a
   concealed frame, the leaf flush with the wall in a 4 mm dark gap).
 - `hero`: the preview's view, also the walkthrough's start.
+- `widen`: a strip `by` metres deep let into the scanned plan at z = `at`,
+  where the owner knows the flat is roomier than the scan: walls, slopes
+  and pieces past it move on, the walls across it grow (`rebuild.widen`).
+  The other dressing positions are as after it.
 
 **Light:** Cycles bakes diffuse light (direct and bounced) into one 2048
 atlas at 2048 samples, with light portals in the roof windows, denoised

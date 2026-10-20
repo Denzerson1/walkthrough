@@ -273,3 +273,31 @@ def test_a_bed_facing_along_its_box_is_sized_length_deep():
     # Scanned as (2.09 long, 0.69, 1.69 wide) with its depth along x (yaw 270).
     assert sized_for((0, -1), [2.09, 0.69, 1.69], 270) == [1.69, 0.69, 2.09]
     assert sized_for((1, 0), [2.09, 0.69, 1.69], 270) == [2.09, 0.69, 1.69]
+
+
+def test_widen_moves_all_past_the_strip_and_keeps_openings_in_place():
+    from walkthrough_pipeline.manifest import Room, Wall, Waypoint
+    from walkthrough_pipeline.rebuild import widen
+
+    corners = [(0.0, 0.0), (4.0, 0.0), (4.0, 3.0), (0.0, 3.0)]
+    room = Room(id="room", name="room", waypoint=Waypoint(position=(1.0, 1.6, 2.0)),
+                floorPolygon=corners,
+                walls=[Wall(start=corners[i - 1], end=corners[i]) for i in (1, 2, 3, 0)],
+                openings=[Opening(type="door", wallIndex=1, offset=2.5, width=0.8, height=2.0),
+                          Opening(type="window", wallIndex=3, offset=0.5, width=0.6, height=1.0),
+                          Opening(type="door", wallIndex=3, offset=2.5, width=0.8, height=2.0)])
+    near = _item("table", (1, 1, 1), (1.0, 0.5, 1.0))
+    far = _item("sofa", (2, 1, 1), (2.0, 0.4, 2.5))
+    scan = {"ceilings": [[[0.0, 2.5, 1.0], [4.0, 2.5, 2.0]]],
+            "partitions": [{"start": [1.0, 0.0], "end": [1.0, 2.0], "height": 2.5}],
+            "zones": [("Other", [[0.0, 0.0], [1.0, 2.0], [0.0, 2.0]])]}
+    widen(room, [near, far], scan, at=1.5, by=0.5)
+    assert room.floorPolygon == [(0.0, 0.0), (4.0, 0.0), (4.0, 3.5), (0.0, 3.5)]
+    assert room.walls[1].end == (4.0, 3.5) and room.walls[3].start == (0.0, 3.5)
+    # Each opening's centre: (4, 2.5) and (0, 2.5) move on; (0, 0.5) stays.
+    assert [o.offset for o in room.openings] == pytest.approx([3.0, 0.5, 3.0])
+    assert near.box.center == (1.0, 0.5, 1.0) and far.box.center == (2.0, 0.4, 3.0)
+    assert room.waypoint.position == (1.0, 1.6, 2.5)
+    assert scan["ceilings"] == [[[0.0, 2.5, 1.0], [4.0, 2.5, 2.5]]]
+    assert scan["partitions"][0]["end"] == [1.0, 2.5] and scan["partitions"][0]["height"] == 2.5
+    assert scan["zones"] == [("Other", [[0.0, 0.0], [1.0, 2.5], [0.0, 2.5]])]

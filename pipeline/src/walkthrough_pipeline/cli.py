@@ -513,6 +513,8 @@ def rebuild(
             "partitions": roomplan_mod.partitions(loaded, np.array(room.floorPolygon), floor_y),
             "zones": [(label, poly.tolist()) for label, poly in roomplan_mod.floor_zones(loaded)],
         }
+        if dressing.get("widen"):
+            rebuild_mod.widen(room, items, scan, **dressing["widen"])
         # The viewer keeps a standing person's head under a slope.
         room.ceilings = [[tuple(p) for p in piece] for piece in scan["ceilings"]]
         if dressing.get("hero"):

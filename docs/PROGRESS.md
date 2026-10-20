@@ -7,6 +7,21 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-10-20 — The island's top in one piece, more room, the real stools
+
+- **Island top:** the oak bar, the oak end and the stone inset were three
+  boxes; where they touched, the bake spread the hidden faces' darkness
+  over the joint and a dark cut showed between the boards. The top is now
+  one slab of cells sharing their edges.
+- **More room towards the windows** (the owner's call): dressing `widen`
+  lets 0.3 m into the plan at z = 2.05, between the stools and the sofa.
+  The slope, roof windows, sofa and bed move with it; the island, TV and
+  kitchen stay.
+- **Stools** as photographed (chair1-3): a soft upholstered shell, seat
+  rolling into a curved back that widens to its top, on four splayed
+  tapering round legs with steel glides and round stretchers. Plain grey
+  suede: the generated linen texture's crumples read as dents on them.
+
 ## 2026-10-19 — Layout 1:1 with the photos, a warmer light
 
 Every capture photo was set beside a render from its own viewpoint (24 mm,
