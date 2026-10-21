@@ -339,8 +339,11 @@ photo). With `sun.times`, once per time of day: `flat_light-HHMM.jpg`
 each, listed in the manifest's `assets.lighting`; a camera's exposure
 follows each time halfway, so the evening stays darker. Faces nobody sees from inside stay in for the
 bake, so the room's solids block light, but get no atlas: each shrinks to
-the point of its nearest seen corner, so one that shows after all (the
-slope's cut beside a roof window's lining) carries that light, not black.
+the nearest point of a seen face, so one that shows after all (the slope's
+cut beside a roof window's lining) carries the light beside it, not black.
+So do the lining boards' 12 mm edges, which on so few texels baked blotchy,
+and the boards' backs on the slab's cut, so an edge takes its board's lit
+face and not a back's black.
 A roof window's sash is one closed ring: four bars meeting end to end hid
 faces whose dark the bake spread into its corners. Each object is
 unwrapped on its own without aspect correction (with it, a photo

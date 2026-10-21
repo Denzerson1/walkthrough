@@ -19,7 +19,8 @@ from pathlib import Path
 import bmesh
 import bpy
 from mathutils import Matrix, Vector
-from mathutils.kdtree import KDTree
+from mathutils.bvhtree import BVHTree
+from mathutils.geometry import barycentric_transform
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src" / "walkthrough_pipeline"))
 from flat_geometry import (  # noqa: E402  (standard library only, so importable here)
@@ -755,6 +756,30 @@ def mark_unseen(obj: bpy.types.Object, rooms: list[dict]) -> None:
     # Weld: a wall's cells then form one connected surface, so
     # the lightmap unwraps it as one island instead of a seam at every cell.
     bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-4)
+    bm.to_mesh(obj.data)
+    bm.free()
+
+
+def mark_lining(obj: bpy.types.Object, skylights: list[dict], width: float) -> None:
+    """
+    Flag as unseen the roof windows' faces that face away from their shaft
+    (the boards' backs on the slab's cut, nobody sees them) and those no
+    wider than `width` (the boards' edges: on so few texels, beside the slab,
+    their light baked in dark blotches). An edge then takes the light of the
+    board's face beside it; with the backs still seen, some took a back's
+    black instead.
+    """
+    axes = [(P(*sk["centre"]), P(*sk["frame"]["n"]).normalized()) for sk in skylights]
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    unseen = bm.faces.layers.int.new("unseen")
+    for face in bm.faces:
+        c = face.calc_center_median()
+        at, axis = min(axes, key=lambda a: (c - a[0]).length)
+        radial = (c - at) - axis * (c - at).dot(axis)
+        away = radial.length > 1e-6 and face.normal.dot(radial.normalized()) > 0.5
+        thin = min(e.calc_length() for e in face.edges) <= width + 1e-4
+        face[unseen] = int(away or thin)
     bm.to_mesh(obj.data)
     bm.free()
 
@@ -1634,21 +1659,11 @@ def layout_lightmap(objects: list[bpy.types.Object], margin: float = 0.006) -> N
                                  correct_aspect=False)
         bpy.ops.object.mode_set(mode="OBJECT")
         # Unseen faces shrink to a point: in the bake, but on no texels. The
-        # point is the nearest seen corner's, not the atlas's empty corner:
-        # where one shows after all (the slope's cut beside a roof window's
-        # lining), it carries its neighbour's light rather than black.
-        uv = obj.data.uv_layers["lightmap"].data
-        seen = [i for poly, is_hidden in zip(obj.data.polygons, hidden, strict=True)
-                if not is_hidden for i in poly.loop_indices]
-        tree = KDTree(len(seen))
-        for k, i in enumerate(seen):
-            tree.insert(obj.data.vertices[obj.data.loops[i].vertex_index].co, k)
-        tree.balance()
-        for poly, is_hidden in zip(obj.data.polygons, hidden, strict=True):
-            if is_hidden:
-                point = uv[seen[tree.find(poly.center)[1]]].uv.copy() if seen else (0.0, 0.0)
-                for i in poly.loop_indices:
-                    uv[i].uv = point
+        # point is the nearest point of a seen face, not the atlas's empty
+        # corner: where one shows after all (the slope's cut beside a roof
+        # window's lining, a lining board's edge), it carries the light
+        # beside it rather than black.
+        shrink_unseen(obj.data, hidden)
         areas.append(ATLAS_WEIGHT.get(obj.name, 1.0)
                      * sum(p.area for p, h in zip(obj.data.polygons, hidden, strict=True) if not h))
     corners, sides = atlas_cells(areas, margin)
@@ -1656,6 +1671,27 @@ def layout_lightmap(objects: list[bpy.types.Object], margin: float = 0.006) -> N
         CELLS[obj.name] = (cx, cy, side)
         for loop in obj.data.uv_layers["lightmap"].data:
             loop.uv = (cx + loop.uv[0] * side, cy + loop.uv[1] * side)
+
+
+def shrink_unseen(mesh: bpy.types.Mesh, hidden: list[bool]) -> None:
+    """Each unseen face's lightmap UVs to one point: where the nearest seen face is nearest."""
+    uv = mesh.uv_layers["lightmap"].data
+    tris = [(p.loop_indices[0], p.loop_indices[k], p.loop_indices[k + 1])
+            for p, is_hidden in zip(mesh.polygons, hidden, strict=True) if not is_hidden
+            for k in range(1, len(p.loop_indices) - 1)]
+    if not tris:
+        return
+    corners = [mesh.vertices[mesh.loops[i].vertex_index].co for tri in tris for i in tri]
+    tree = BVHTree.FromPolygons(corners, [(3 * n, 3 * n + 1, 3 * n + 2) for n in range(len(tris))])
+    for poly, is_hidden in zip(mesh.polygons, hidden, strict=True):
+        if not is_hidden:
+            continue
+        at, _, n, _ = tree.find_nearest(poly.center)
+        a, b, c = tris[n]
+        point = barycentric_transform(at, *corners[3 * n : 3 * n + 3],
+                                      *(uv[i].uv.to_3d() for i in (a, b, c))).to_2d()
+        for i in poly.loop_indices:
+            uv[i].uv = point
 
 
 def denoise(baked: bpy.types.Image, scratch: Path):
@@ -1870,6 +1906,8 @@ def main() -> None:
         # The roof window's shaft is not room air, so its lining would count as unseen.
         if obj.name not in ("glass", "skylight"):
             mark_unseen(obj, spec["rooms"])
+        elif obj.name == "skylight":
+            mark_lining(obj, spec["skylights"], LINING_T)
     for obj in shell:
         if obj.name.startswith("floor-"):
             floor_uvs(obj, spec["floors"]["main"]["tile"])

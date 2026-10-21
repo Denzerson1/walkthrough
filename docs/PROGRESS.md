@@ -36,8 +36,11 @@ The owner walked the live site on an iPhone (Firefox) and sent screenshots.
   sky is made from the photo.
 - **Black edges at the roof windows:** the slope's cut beside a lining was
   marked unseen, and unseen faces sampled the atlas's empty corner: black.
-  They now carry their nearest seen neighbour's light. The sash, four bars
-  meeting end to end, baked dark notches into its corners; it is one ring.
+  They now carry the light of the nearest point of a seen face. The sash,
+  four bars meeting end to end, baked dark notches into its corners; it is
+  one ring. The lining boards' 12 mm edges, on too few texels beside the
+  slab, baked in dark blotches; they are unseen too and take their board's
+  light (the boards' backs as well, or an edge took a back's black).
 
 Verified on the dev server as an iPhone 14 Pro Max (DPR 3) at the owner's
 viewpoints, before and after. The island, stool and view checks are
