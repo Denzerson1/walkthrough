@@ -28,7 +28,9 @@ call, to show it around), kept out of search engines.
   from both differ on under 0.04% of pixels. Spark is loaded only for a
   splat scene: the page's script went from 1.15 MB to 0.27 MB gzipped. The
   model, the view and the daylight maps are fetched at once rather than one
-  after another, and the loading bar shows how much of the model is in.
+  after another, and the loading bar shows how much of the model is in,
+  measured against the length in the .glb's header: Pages gzips it (2.4 to
+  1.6 MB on the wire), so Content-Length is not the size that arrives.
 - **Phones.** Pinching no longer spins the view (each finger's moves turned
   it by the gap between them). A finger drags the room along with it, as
   photo spheres do; the mouse is unchanged. Buttons are 44 px under a
@@ -43,8 +45,10 @@ call, to show it around), kept out of search engines.
 Verified: the built site served locally under `/walkthrough/` in Chrome as
 an iPhone 13 (portrait and landscape) and a Pixel 7, touch taps and the
 panels included, no console errors or failed requests; the dev app with the
-API still loads. Not verified: Safari on a real iPhone (Playwright's WebKit
-is not installed here).
+API still loads. Live, as an iPhone 13 throttled to 16 Mbit/s: ready in
+4.5 s, the bar counting 5% to 95%; routes, the share link's redirect and
+the 404 page work, and the owner's photos are not served. Not verified:
+Safari on a real iPhone (Playwright's WebKit is not installed here).
 
 ## 2026-10-20 — The island's top in one piece, more room, the real stools
 
