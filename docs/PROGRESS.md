@@ -7,6 +7,43 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-10-21 — From the owner's phone: sharper, warmer, the island and stools refined
+
+The owner walked the live site on an iPhone (Firefox) and sent screenshots.
+
+- **Pixelated** close up: roof windows reflected in the gloss fronts in
+  steps (a 512 cube drawn without antialiasing, magnified 6x), the view
+  drawn at 2x on a 3x screen, and blotches in the fronts' light. Now a 1024
+  cube read a mip level down, the device's full pixel ratio (stepping down
+  half a ratio at a time below 45 fps), light maps filtered anisotropically,
+  saved at the quality 95 always intended (`Image.save` ignores the scene's
+  setting; it was 90), and furniture given more atlas and smoother light.
+- **Night mode** in the owner's browser painted the panels dark brown:
+  `color-scheme: light only` and `darkreader-lock`. Chrome's forced dark
+  mode leaves them light; Firefox on iOS is not verified here.
+- **Island:** the stone lies 3.5 cm below the oak, a step all round
+  (kitchentray1-3). **Stools:** the legs meet the seat well inside its
+  outline; at the back their tops stood out behind it (chair1-3).
+- **Warmer light** (`WARMTH` 1.08, 1.0, 0.86).
+- **Daylight control:** a sky-coloured track with the baked times as stops;
+  let go, it glides to the nearest bake, since between two the floor had
+  two half-strength suns.
+- **The view out** looked scuffed: both photos showed the house across, one
+  copy torn across the other, from anywhere but the window a photo was taken
+  from. The second photo now shows only what the first does not, what stands
+  within 1.6x of the street front lies on it (its roofs, a side wall),
+  the outline is meshed four times finer, and dust is painted out before the
+  sky is made from the photo.
+- **Black edges at the roof windows:** the slope's cut beside a lining was
+  marked unseen, and unseen faces sampled the atlas's empty corner: black.
+  They now carry their nearest seen neighbour's light. The sash, four bars
+  meeting end to end, baked dark notches into its corners; it is one ring.
+
+Verified on the dev server as an iPhone 14 Pro Max (DPR 3) at the owner's
+viewpoints, before and after. The island, stool and view checks are
+renders; the black edges are measured in the model (faces round both
+windows with near-black light) and checked again after the bake.
+
 ## 2026-10-21 — On GitHub Pages, made for phones
 
 The flat is public at https://denzerson1.github.io/walkthrough/ (the owner's

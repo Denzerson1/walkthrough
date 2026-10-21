@@ -19,6 +19,7 @@ from pathlib import Path
 import bmesh
 import bpy
 from mathutils import Matrix, Vector
+from mathutils.kdtree import KDTree
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src" / "walkthrough_pipeline"))
 from flat_geometry import (  # noqa: E402  (standard library only, so importable here)
@@ -299,6 +300,28 @@ def build_ceilings(b: Builder, room: dict, skylights: list[dict]) -> None:
                       0.0, SLAB_T)
 
 
+def slope_ring(b: Builder, key: str, frame: dict, outer: tuple[float, float, float, float],
+               width: float, n0: float, n1: float) -> None:
+    """
+    A frame `width` wide round the rectangle `outer` (u0, u1, v0, v1) in a
+    sloped ceiling's frame, as one closed piece. Four bars meeting end to end
+    hid faces between them, and the bake spread their dark into the corners.
+    """
+    u0, u1, v0, v1 = outer
+    rings = [[(u0, v0), (u1, v0), (u1, v1), (u0, v1)],
+             [(u0 + width, v0 + width), (u1 - width, v0 + width),
+              (u1 - width, v1 - width), (u0 + width, v1 - width)]]
+    bm = b.bm(key)
+    vs = [[[bm.verts.new(P(*slope_point(frame, u, v, n))) for u, v in ring] for ring in rings]
+          for n in (n0, n1)]
+    for i in range(4):
+        j = (i + 1) % 4
+        for side in (0, 1):  # the faces towards the room and away from it
+            bm.faces.new([vs[side][0][i], vs[side][0][j], vs[side][1][j], vs[side][1][i]])
+        for ring in (0, 1):  # round the outside and the inside
+            bm.faces.new([vs[0][ring][i], vs[0][ring][j], vs[1][ring][j], vs[1][ring][i]])
+
+
 def roof_window(b: Builder, sk: dict) -> None:
     """The lining boards, the sash and the pane of a roof window (see flat_geometry.roof_window)."""
     frame, depth = sk["frame"], sk["depth"]
@@ -315,10 +338,7 @@ def roof_window(b: Builder, sk: dict) -> None:
         b.box("skylight", [P(*p) for p in pts] + [P(*p) for p in inner])
     u0, u1, v0, v1 = sk["sash"]
     n0, n1 = depth - 0.07, depth + 0.005
-    slope_box(b, "skylight", frame, u0, u0 + SASH_W, v0, v1, n0, n1)
-    slope_box(b, "skylight", frame, u1 - SASH_W, u1, v0, v1, n0, n1)
-    slope_box(b, "skylight", frame, u0 + SASH_W, u1 - SASH_W, v0, v0 + SASH_W, n0, n1)
-    slope_box(b, "skylight", frame, u0 + SASH_W, u1 - SASH_W, v1 - SASH_W, v1, n0, n1)
+    slope_ring(b, "skylight", frame, (u0, u1, v0, v1), SASH_W, n0, n1)
     slope_box(b, "glass", frame, u0 + SASH_W, u1 - SASH_W, v0 + SASH_W, v1 - SASH_W,
               depth - 0.035, depth - 0.027)
 
@@ -1613,12 +1633,22 @@ def layout_lightmap(objects: list[bpy.types.Object], margin: float = 0.006) -> N
         bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.02,
                                  correct_aspect=False)
         bpy.ops.object.mode_set(mode="OBJECT")
-        # Unseen faces shrink to a point: in the bake, but on no texels.
+        # Unseen faces shrink to a point: in the bake, but on no texels. The
+        # point is the nearest seen corner's, not the atlas's empty corner:
+        # where one shows after all (the slope's cut beside a roof window's
+        # lining), it carries its neighbour's light rather than black.
         uv = obj.data.uv_layers["lightmap"].data
+        seen = [i for poly, is_hidden in zip(obj.data.polygons, hidden, strict=True)
+                if not is_hidden for i in poly.loop_indices]
+        tree = KDTree(len(seen))
+        for k, i in enumerate(seen):
+            tree.insert(obj.data.vertices[obj.data.loops[i].vertex_index].co, k)
+        tree.balance()
         for poly, is_hidden in zip(obj.data.polygons, hidden, strict=True):
             if is_hidden:
+                point = uv[seen[tree.find(poly.center)[1]]].uv.copy() if seen else (0.0, 0.0)
                 for i in poly.loop_indices:
-                    uv[i].uv = (0.0, 0.0)
+                    uv[i].uv = point
         areas.append(ATLAS_WEIGHT.get(obj.name, 1.0)
                      * sum(p.area for p, h in zip(obj.data.polygons, hidden, strict=True) if not h))
     corners, sides = atlas_cells(areas, margin)

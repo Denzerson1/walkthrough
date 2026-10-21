@@ -338,7 +338,11 @@ exposed against the owner's photos (sun spots clip, as they do in a
 photo). With `sun.times`, once per time of day: `flat_light-HHMM.jpg`
 each, listed in the manifest's `assets.lighting`; a camera's exposure
 follows each time halfway, so the evening stays darker. Faces nobody sees from inside stay in for the
-bake, so the room's solids block light, but get no atlas. Each object is
+bake, so the room's solids block light, but get no atlas: each shrinks to
+the point of its nearest seen corner, so one that shows after all (the
+slope's cut beside a roof window's lining) carries that light, not black.
+A roof window's sash is one closed ring: four bars meeting end to end hid
+faces whose dark the bake spread into its corners. Each object is
 unwrapped on its own without aspect correction (with it, a photo
 texture's aspect squashed a piece's islands up to 16x and thin parts
 baked black). Furniture gets 1.5x its share of the atlas and its light a
