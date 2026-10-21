@@ -10,6 +10,10 @@ interface ProjectRow {
   rooms: string;
 }
 
+function roomCount(rooms: string): string {
+  return rooms === '1' ? '1 room' : `${rooms} rooms`;
+}
+
 export function Landing() {
   const [projects, setProjects] = useState<ProjectRow[] | null>(null);
 
@@ -41,7 +45,7 @@ export function Landing() {
           className="btn-primary mt-10 inline-flex items-baseline gap-4 px-6 py-4"
         >
           <span className="text-[15px] font-semibold">Walk through {featured.name}</span>
-          <span className="measure text-[12px] opacity-60">{featured.rooms} rooms</span>
+          <span className="measure text-[12px] opacity-60">{roomCount(featured.rooms)}</span>
         </Link>
       ) : projects === null ? (
         <p className="mt-10 text-[13px] opacity-55">Loading apartments…</p>
@@ -69,7 +73,7 @@ export function Landing() {
                 >
                   <span className="text-[15px]">{project.name}</span>
                   <span className="measure text-[12px] opacity-55">
-                    {project.rooms} rooms
+                    {roomCount(project.rooms)}
                   </span>
                 </Link>
               </li>

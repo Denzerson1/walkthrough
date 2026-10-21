@@ -1,0 +1,41 @@
+name: Pages
+
+# The site carries the flat's scene files, too large for git, so it is built
+# locally: `pnpm publish:pages` uploads it as the asset of the `site` release
+# and runs this, which deploys that archive as it is.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download the site
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download site --repo "$GITHUB_REPOSITORY" --pattern site.tar.gz
+          mkdir site
+          tar -xzf site.tar.gz -C site
+
+      - uses: actions/configure-pages@v6
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+      - id: deployment
+        uses: actions/deploy-pages@v5

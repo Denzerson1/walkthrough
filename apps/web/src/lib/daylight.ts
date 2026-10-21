@@ -265,12 +265,13 @@ export class Daylight {
   }
 }
 
-/** Load each key's light map, as the model's own one is set up. */
-export async function loadDaylight(
+/**
+ * Load each key's light map, as the model's own one is set up, and its sky.
+ * Apart from the model, so both can be fetched at once.
+ */
+export async function loadDaylightMaps(
   keys: DaylightKey[],
-  model: THREE.Object3D,
-  photoMinutes?: number,
-): Promise<Daylight> {
+): Promise<{ maps: THREE.Texture[]; skies: THREE.Texture[] | null }> {
   const loader = new THREE.TextureLoader();
   const withSkies = keys.every((k) => k.skyUrl);
   const [maps, skies] = await Promise.all([
@@ -288,5 +289,5 @@ export async function loadDaylight(
     sky.generateMipmaps = false;
     sky.minFilter = THREE.LinearFilter;
   }
-  return new Daylight(keys, maps, model, photoMinutes, skies);
+  return { maps, skies };
 }

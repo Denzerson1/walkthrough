@@ -1,6 +1,7 @@
 /** Bottom-sheet panels: floors, furniture and the assistant. */
 
 import { useEffect, useMemo, useState } from 'react';
+import { apiUrl } from '../lib/api';
 import { floorColor } from '../lib/floorColors';
 import type { CatalogItem } from '../lib/store';
 import { furnitureThumbnail } from '../lib/thumbnails';
@@ -14,7 +15,7 @@ interface SheetProps {
 export function Sheet({ title, onClose, children }: SheetProps) {
   return (
     <section
-      className="panel rule flex max-h-[58vh] flex-col border-t"
+      className="panel rule flex max-h-[58vh] flex-col border-t [@media(max-height:500px)]:max-h-[calc(100vh-8.5rem)]"
       role="dialog"
       aria-label={title}
       data-testid={`sheet-${title.toLowerCase()}`}
@@ -25,7 +26,7 @@ export function Sheet({ title, onClose, children }: SheetProps) {
           type="button"
           onClick={onClose}
           aria-label={`Close ${title}`}
-          className="-mr-1 px-2 py-1 text-[18px] leading-none opacity-70 hover:opacity-100"
+          className="tap -mr-1 px-2 py-1 text-[18px] leading-none opacity-70 hover:opacity-100"
         >
           ×
         </button>
@@ -76,7 +77,7 @@ export function FloorPanel({
             onClick={() => setCategory(c)}
             aria-pressed={category === c}
             className={[
-              'shrink-0 px-2.5 py-1 text-[12px] capitalize',
+              'tap shrink-0 px-2.5 py-1 text-[12px] capitalize',
               category === c ? 'bg-[var(--accent)]' : 'opacity-65 hover:opacity-100',
             ].join(' ')}
           >
@@ -85,7 +86,7 @@ export function FloorPanel({
         ))}
       </div>
 
-      <div className="grid grid-cols-3 gap-2 p-3 sm:grid-cols-5 lg:grid-cols-8">
+      <div className="grid grid-cols-3 gap-2 p-3 sm:grid-cols-5 lg:grid-cols-8 [@media(max-height:500px)]:grid-cols-7">
         {shown.map((floor) => {
           const applied = floor.id === appliedFloorId;
           return (
@@ -101,7 +102,7 @@ export function FloorPanel({
                 className="block aspect-square w-full rounded-sm border"
                 style={{
                   background: floor.thumbnail
-                    ? `center/cover url(${floor.thumbnail})`
+                    ? `center/cover url(${apiUrl(floor.thumbnail)})`
                     : swatchFor(floor),
                   borderColor: applied ? 'var(--accent)' : 'var(--line)',
                   borderWidth: applied ? 2 : 1,
@@ -156,7 +157,8 @@ interface FurniturePanelProps {
   styles: CatalogItem[];
   onAdd: (itemId: string) => void;
   onApplyStyle: (styleId: string) => void;
-  onAutoLayout: (styleId: string) => void;
+  /** Absent where there is no layout service: the static site. */
+  onAutoLayout?: (styleId: string) => void;
 }
 
 /**
@@ -247,7 +249,7 @@ export function FurniturePanel({
                 onClick={() => setStyleId(style.id)}
                 aria-pressed={styleId === style.id}
                 className={[
-                  'btn shrink-0 px-3 py-1.5 text-[12px]',
+                  'btn tap shrink-0 px-3 py-1.5 text-[12px]',
                   style.complete === false ? 'italic' : '',
                 ].join(' ')}
               >
@@ -267,14 +269,16 @@ export function FurniturePanel({
             >
               Apply style
             </button>
-            <button
-              type="button"
-              onClick={() => onAutoLayout(styleId)}
-              disabled={!styleId || unstocked}
-              className="btn flex-1 px-3 py-2 text-[12px]"
-            >
-              Furnish automatically
-            </button>
+            {onAutoLayout && (
+              <button
+                type="button"
+                onClick={() => onAutoLayout(styleId)}
+                disabled={!styleId || unstocked}
+                className="btn flex-1 px-3 py-2 text-[12px]"
+              >
+                Furnish automatically
+              </button>
+            )}
           </div>
           {unstocked && (
             <p className="mt-2 text-[12px] opacity-60">
@@ -285,7 +289,7 @@ export function FurniturePanel({
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-2 p-3 sm:grid-cols-5 lg:grid-cols-8">
+      <div className="grid grid-cols-3 gap-2 p-3 sm:grid-cols-5 lg:grid-cols-8 [@media(max-height:500px)]:grid-cols-7">
         {shown.map((item) => (
           <button
             key={item.id}

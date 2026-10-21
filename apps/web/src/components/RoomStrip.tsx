@@ -60,7 +60,7 @@ export function RoomStrip({ manifest, activeRoomId, stagedRoomIds, onSelect }: P
             data-room-id={room.id}
             onClick={() => onSelect(room.id)}
             className={[
-              'group relative shrink-0 rounded-[var(--radius)] px-3.5 py-1.5 text-left transition-colors',
+              'tap group relative shrink-0 rounded-[var(--radius)] px-3.5 py-1.5 text-left transition-colors',
               isActive
                 ? 'bg-[var(--accent)] text-[var(--paper)]'
                 : 'panel text-[var(--ink)] hover:bg-[var(--paper)]',

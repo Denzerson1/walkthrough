@@ -12,6 +12,8 @@
     "dev:web": "pnpm --filter @walkthrough/web dev",
     "dev:api": "uv run uvicorn walkthrough_api.main:app --reload --host 127.0.0.1 --port 8000",
     "build": "pnpm --filter @walkthrough/web build",
+    "build:pages": "pnpm --filter @walkthrough/web build:pages && uv run python scripts/export_site.py flat-01",
+    "publish:pages": "uv run python scripts/publish_pages.py",
     "test": "pnpm test:web && pnpm test:py",
     "test:web": "pnpm --filter @walkthrough/web test",
     "test:py": "uv run pytest -q",

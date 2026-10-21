@@ -8,7 +8,7 @@ import { FloorPanel, FurniturePanel, Sheet } from '../components/Panels';
 import { RoomStrip } from '../components/RoomStrip';
 import { SplatScene } from '../components/SplatScene';
 import { StagedBadge } from '../components/StagedBadge';
-import { apiUrl, fileUrl, getJson, postEvent, sessionId } from '../lib/api';
+import { IS_STATIC, apiUrl, fileUrl, getJson, postEvent, sessionId } from '../lib/api';
 import { formatMinutes, toMinutes } from '../lib/daylight';
 import type { Manifest } from '../lib/manifest';
 import { type CatalogItem, stagedRoomIds, useStore } from '../lib/store';
@@ -25,6 +25,20 @@ interface AssistantArgs {
   colorHex?: string;
 }
 
+/** Phone-sized screens, in either orientation. */
+const COMPACT = '(max-width: 639px), (max-height: 500px)';
+
+function useCompact(): boolean {
+  const [compact, setCompact] = useState(() => window.matchMedia(COMPACT).matches);
+  useEffect(() => {
+    const list = window.matchMedia(COMPACT);
+    const update = () => setCompact(list.matches);
+    list.addEventListener('change', update);
+    return () => list.removeEventListener('change', update);
+  }, []);
+  return compact;
+}
+
 export function Viewer() {
   const { projectId = '' } = useParams();
   const [searchParams] = useSearchParams();
@@ -38,6 +52,7 @@ export function Viewer() {
   } = useStore();
 
   const [ready, setReady] = useState(false);
+  const [progress, setProgress] = useState(0);
   // The time of day shown, for a rebuilt flat baked at several; it opens at
   // the time the pipeline made the default.
   const daylightRange = useMemo((): [number, number] | null => {
@@ -53,6 +68,8 @@ export function Viewer() {
   const [chosen, setDaylight] = useState<number | null>(null);
   const daylight = chosen ?? opening;
   const [showHint, setShowHint] = useState(true);
+  const touch = useMemo(() => window.matchMedia('(pointer: coarse)').matches, []);
+  const compact = useCompact();
   const [pose, setPose] = useState<{ x: number; z: number; yaw: number } | null>(null);
   const [copied, setCopied] = useState(false);
   const [layoutNote, setLayoutNote] = useState<string | null>(null);
@@ -226,6 +243,15 @@ export function Viewer() {
 
   async function share() {
     const url = shareUrl();
+    // On a phone, the phone's own share sheet: straight into a message.
+    if (touch && navigator.share) {
+      try {
+        await navigator.share({ title: manifest?.name, url });
+        return;
+      } catch (e) {
+        if ((e as Error).name === 'AbortError') return;
+      }
+    }
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
@@ -234,6 +260,32 @@ export function Viewer() {
       window.prompt('Copy this link', url);
     }
   }
+
+  /**
+   * The time of day, for a rebuilt flat baked at several: how the light
+   * falls in the morning, at noon, in the evening. Top right on a big
+   * screen; on a phone, at the bottom where a thumb reaches it.
+   */
+  const daylightControl = manifest && ready && daylightRange && daylight !== null && (
+    <>
+      <label className="flex items-baseline justify-between text-[11px]" htmlFor="daylight">
+        <span className="opacity-65">Daylight</span>
+        <span className="font-medium tabular-nums" data-testid="daylight-time">
+          {formatMinutes(daylight)}
+        </span>
+      </label>
+      <input
+        id="daylight"
+        type="range"
+        className="mt-1 w-full accent-[var(--accent)]"
+        min={daylightRange[0]}
+        max={daylightRange[1]}
+        step={5}
+        value={daylight}
+        onChange={(e) => setDaylight(Number(e.target.value))}
+      />
+    </>
+  );
 
   if (error) {
     return (
@@ -247,7 +299,7 @@ export function Viewer() {
   }
 
   return (
-    <main className="relative h-full overflow-hidden">
+    <main className="viewer relative h-full overflow-hidden">
       {manifest && (
         <SplatScene
           manifest={manifest}
@@ -291,7 +343,7 @@ export function Viewer() {
           floorCatalog={catalog.floors}
           furnitureCatalog={catalog.furniture}
           showingOriginal={showingOriginal}
-          onProgress={() => undefined}
+          onProgress={setProgress}
           onReady={() => setReady(true)}
           onError={setError}
           onRoomChange={goToRoom}
@@ -315,13 +367,24 @@ export function Viewer() {
       {!ready && !error && (
         <div className="absolute inset-0 flex items-center justify-center bg-[var(--paper-warm)]">
           {/*
-            Spark reports completion but not incremental progress, so this is
-            an indeterminate bar rather than a fake percentage.
+            A rebuilt flat reports how much of its model has arrived. Spark
+            reports completion but not incremental progress, so a splat scene
+            gets an indeterminate bar rather than a fake percentage.
           */}
           <div className="w-[min(280px,70vw)]">
-            <p className="measure text-[12px] opacity-70">Loading the apartment…</p>
+            <p className="measure flex justify-between text-[12px] opacity-70">
+              <span>Loading the apartment…</span>
+              {progress > 0 && <span>{Math.round(progress * 100)}%</span>}
+            </p>
             <div className="mt-2 h-px w-full overflow-hidden bg-[rgba(42,38,34,0.18)]">
-              <div className="h-px w-1/3 animate-[slide_1.4s_ease-in-out_infinite] bg-[var(--accent)]" />
+              {progress > 0 ? (
+                <div
+                  className="h-px bg-[var(--accent)] transition-[width] duration-200"
+                  style={{ width: `${progress * 100}%` }}
+                />
+              ) : (
+                <div className="h-px w-1/3 animate-[slide_1.4s_ease-in-out_infinite] bg-[var(--accent)]" />
+              )}
             </div>
           </div>
         </div>
@@ -336,7 +399,8 @@ export function Viewer() {
           <h1 className="text-[13px] font-semibold leading-tight tracking-tight">
             {manifest?.name ?? 'walkthrough'}
           </h1>
-          {activeRoom && (
+          {/* A flat rebuilt as one room has no room name worth showing. */}
+          {activeRoom && manifest && manifest.rooms.length > 1 && (
             <p className="measure text-[11px] opacity-65">{activeRoom.name}</p>
           )}
         </div>
@@ -351,39 +415,22 @@ export function Viewer() {
         </div>
       </header>
 
-      {/*
-        The time of day, for a rebuilt flat baked at several: how the light
-        falls in the morning, at noon, in the evening.
-      */}
-      {manifest && ready && daylightRange && daylight !== null && (
+      {!compact && daylightControl && (
         <div
           className="panel absolute right-3 w-[min(220px,46vw)] px-3 py-2"
           style={{ top: 'calc(5.5rem + var(--safe-top))' }}
         >
-          <label className="flex items-baseline justify-between text-[11px]" htmlFor="daylight">
-            <span className="opacity-65">Daylight</span>
-            <span className="font-medium tabular-nums" data-testid="daylight-time">
-              {formatMinutes(daylight)}
-            </span>
-          </label>
-          <input
-            id="daylight"
-            type="range"
-            className="mt-1 w-full accent-[var(--accent)]"
-            min={daylightRange[0]}
-            max={daylightRange[1]}
-            step={5}
-            value={daylight}
-            onChange={(e) => setDaylight(Number(e.target.value))}
-          />
+          {daylightControl}
         </div>
       )}
 
-      {/* Floor plan */}
-      {manifest && ready && (
+      {/* Floor plan: smaller on a phone, and out of the way of an open sheet. */}
+      {manifest && ready && !(compact && panel) && (
         <div
           className="panel absolute left-3 rounded-sm p-2"
-          style={{ top: 'calc(5.5rem + var(--safe-top))' }}
+          style={{
+            top: compact ? 'calc(4.25rem + var(--safe-top))' : 'calc(5.5rem + var(--safe-top))',
+          }}
         >
           <FloorPlan
             manifest={manifest}
@@ -391,6 +438,7 @@ export function Viewer() {
             stagedRoomIds={stagedRooms}
             onSelectRoom={goToRoom}
             pose={pose}
+            size={compact ? 84 : undefined}
           />
         </div>
       )}
@@ -415,12 +463,21 @@ export function Viewer() {
       {ready && showHint && (
         <div
           className="panel pointer-events-none absolute left-1/2 -translate-x-1/2 rounded-[var(--radius)] px-4 py-2"
-          style={{ bottom: 'calc(9rem + var(--safe-bottom))', animation: 'fade-up 300ms ease-out' }}
+          style={{ bottom: 'calc(9.5rem + var(--safe-bottom))', animation: 'fade-up 300ms ease-out' }}
           data-testid="walk-hint"
         >
           <p className="text-[12.5px]">
-            <span className="font-medium">Click the floor to walk there</span>
-            <span className="opacity-60"> · drag to look around</span>
+            {touch ? (
+              <>
+                <span className="font-medium">Tap the floor to walk</span>
+                <span className="opacity-60"> · drag to look · pinch to zoom</span>
+              </>
+            ) : (
+              <>
+                <span className="font-medium">Click the floor to walk there</span>
+                <span className="opacity-60"> · drag to look around</span>
+              </>
+            )}
           </p>
         </div>
       )}
@@ -474,7 +531,9 @@ export function Viewer() {
                     value: styleId,
                   });
                 }}
-                onAutoLayout={(styleId) => void runAutoLayout(activeRoom.id, styleId)}
+                onAutoLayout={
+                  IS_STATIC ? undefined : (styleId) => void runAutoLayout(activeRoom.id, styleId)
+                }
               />
             )}
             {panel === 'assistant' && (
@@ -508,7 +567,7 @@ export function Viewer() {
               <button
                 type="button"
                 onClick={() => rotateItem(selectedItem.uid, -15)}
-                className="rounded-[var(--radius-sm)] px-2.5 py-1.5 text-[13px] hover:bg-[var(--paper-warm)]"
+                className="tap rounded-[var(--radius-sm)] px-2.5 py-1.5 text-[13px] hover:bg-[var(--paper-warm)]"
                 aria-label="Rotate left"
               >
                 ⟲
@@ -516,7 +575,7 @@ export function Viewer() {
               <button
                 type="button"
                 onClick={() => rotateItem(selectedItem.uid, 15)}
-                className="rounded-[var(--radius-sm)] px-2.5 py-1.5 text-[13px] hover:bg-[var(--paper-warm)]"
+                className="tap rounded-[var(--radius-sm)] px-2.5 py-1.5 text-[13px] hover:bg-[var(--paper-warm)]"
                 aria-label="Rotate right"
               >
                 ⟳
@@ -524,7 +583,7 @@ export function Viewer() {
               <button
                 type="button"
                 onClick={() => removeItem(selectedItem.uid)}
-                className="rounded-[var(--radius-sm)] px-3 py-1.5 text-[12px] font-medium text-[var(--staged)] hover:bg-[var(--paper-warm)]"
+                className="tap rounded-[var(--radius-sm)] px-3 py-1.5 text-[12px] font-medium text-[var(--staged)] hover:bg-[var(--paper-warm)]"
                 data-testid="remove-item"
               >
                 Remove
@@ -533,7 +592,7 @@ export function Viewer() {
           </div>
         )}
 
-        {manifest && (
+        {manifest && manifest.rooms.length > 1 && (
           <RoomStrip
             manifest={manifest}
             activeRoomId={activeRoomId}
@@ -542,12 +601,24 @@ export function Viewer() {
           />
         )}
 
+        {compact && !panel && daylightControl && (
+          <div className="flex justify-center px-3 pb-1.5">
+            <div className="panel w-full max-w-[360px] rounded-[9px] px-3 py-1.5">
+              {daylightControl}
+            </div>
+          </div>
+        )}
+
         <nav
           className="flex items-center justify-center gap-1.5 px-3 pb-3 pt-1"
           aria-label="Tools"
         >
           <div className="panel flex items-center gap-0.5 rounded-[9px] p-1">
-            {(['floors', 'furniture', 'assistant'] as const).map((id) => (
+            {/* The assistant runs on the server, which a static site does not have. */}
+            {(IS_STATIC
+              ? (['floors', 'furniture'] as const)
+              : (['floors', 'furniture', 'assistant'] as const)
+            ).map((id) => (
               <button
                 key={id}
                 type="button"
@@ -555,7 +626,7 @@ export function Viewer() {
                 aria-pressed={panel === id}
                 data-testid={`tool-${id}`}
                 className={[
-                  'rounded-[var(--radius-sm)] px-4 py-1.5 text-[13px] font-medium capitalize',
+                  'tap rounded-[var(--radius-sm)] px-4 py-1.5 text-[13px] font-medium capitalize',
                   'transition-colors',
                   panel === id
                     ? 'bg-[var(--accent)] text-[var(--paper)]'
@@ -569,7 +640,7 @@ export function Viewer() {
             <button
               type="button"
               onClick={share}
-              className="rounded-[var(--radius-sm)] px-4 py-1.5 text-[13px] font-medium text-[var(--ink)] transition-colors hover:bg-[var(--paper-warm)]"
+              className="tap rounded-[var(--radius-sm)] px-4 py-1.5 text-[13px] font-medium text-[var(--ink)] transition-colors hover:bg-[var(--paper-warm)]"
               data-testid="share"
             >
               {copied ? 'Copied' : 'Share'}

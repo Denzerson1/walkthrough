@@ -55,6 +55,7 @@ export class AutoExposure {
   private readonly pixels = new Uint8Array(W * H * 4);
   private frame = 0;
   private goal = 1;
+  private metering = false;
   /** The latest metered log-average luminance, for calibrating `key`. */
   reading = 0;
   exposure = 1;
@@ -63,18 +64,34 @@ export class AutoExposure {
 
   /** Meter every few frames, then move the exposure a step towards the goal. */
   update(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, dt: number) {
-    if (this.frame++ % 6 === 0) {
+    if (this.frame++ % 6 === 0 && !this.metering) {
       // A render target gets linear light with no tone mapping: what the
       // sensor sees before the camera's curve.
       renderer.setRenderTarget(this.target);
       renderer.render(scene, camera);
       renderer.setRenderTarget(null);
-      renderer.readRenderTargetPixels(this.target, 0, 0, W, H, this.pixels);
-      this.reading = meter(this.pixels, W, H);
-      this.goal = targetExposure(this.reading, this.key);
+      if (this.frame === 1) {
+        // The first reading sets the exposure outright, so it is waited for.
+        renderer.readRenderTargetPixels(this.target, 0, 0, W, H, this.pixels);
+        this.read();
+      } else {
+        // The rest are not: a synchronous read stalls a phone's GPU pipeline.
+        this.metering = true;
+        renderer
+          .readRenderTargetPixelsAsync(this.target, 0, 0, W, H, this.pixels)
+          .then(() => this.read(), () => undefined)
+          .finally(() => {
+            this.metering = false;
+          });
+      }
     }
     this.exposure = this.frame === 1 ? this.goal : approach(this.exposure, this.goal, dt);
     renderer.toneMappingExposure = this.exposure;
+  }
+
+  private read() {
+    this.reading = meter(this.pixels, W, H);
+    this.goal = targetExposure(this.reading, this.key);
   }
 
   dispose() {

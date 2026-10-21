@@ -34,6 +34,10 @@ pnpm seed:assets     # downloads the real textures and meshes, and writes
                      # catalog/furniture + catalog/styles from
                      # scripts/furniture_themes.py
 
+# the public site on GitHub Pages (static: no assistant, no editor)
+pnpm build:pages     # viewer + flat-01's files -> apps/web/dist
+pnpm publish:pages   # upload as the `site` release asset, run pages.yml
+
 # capture pipeline — runs inside WSL2 Ubuntu on the GPU; see docs/PIPELINE.md.
 # `pnpm run` (not `pnpm pipeline`) so every argument reaches the CLI.
 pnpm run setup:pipeline        # once: CUDA, torch, gsplat, pycolmap in WSL

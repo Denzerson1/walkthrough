@@ -7,10 +7,11 @@
  * (brief M3) without any extra work — they share one depth buffer.
  */
 
-import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark';
+import type { SplatMesh } from '@sparkjsdev/spark';
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import {
   DEFAULT_FOV,
   TRANSITION_MS,
@@ -32,7 +33,7 @@ import {
 import type { Manifest, Room, Vec2 } from '../lib/manifest';
 import { FLOOR_DEFAULT_COLOR, floorColor } from '../lib/floorColors';
 import { apiUrl } from '../lib/api';
-import { type Daylight, type DaylightKey, decodeLightMaps, loadDaylight } from '../lib/daylight';
+import { Daylight, type DaylightKey, decodeLightMaps, loadDaylightMaps } from '../lib/daylight';
 import { AutoExposure } from '../lib/exposure';
 import type { CatalogItem } from '../lib/store';
 import type { PlacedItem, ViewerState } from '../lib/viewerState';
@@ -137,6 +138,10 @@ const GLIDE_SPEED = 2.6;
 const GLIDE_MIN_MS = 320;
 const GLIDE_MAX_MS = 1400;
 
+/** How long after the last change the view drops to its idle frame rate, and that rate. */
+const IDLE_AFTER_MS = 1500;
+const IDLE_FRAME_MS = 250;
+
 function glideDuration(from: Vec2, to: Vec2): number {
   const metres = Math.hypot(to[0] - from[0], to[1] - from[1]);
   return Math.min(GLIDE_MAX_MS, Math.max(GLIDE_MIN_MS, (metres / GLIDE_SPEED) * 1000));
@@ -222,14 +227,15 @@ export function SplatScene({
     daylight?: Daylight;
     exposure?: AutoExposure;
   } | null>(null);
-  // Effects that touch the rebuilt flat must run again once it has loaded.
-  const [modelReady, setModelReady] = useState(false);
+  // Effects that touch the rebuilt flat or the splats must run again once
+  // they are in the scene.
+  const [contentReady, setContentReady] = useState(false);
   // The latest slider value, for the async model load to start from.
   const daylightRef = useRef(daylight);
   useEffect(() => {
     daylightRef.current = daylight;
     if (daylight !== undefined) sceneRef.current?.daylight?.set(daylight);
-  }, [daylight, modelReady]);
+  }, [daylight, contentReady]);
 
   // ---- one-time scene setup -------------------------------------------
   useEffect(() => {
@@ -272,9 +278,6 @@ export function SplatScene({
     // rather than as a window.
     renderer.setClearColor(0xf3f6f8, 1);
     mount.appendChild(renderer.domElement);
-
-    const spark = new SparkRenderer({ renderer });
-    scene.add(spark);
 
     // Ambient plus a soft key so placed furniture is not flat. The real
     // environment map from the splat arrives in M6.
@@ -335,37 +338,54 @@ export function SplatScene({
       // Haze over the neighbourhood: distance is what makes a view read as
       // real. Nothing inside the flat is near the fog's start.
       scene.fog = new THREE.Fog(0xd6e0e8, 40, 420);
-      loadBakedModel(model, renderer.capabilities.getMaxAnisotropy())
-        .then(async (group) => {
+      const lighting = model.lighting && model.lighting.length > 1 ? model.lighting : null;
+      // Every file at once rather than one after another. The model is the
+      // largest of them, so how much of it has arrived is the progress shown.
+      Promise.all([
+        loadBakedModel(model, renderer.capabilities.getMaxAnisotropy(), (fraction) =>
+          onProgress?.(fraction * 0.95),
+        ),
+        model.viewPhoto ? loadViewPhoto(model.viewPhoto.url) : null,
+        lighting ? loadDaylightMaps(lighting) : null,
+      ])
+        .then(([group, view, daylightMaps]) => {
           if (disposed || !sceneRef.current) return;
-          if (model.viewPhoto) group.add(await loadViewPhoto(model.viewPhoto.url));
-          if (disposed || !sceneRef.current) return;
+          if (view) group.add(view);
           scene.add(group);
           sceneRef.current.model = group;
-          if (model.lighting && model.lighting.length > 1) {
-            const rig = await loadDaylight(model.lighting, group, model.viewPhoto?.minutes);
-            if (disposed || !sceneRef.current) return;
+          if (lighting && daylightMaps) {
+            const { maps, skies } = daylightMaps;
+            const rig = new Daylight(lighting, maps, group, model.viewPhoto?.minutes, skies);
             sceneRef.current.daylight = rig;
             rig.set(daylightRef.current ?? rig.keys[0].minutes);
           }
           addReflections(scene, renderer, group, manifest.rooms[0]?.waypoint.position);
           sceneRef.current.exposure = new AutoExposure(METER_KEY);
-          setModelReady(true);
+          setContentReady(true);
           settle();
         })
         .catch(() => onError('Could not load this apartment.'));
     } else {
-      const splat = new SplatMesh({ url: sceneUrl, onLoad: settle });
-      splat.quaternion.identity();
-      scene.add(splat);
-      sceneRef.current.splat = splat;
+      // Spark is most of the bundle and only splat scenes need it, so a
+      // rebuilt flat on a phone neither downloads nor parses it.
+      import('@sparkjsdev/spark')
+        .then(({ SparkRenderer, SplatMesh }) => {
+          if (disposed || !sceneRef.current) return;
+          scene.add(new SparkRenderer({ renderer }));
+          const splat = new SplatMesh({ url: sceneUrl, onLoad: settle });
+          splat.quaternion.identity();
+          scene.add(splat);
+          sceneRef.current.splat = splat;
 
-      if (floorUrl) {
-        const floorSplat = new SplatMesh({ url: floorUrl, onLoad: settle });
-        floorSplat.quaternion.identity();
-        scene.add(floorSplat);
-        sceneRef.current.floorSplat = floorSplat;
-      }
+          if (floorUrl) {
+            const floorSplat = new SplatMesh({ url: floorUrl, onLoad: settle });
+            floorSplat.quaternion.identity();
+            scene.add(floorSplat);
+            sceneRef.current.floorSplat = floorSplat;
+          }
+          setContentReady(true);
+        })
+        .catch(() => onError('Could not load this apartment.'));
     }
 
     const onResize = () => {
@@ -462,6 +482,19 @@ export function SplatScene({
     let raf = 0;
     let lastFrame = performance.now();
 
+    // Drawing the same frame 60 times a second runs a phone hot and flat for
+    // nothing. Full rate while the view moves or was touched a moment ago;
+    // otherwise a few frames a second, enough for a texture that arrives
+    // late or the exposure settling.
+    let activeAt = lastFrame;
+    let drawnAt = 0;
+    const lastPose = [Number.NaN, 0, 0, 0, 0, 0];
+    const wake = () => {
+      activeAt = performance.now();
+    };
+    const wakeOn = ['pointerdown', 'pointermove', 'pointerup', 'keydown', 'wheel', 'input'] as const;
+    for (const type of wakeOn) window.addEventListener(type, wake, { passive: true });
+
     const tick = () => {
       raf = requestAnimationFrame(tick);
       const st = stateRef.current;
@@ -498,7 +531,16 @@ export function SplatScene({
         camera.fov = st.fov;
         camera.updateProjectionMatrix();
       }
-      sceneRef.current?.exposure?.update(renderer, scene, camera, dt);
+
+      const pose = [...st.position, st.yaw, st.pitch, st.fov];
+      if (pose.some((v, i) => v !== lastPose[i])) {
+        lastPose.splice(0, 6, ...pose);
+        wake();
+      }
+      if (now - activeAt > IDLE_AFTER_MS && now - drawnAt < IDLE_FRAME_MS) return;
+      const sinceDrawn = Math.min(IDLE_FRAME_MS / 1000, (now - drawnAt) / 1000);
+      drawnAt = now;
+      sceneRef.current?.exposure?.update(renderer, scene, camera, sinceDrawn);
       renderer.render(scene, camera);
     };
     tick();
@@ -507,6 +549,7 @@ export function SplatScene({
       disposed = true;
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', onResize);
+      for (const type of wakeOn) window.removeEventListener(type, wake);
 
       disposeChildren(floorGroup);
       disposeChildren(furnitureGroup);
@@ -553,6 +596,12 @@ export function SplatScene({
     let pressY = 0;
     let pressAt = 0;
     let pinchDistance = 0;
+    /**
+     * Fingers on the screen. A second one makes the gesture a pinch: each
+     * finger's moves would otherwise turn the view by the gap between them.
+     */
+    const touches = new Set<number>();
+    let lookPointer: number | null = null;
 
     /** Recompute the walk intent from whichever keys are currently held. */
     const updateIntent = () => {
@@ -682,6 +731,12 @@ export function SplatScene({
     };
 
     const onPointerDown = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') touches.add(e.pointerId);
+      if (touches.size > 1) {
+        dragging = false;
+        tapTarget = null;
+        return;
+      }
       const picked = onMoveItemRef.current ? pickItem(e) : null;
 
       // Dragging moves a piece ONLY when it is already the selected one.
@@ -707,6 +762,7 @@ export function SplatScene({
       // whatever was under it (or clears the selection over empty floor).
       tapTarget = (picked?.userData.uid as string | undefined) ?? null;
       dragging = true;
+      lookPointer = e.pointerId;
       lastX = e.clientX;
       lastY = e.clientY;
       pressX = e.clientX;
@@ -762,10 +818,12 @@ export function SplatScene({
         dropAt = { position: [placed[0], 0, placed[1]], roomId: room.id };
         return;
       }
-      if (!dragging) return;
+      if (!dragging || e.pointerId !== lookPointer) return;
       const st = stateRef.current;
       const k = dragSensitivity(st.fov);
-      st.yaw -= (e.clientX - lastX) * k;
+      // A finger drags the room along with it, as every photo sphere on a
+      // phone does; the mouse turns the way it moves.
+      st.yaw += (e.pointerType === 'touch' ? 1 : -1) * (e.clientX - lastX) * k;
       st.pitch = clampPitch(st.pitch + (e.clientY - lastY) * k);
       lastX = e.clientX;
       lastY = e.clientY;
@@ -774,6 +832,7 @@ export function SplatScene({
     };
 
     const onPointerUp = (e: PointerEvent) => {
+      touches.delete(e.pointerId);
       // A short press that barely moved is a tap, not a look — walk there.
       // This is the only way to move on a touch device, where there is no
       // keyboard and no wheel.
@@ -982,8 +1041,8 @@ export function SplatScene({
       const floor = floorId ? floorCatalog.find((f) => f.id === floorId) : undefined;
       group.add(buildFloorMesh(room, floor));
     }
-    // showingOriginal and modelReady only matter for a rebuilt flat (above).
-  }, [viewer.floors, manifest, floorCatalog, showingOriginal, modelReady]);
+    // showingOriginal only matters for a rebuilt flat (above).
+  }, [viewer.floors, manifest, floorCatalog, showingOriginal, contentReady]);
 
   // "Hold to compare" must not hitch: toggle visibility rather than
   // disposing and rebuilding every floor and furniture mesh twice per press.
@@ -1225,6 +1284,11 @@ function addReflections(
   });
 }
 
+/** The published flat's glTF files are meshopt-compressed (scripts/export_site.py). */
+function gltfLoader(): GLTFLoader {
+  return new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+}
+
 /**
  * A rebuilt flat with its baked light.
  *
@@ -1232,9 +1296,15 @@ function addReflections(
  * — so phones draw what Cycles computed, and live lights (there for placed
  * catalog furniture) cannot light the room a second time.
  */
-async function loadBakedModel(model: BakedModel, anisotropy: number): Promise<THREE.Group> {
+async function loadBakedModel(
+  model: BakedModel,
+  anisotropy: number,
+  onProgress: (fraction: number) => void,
+): Promise<THREE.Group> {
   const [gltf, lightMap] = await Promise.all([
-    new GLTFLoader().loadAsync(model.url),
+    gltfLoader().loadAsync(model.url, (e) => {
+      if (e.lengthComputable) onProgress(e.loaded / e.total);
+    }),
     new THREE.TextureLoader().loadAsync(model.lightmapUrl),
   ]);
   // Same convention as the glTF's own textures, on its second UV set;
@@ -1288,7 +1358,7 @@ async function loadBakedModel(model: BakedModel, anisotropy: number): Promise<TH
  * camera already saw all that.
  */
 async function loadViewPhoto(url: string): Promise<THREE.Object3D> {
-  const gltf = await new GLTFLoader().loadAsync(url);
+  const gltf = await gltfLoader().loadAsync(url);
   gltf.scene.traverse((node) => {
     if (!(node instanceof THREE.Mesh)) return;
     const source = node.material as THREE.MeshBasicMaterial;

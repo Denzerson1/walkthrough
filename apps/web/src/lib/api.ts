@@ -1,6 +1,15 @@
 /** API base URL and small fetch helpers. */
 
-const BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8000';
+/**
+ * The GitHub Pages build (`vite build --mode pages`) has no server. Its GET
+ * endpoints are JSON files beside the page and its scene files sit under
+ * files/, both written by scripts/export_site.py; nothing is posted anywhere.
+ */
+export const IS_STATIC = import.meta.env.MODE === 'pages';
+
+const BASE = IS_STATIC
+  ? import.meta.env.BASE_URL.replace(/\/$/, '')
+  : ((import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8000');
 
 export function apiUrl(path: string): string {
   return `${BASE}${path}`;
@@ -12,7 +21,7 @@ export function fileUrl(projectId: string, relativePath: string): string {
 }
 
 export async function getJson<T>(path: string): Promise<T> {
-  const response = await fetch(apiUrl(path));
+  const response = await fetch(apiUrl(IS_STATIC ? `${path}.json` : path));
   if (!response.ok) {
     throw new Error(`${response.status} ${response.statusText}`);
   }
@@ -30,6 +39,7 @@ export function postEvent(
     duration_ms?: number;
   },
 ): void {
+  if (IS_STATIC) return;
   void fetch(apiUrl(`/api/projects/${projectId}/events`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

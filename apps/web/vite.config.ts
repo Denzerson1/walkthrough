@@ -1,7 +1,9 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  // The GitHub Pages build is served from the repository's path.
+  base: mode === 'pages' ? '/walkthrough/' : '/',
   plugins: [react()],
   server: {
     port: 5173,
@@ -13,4 +15,4 @@ export default defineConfig({
     environment: 'node',
     include: ['tests/**/*.test.ts'],
   },
-});
+}));

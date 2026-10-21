@@ -197,7 +197,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   shareUrl: () => {
     const { manifest, viewer } = get();
-    const base = `${window.location.origin}/p/${manifest?.id ?? ''}`;
+    const base = `${window.location.origin}${import.meta.env.BASE_URL}p/${manifest?.id ?? ''}`;
     const encoded = encodeViewerState(viewer);
     return encoded ? `${base}?s=${encoded}` : base;
   },

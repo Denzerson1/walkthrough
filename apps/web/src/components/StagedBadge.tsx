@@ -36,7 +36,7 @@ export function StagedBadge({
         onPointerLeave={onHoldEnd}
         onPointerCancel={onHoldEnd}
         aria-pressed={showingOriginal}
-        className="panel whitespace-nowrap rounded-[var(--radius)] px-3 py-1.5 text-[12px] font-medium hover:bg-[var(--paper)]"
+        className="panel tap whitespace-nowrap rounded-[var(--radius)] px-3 py-1.5 text-[12px] font-medium hover:bg-[var(--paper)]"
         data-testid="hold-original"
       >
         <span className="hidden sm:inline">
@@ -48,7 +48,7 @@ export function StagedBadge({
       <button
         type="button"
         onClick={onReset}
-        className="panel whitespace-nowrap rounded-[var(--radius)] px-3 py-1.5 text-[12px] font-medium hover:bg-[var(--paper)]"
+        className="panel tap whitespace-nowrap rounded-[var(--radius)] px-3 py-1.5 text-[12px] font-medium hover:bg-[var(--paper)]"
         data-testid="reset-all"
       >
         Reset

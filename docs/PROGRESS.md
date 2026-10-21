@@ -7,6 +7,45 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-10-21 — On GitHub Pages, made for phones
+
+The flat is public at https://denzerson1.github.io/walkthrough/ (the owner's
+call, to show it around), kept out of search engines.
+
+- **A static site.** `vite build --mode pages` (`IS_STATIC` in `api.ts`)
+  reads JSON files where it asked the API, under the repository's path, and
+  posts nothing. The assistant and "Furnish automatically" need the server
+  and are not offered; the editor route is not there. `scripts/export_site.py`
+  writes what the API would have served, only the scene files the manifest
+  names (not the owner's photos beside them), a copy of the page at every
+  route and a link preview (`data/projects/<id>/preview.jpg`).
+- **Deployed without git.** The site is 114 MB, mostly the catalog's meshes
+  and floor textures, which only load when picked. `pnpm publish:pages`
+  uploads it as the asset of the `site` release and runs
+  `.github/workflows/pages.yml`, which deploys that archive.
+- **Smaller.** The flat's glTF files are meshopt-compressed in the export
+  (6.5 MB to 2.4 MB, the view 1.0 to 0.9 MB); renders of the same views
+  from both differ on under 0.04% of pixels. Spark is loaded only for a
+  splat scene: the page's script went from 1.15 MB to 0.27 MB gzipped. The
+  model, the view and the daylight maps are fetched at once rather than one
+  after another, and the loading bar shows how much of the model is in.
+- **Phones.** Pinching no longer spins the view (each finger's moves turned
+  it by the gap between them). A finger drags the room along with it, as
+  photo spheres do; the mouse is unchanged. Buttons are 44 px under a
+  finger. On a phone the plan is smaller, the daylight slider sits at the
+  bottom by the thumb, both make way for an open sheet, Share opens the
+  phone's share sheet, and a one-room flat shows no room strip. Landscape
+  sheets are taller with more columns. A long press selects nothing.
+- **Battery.** The view draws at full rate while it moves or was touched in
+  the last 1.5 s, and at 4 frames a second otherwise. Auto exposure reads its
+  meter back without stalling the GPU after the first reading.
+
+Verified: the built site served locally under `/walkthrough/` in Chrome as
+an iPhone 13 (portrait and landscape) and a Pixel 7, touch taps and the
+panels included, no console errors or failed requests; the dev app with the
+API still loads. Not verified: Safari on a real iPhone (Playwright's WebKit
+is not installed here).
+
 ## 2026-10-20 — The island's top in one piece, more room, the real stools
 
 - **Island top:** the oak bar, the oak end and the stone inset were three
