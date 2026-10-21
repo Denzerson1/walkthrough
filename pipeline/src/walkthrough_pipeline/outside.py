@@ -37,7 +37,8 @@ def build(paths: ProjectPaths, spec: dict, dressing: dict, times: list[str]) -> 
                 repo_root() / entry["photo"], repo_root() / partner["photo"],
                 centres[entry["window"]], centres[partner["window"]], outward,
                 entry.get("keep")))
-        glb.write_textured_meshes(paths.scene / VIEW_FILE, [v.mesh for v in views], "view-photo")
+        shown = [views[0], *(view_photo.outside_of(v, views[0]) for v in views[1:])]
+        glb.write_textured_meshes(paths.scene / VIEW_FILE, [v.mesh for v in shown], "view-photo")
     when = view_photo.taken(repo_root() / entries[0]["photo"]) if views else None
 
     photo, photo_sun = None, None

@@ -902,16 +902,21 @@ def finish_parts(finish: str, w: float, h: float, d: float, opts: dict) -> list[
                 ("vent", (x0 + 0.05, x1 - 0.05, y0 - 0.002, y0 + 0.03, 0.02, 0.07))]
     if finish == "island":
         # Drawers face the kitchen (-y); the free end is +x, the bar side +y.
-        # The top is one piece: island_top.
+        # The top is one piece: island_top. The drawers and their grip sit
+        # under its stone, lower than its oak; under the oak end, a fascia
+        # closes the front up to it.
+        under = h - 0.04 - STONE_DROP
+        end = x1 - 0.25
         parts = [("plinth", (x0 + 0.05, x1 - 0.05, y0 + 0.06, y1 - 0.06, 0, 0.1)),
                  ("white", (x0, x1 - 0.025, y0 + FRONT_T, y1 - 0.02, 0.1, h - 0.04)),
                  ("alu", (x0, x1 - 0.025, y0 + 0.004, y0 + FRONT_T + 0.01,
-                          h - 0.04 - GRIP + 0.001, h - 0.041)),
-                 *fronts(x0, x1 - 0.025, 0.1 + GAP, h - 0.04 - GRIP, y0, [[0, 3]] * 3),
+                          under - GRIP + 0.001, under - 0.001)),
+                 ("white", (end, x1 - 0.025, y0, y0 + FRONT_T, under, h - 0.04)),
+                 *fronts(x0, x1 - 0.025, 0.1 + GAP, under - GRIP, y0, [[0, 3]] * 3),
                  ("oak-warm", (x1 - 0.025, x1, y0, y1 - 0.02, 0, h - 0.04)),
                  ("oak-warm", (x0, x1, y1 - 0.02, y1, 0, h - 0.04))]
         if opts.get("backPanel", True):
-            parts += [("oak-warm", (x0, x0 + 0.03, y0, y1, h, h + 0.75)),
+            parts += [("oak-warm", (x0, x0 + 0.03, y0, y1, h - STONE_DROP, h + 0.75)),
                       ("glass-shelf", (x0 + 0.03, x0 + 0.2, y0 + 0.08, y1 - 0.08,
                                        h + 0.45, h + 0.462))]
         return parts
@@ -1005,11 +1010,16 @@ def finish_parts(finish: str, w: float, h: float, d: float, opts: dict) -> list[
 
 
 #: A top in one piece: cut lines `xs` and `ys` across the plan, each cell of
-#: the grid its own surface (None: no cell), between z0 and z1. The cells
-#: share their edges, so no hidden faces lie between them: two boards laid
-#: side by side baked a dark seam, the bake spreading the hidden faces'
-#: darkness over the joint.
-Slab = tuple[list[float], list[float], float, float, list[list[str | None]]]
+#: the grid its own surface between its own z0 and z1 (None: no cell). The
+#: cells share their edges, so no hidden faces lie between them: two boards
+#: laid side by side baked a dark seam, the bake spreading the hidden faces'
+#: darkness over the joint. Where a neighbour lies lower, the step shows.
+Cell = tuple[str, float, float] | None
+Slab = tuple[list[float], list[float], list[list[Cell]]]
+
+#: The island's stone lies this far below its oak, which stands round it as a
+#: raised bar, its edge a step (kitchentray1-3).
+STONE_DROP = 0.035
 
 
 def island_top(w: float, h: float, d: float, opts: dict) -> Slab:
@@ -1018,37 +1028,47 @@ def island_top(w: float, h: float, d: float, opts: dict) -> Slab:
     x0, x1, y0, y1 = -w / 2, w / 2, -d / 2, d / 2
     out_end, out_back = opts.get("overhangEnd", 0.42), opts.get("overhangBack", 0.27)
     bar = opts.get("barWidth", 0.3)
-    return ([x0, x1 - 0.25, x1 + out_end], [y0 - 0.02, y1 - bar, y1 + out_back], h - 0.04, h,
-            [["stone", "oak-warm"], ["oak-warm", "oak-warm"]])
+    oak, stone = ("oak-warm", h - 0.04, h), ("stone", h - 0.04 - STONE_DROP, h - STONE_DROP)
+    return ([x0 - 0.01, x1 - 0.25, x1 + out_end], [y0 - 0.02, y1 - bar, y1 + out_back],
+            [[stone, oak], [oak, oak]])
 
 
 def add_slab(bm: bmesh.types.BMesh, slab: Slab, slot, surfaces: dict) -> None:
     """A Slab into `bm`, its faces given their surface's material by `slot`."""
-    xs, ys, z0, z1, cells = slab
-    verts: dict[tuple[int, int, int], bmesh.types.BMVert] = {}
+    xs, ys, cells = slab
+    verts: dict[tuple[int, int, float], bmesh.types.BMVert] = {}
 
-    def vert(i: int, j: int, k: int) -> bmesh.types.BMVert:
-        if (i, j, k) not in verts:
-            verts[i, j, k] = bm.verts.new((xs[i], ys[j], (z0, z1)[k]))
-        return verts[i, j, k]
+    def vert(i: int, j: int, z: float) -> bmesh.types.BMVert:
+        key = (i, j, round(z, 6))
+        if key not in verts:
+            verts[key] = bm.verts.new((xs[i], ys[j], z))
+        return verts[key]
 
-    def filled(i: int, j: int) -> bool:
-        return 0 <= j < len(cells) and 0 <= i < len(cells[j]) and cells[j][i] is not None
+    def cell(i: int, j: int) -> Cell:
+        return cells[j][i] if 0 <= j < len(cells) and 0 <= i < len(cells[j]) else None
 
-    size = (xs[-1] - xs[0], ys[-1] - ys[0], z1 - z0)
+    heights = [z for row in cells for c in row if c for z in c[1:]]
+    size = (xs[-1] - xs[0], ys[-1] - ys[0], max(heights) - min(heights))
     for j, row in enumerate(cells):
-        for i, surface in enumerate(row):
-            if surface is None:
+        for i, c in enumerate(row):
+            if c is None:
                 continue
+            surface, z0, z1 = c
             corners = [(i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1)]
-            faces = [bm.faces.new([vert(a, b, 1) for a, b in corners]),
-                     bm.faces.new([vert(a, b, 0) for a, b in reversed(corners)])]
-            # Sides only on the outline, counter-clockwise from the front.
+            faces = [bm.faces.new([vert(a, b, z1) for a, b in corners]),
+                     bm.faces.new([vert(a, b, z0) for a, b in reversed(corners)])]
+            # Sides wherever no neighbour covers them: the whole height on the
+            # outline, the step above a lower neighbour, the band below a
+            # higher one. Counter-clockwise from the front.
             for n, (di, dj) in enumerate(((0, -1), (1, 0), (0, 1), (-1, 0))):
-                if not filled(i + di, j + dj):
-                    a, b = corners[n], corners[(n + 1) % 4]
-                    faces.append(bm.faces.new([vert(*a, 0), vert(*b, 0), vert(*b, 1),
-                                               vert(*a, 1)]))
+                other = cell(i + di, j + dj)
+                bands = ([(z0, z1)] if other is None else
+                         [(max(z0, other[2]), z1), (z0, min(z1, other[1]))])
+                a, b = corners[n], corners[(n + 1) % 4]
+                for lo, hi in bands:
+                    if hi - lo > 1e-6:
+                        faces.append(bm.faces.new([vert(*a, lo), vert(*b, lo), vert(*b, hi),
+                                                   vert(*a, hi)]))
             for face in faces:
                 face.material_index = slot(surface)
                 face.normal_update()  # a new face has none, and box_uvs goes by it
@@ -1142,9 +1162,12 @@ def stool(bm: bmesh.types.BMesh, w: float, h: float, d: float, slot, surfaces: d
     for face in faces:
         face.material_index, face.smooth = slot("fabric"), True
     box_uvs(bm, faces, (w, d, h - seat), surfaces["fabric"].get("tile", (1.0, 1.0)))
-    glide, under = 0.012, seat - 0.01  # the legs' tops sunk into the shell
+    glide, under = 0.012, seat - 0.004  # the legs' tops sunk into the shell
     feet = [Vector((sx * 0.195 * k, sy * 0.185 * k, 0)) for sy in (-1, 1) for sx in (-1, 1)]
-    tops = [Vector((sx * 0.13 * k, sy * 0.10 * k, under)) for sy in (-1, 1) for sx in (-1, 1)]
+    # Under the seat, well inside its outline (chair1-3): at the back, where
+    # the shell starts to rise, the tops stood out behind it.
+    tops = [Vector((sx * 0.12 * k, (-0.09 if sy < 0 else 0.04) * k, under))
+            for sy in (-1, 1) for sx in (-1, 1)]
 
     def on_leg(n: int, z: float) -> Vector:
         return feet[n].lerp(tops[n], z / under)
@@ -1555,6 +1578,9 @@ CELLS: dict[str, tuple[float, float, float]] = {}
 #: Extra smoothing for an object's light: painted trim's light is smooth,
 #: and on few texels the denoiser leaves blotches.
 SMOOTH = {"trim": 2.5}
+#: The same for every piece of furniture: on few texels its light came out
+#: in blotches on the kitchen's white fronts once exposed.
+PIECE_WEIGHT, PIECE_SMOOTH = 1.5, 2.0
 
 
 def layout_lightmap(objects: list[bpy.types.Object], margin: float = 0.006) -> None:
@@ -1680,7 +1706,7 @@ EXPOSE_TO, CLIP = 0.22, 16.0
 WHITE_BALANCE = 0.6
 #: Then a slight warm cast over it all, like a camera set a little below
 #: daylight: the owner found the neutral room a touch cool.
-WARMTH = (1.05, 1.0, 0.91)
+WARMTH = (1.08, 1.0, 0.86)
 #: The light map holds (light / scale) ** (1 / LIGHTMAP_GAMMA): steeper than
 #: sRGB, so dim light (a hall lit only by bounce) gets enough of the 256
 #: levels. With sRGB, the hall's few levels showed as grey blotches and JPEG
@@ -1747,8 +1773,9 @@ def save_lightmap(baked: bpy.types.Image, path: str, scratch: Path) -> tuple[flo
     out.pixels.foreach_set(encoded.ravel())
     out.filepath_raw = path
     out.file_format = "JPEG"
-    bpy.context.scene.render.image_settings.quality = 95
-    out.save()
+    # Image.save's own quality: the scene's render setting does not reach it,
+    # and the default (90) left blocks on white fronts once exposed.
+    out.save(quality=95)
     return scale, exposure
 
 
@@ -1825,6 +1852,9 @@ def main() -> None:
         else:
             plain_uvs(obj)
     pieces = [furniture(item, spec["surfaces"]) for item in spec["items"]]
+    for piece in pieces:
+        ATLAS_WEIGHT.setdefault(piece.name, PIECE_WEIGHT)
+        SMOOTH.setdefault(piece.name, PIECE_SMOOTH)
     views = outside(spec)
     site = neighbourhood(spec)
     patch = light(spec, windows)

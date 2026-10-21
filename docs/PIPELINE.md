@@ -305,12 +305,14 @@ cannot see; placed by hand from the capture photos):
   gets basin and tap), `kitchen-wall` (`rows`, `columns`), `kitchen-tall`,
   `oven`, `hob`, `island` (oak bar top overhanging `overhangEnd` and
   `overhangBack`, one piece with the stone inset: cells of one slab that
-  share their edges, since two boards side by side baked a dark seam),
+  share their edges, since two boards side by side baked a dark seam; the
+  stone lies 3.5 cm below the oak, which stands round it as a step),
   `wardrobe` (`doors`, or door widths as `columns`;
   `handles` as fractions across the front, `[]` for none), `open-wardrobe`
   (`drawers`), `coat-niche`, `bed`, `sofa`, `stool` (an upholstered shell
   smoothed by subdivision from a cage of sections, on splayed tapering
-  round legs with stretchers), `tv`; `min`/`max`
+  round legs with stretchers, meeting the seat well inside its outline),
+  `tv`; `min`/`max`
   correct a scanned box, `front` names the side a piece faces. `extras`:
   what the scanner missed (panels, shelves, the air conditioner, a
   pendant, more stools, the corner wardrobe's second wing).
@@ -329,7 +331,9 @@ with Open Image Denoise, stored with a gamma of 4 (steeper than sRGB: the
 dim hall, lit only by bounce, had too few of the 256 levels and showed grey
 blotches once brightened), white balanced like a camera (the shade's colour
 cast mostly taken out, so walls read white and sun stays warm; then a
-slight warm cast over it all, `WARMTH`) and
+warm cast over it all, `WARMTH`), saved at JPEG quality 95 (Blender's
+`Image.save` takes its own quality; the scene's render setting never reached
+it, and 90 left blocks on white fronts once exposed) and
 exposed against the owner's photos (sun spots clip, as they do in a
 photo). With `sun.times`, once per time of day: `flat_light-HHMM.jpg`
 each, listed in the manifest's `assets.lighting`; a camera's exposure
@@ -337,17 +341,23 @@ follows each time halfway, so the evening stays darker. Faces nobody sees from i
 bake, so the room's solids block light, but get no atlas. Each object is
 unwrapped on its own without aspect correction (with it, a photo
 texture's aspect squashed a piece's islands up to 16x and thin parts
-baked black). Oak, worktop and
+baked black). Furniture gets 1.5x its share of the atlas and its light a
+smoothing (σ 2 texels), as the trim does: on few texels the kitchen's white
+fronts came out blotchy. Oak, worktop and
 fabric carry generated textures (`photo_texture.surface_texture`).
 
 **Viewer:** shows `flat.glb` unlit (colour × baked light), antialiased,
 with neutral tone mapping (AgX greyed colours into a render's look),
-reflections of the room on gloss, glass, steel and the floor, haze over
+reflections of the room on gloss, glass, steel and the floor (a 1024 cube
+looked up a mip level down, its faces being drawn without antialiasing), haze over
 the distant houses, a lens's corner falloff, and auto exposure like a
 phone camera (it meters the view and follows it most of the way: the
 bounce-lit hall opens up, a view into a window stops down). The daylight slider
-blends the two nearest baked times (light maps in the shader, the
-neighbourhood's vertex light on the CPU, the sky's tint).
+blends the two nearest baked times while dragged (light maps in the
+shader, the neighbourhood's vertex light on the CPU, the sky's tint) and,
+let go, glides to the nearest one: between two, the floor had two
+half-strength suns on it. It renders at the device's full pixel ratio (up
+to 3), half a step lower at a time while it cannot keep 45 fps.
 Floor swaps change only the texture under the light. The walk stops where a
 slope drops below 1.8 m (the manifest's `ceilings`) and keeps out of every
 piece standing on the floor (its `obstacles`, written by the bake).
@@ -369,7 +379,14 @@ own photos out of them, stood in 3D (`view_photo.py`):
 - The sky is cut away along the roofs and chimneys; the mesh is drawn in
   front of the generated houses (distances drawn in towards the camera, so
   from where the photo was taken it is the photo, pixel for pixel).
-- Glass dust and drops are painted out.
+- Glass dust and drops are painted out, up to 1/140 of the photo across,
+  before the sky panorama is made from it too.
+- The second photo shows only what the first does not: each is stood at its
+  own pair's depths, and where both covered a house it showed twice, one
+  copy torn across the other, from anywhere but the window it was taken
+  from.
+- Near its outline the mesh is four times finer, so the roofs' and the
+  photo's edges are not cut into teeth.
 
 The sky (`sky.py`): per baked time, sunlight scattered by air, haze and
 ozone along each line of sight (single scattering, Nishita), the low sky

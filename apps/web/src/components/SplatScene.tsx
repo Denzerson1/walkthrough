@@ -271,7 +271,10 @@ export function SplatScene({
       onError('Could not start WebGL on this device.');
       return;
     }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // A phone's full resolution: at 2x on a 3x screen the flat looked soft
+    // and its edges stepped. One that cannot keep up steps down (tick).
+    let pixelRatio = Math.min(window.devicePixelRatio, 3);
+    renderer.setPixelRatio(pixelRatio);
     renderer.setSize(mount.clientWidth, mount.clientHeight);
     // Daylight, not the page's paper colour. Window and door openings are
     // cut out of the wall splats, so whatever is behind the scene is what you
@@ -321,10 +324,14 @@ export function SplatScene({
     // two meshes, so the floor can be hidden for a replacement. Otherwise we
     // load the single combined scene and floor replacement is unavailable.
     let pending = model ? 1 : floorUrl ? 2 : 1;
+    // Frame times are judged from a moment after the scene is in, past the
+    // first frames' uploads and shader compiles.
+    let judgeFrom = Infinity;
     const settle = () => {
       if (disposed) return;
       pending -= 1;
       if (pending === 0) {
+        judgeFrom = performance.now() + 2000;
         onProgress?.(1);
         onReady();
       }
@@ -347,7 +354,7 @@ export function SplatScene({
           onProgress?.(fraction * 0.95),
         ),
         model.viewPhoto ? loadViewPhoto(model.viewPhoto.url) : null,
-        lighting ? loadDaylightMaps(lighting) : null,
+        lighting ? loadDaylightMaps(lighting, renderer.capabilities.getMaxAnisotropy()) : null,
       ])
         .then(([group, view, daylightMaps]) => {
           if (disposed || !sceneRef.current) return;
@@ -495,6 +502,8 @@ export function SplatScene({
     };
     const wakeOn = ['pointerdown', 'pointermove', 'pointerup', 'keydown', 'wheel', 'input'] as const;
     for (const type of wakeOn) window.addEventListener(type, wake, { passive: true });
+    let judged = 0;
+    let slow = 0;
 
     const tick = () => {
       raf = requestAnimationFrame(tick);
@@ -540,6 +549,19 @@ export function SplatScene({
       }
       if (now - activeAt > IDLE_AFTER_MS && now - drawnAt < IDLE_FRAME_MS) return;
       const sinceDrawn = Math.min(IDLE_FRAME_MS / 1000, (now - drawnAt) / 1000);
+      // Below 45 fps for most of 90 frames at full rate: half a pixel ratio
+      // less, until it keeps up. Never back up, which would only oscillate.
+      if (now - activeAt <= IDLE_AFTER_MS && now > judgeFrom && sinceDrawn < 0.25) {
+        judged += 1;
+        if (sinceDrawn > 1 / 45) slow += 1;
+        if (judged === 90) {
+          if (slow > 45 && pixelRatio > 1) {
+            pixelRatio = Math.max(1, pixelRatio - 0.5);
+            renderer.setPixelRatio(pixelRatio);
+          }
+          judged = slow = 0;
+        }
+      }
       drawnAt = now;
       sceneRef.current?.exposure?.update(renderer, scene, camera, sinceDrawn);
       renderer.render(scene, camera);
@@ -1266,13 +1288,20 @@ function addReflections(
   model: THREE.Object3D,
   at: [number, number, number] | undefined,
 ): void {
-  const target = new THREE.WebGLCubeRenderTarget(512, {
+  const target = new THREE.WebGLCubeRenderTarget(1024, {
     generateMipmaps: true,
     minFilter: THREE.LinearMipmapLinearFilter,
   });
   const camera = new THREE.CubeCamera(0.05, 300, target);
   camera.position.set(at?.[0] ?? 0, at?.[1] ?? 1.6, at?.[2] ?? 0);
   camera.update(renderer, scene);
+  // Looked up one level down the cube's mips. Its faces are drawn without
+  // antialiasing, and a roof window reflected in a front close up showed
+  // their steps; a level down, each texel is four averaged.
+  const envmap = THREE.ShaderChunk.envmap_fragment.replace(
+    'textureCube( envMap, envMapRotation * reflectVec )',
+    'textureCube( envMap, envMapRotation * reflectVec, 1.0 )',
+  );
   model.traverse((node) => {
     if (!(node instanceof THREE.Mesh)) return;
     const material = node.material as THREE.MeshBasicMaterial;
@@ -1281,6 +1310,11 @@ function addReflections(
     material.envMap = target.texture;
     material.combine = THREE.MixOperation;
     material.reflectivity = amount;
+    const decode = material.onBeforeCompile;
+    material.onBeforeCompile = (shader, gl) => {
+      decode.call(material, shader, gl);
+      shader.fragmentShader = shader.fragmentShader.replace('#include <envmap_fragment>', envmap);
+    };
     material.needsUpdate = true;
   });
 }
@@ -1313,6 +1347,7 @@ async function loadBakedModel(
   lightMap.flipY = false;
   lightMap.colorSpace = THREE.NoColorSpace;
   lightMap.channel = 1;
+  lightMap.anisotropy = anisotropy;
   const single = {
     lightMap2: { value: lightMap },
     lightMix: { value: 0 },

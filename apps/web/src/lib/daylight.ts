@@ -35,6 +35,40 @@ export function formatMinutes(minutes: number): string {
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
 
+/** The sky's colour through the day, for the track: dawn gold, noon blue, evening amber, dusk. */
+const SKY: Array<[number, [number, number, number]]> = [
+  [7 * 60, [243, 196, 141]],
+  [10 * 60, [214, 220, 214]],
+  [12 * 60, [168, 203, 233]],
+  [15 * 60, [190, 211, 230]],
+  [17.5 * 60, [240, 170, 102]],
+  [20 * 60, [111, 106, 160]],
+];
+
+/** The sky's colour at `minutes`, between the stops above. */
+export function skyColour(minutes: number): string {
+  const i = SKY.findIndex(([t]) => t >= minutes);
+  if (i <= 0) return `rgb(${SKY[i === 0 ? 0 : SKY.length - 1][1].join(',')})`;
+  const [t0, a] = SKY[i - 1];
+  const [t1, b] = SKY[i];
+  const f = (minutes - t0) / (t1 - t0);
+  return `rgb(${a.map((v, k) => Math.round(v + (b[k] - v) * f)).join(',')})`;
+}
+
+/** What a time of day is called. */
+export function mood(minutes: number): string {
+  if (minutes < 10 * 60) return 'Morning';
+  if (minutes < 14 * 60) return 'Midday';
+  if (minutes < 16.5 * 60) return 'Afternoon';
+  if (minutes < 19 * 60) return 'Evening';
+  return 'Dusk';
+}
+
+/** The baked time nearest `minutes`. */
+export function nearestKey(keys: number[], minutes: number): number {
+  return keys.reduce((best, k) => (Math.abs(k - minutes) < Math.abs(best - minutes) ? k : best));
+}
+
 /**
  * The two keys (indices into `times`, sorted ascending) a time falls
  * between, and how far from the first to the second; clamped at the ends.
@@ -271,6 +305,7 @@ export class Daylight {
  */
 export async function loadDaylightMaps(
   keys: DaylightKey[],
+  anisotropy = 1,
 ): Promise<{ maps: THREE.Texture[]; skies: THREE.Texture[] | null }> {
   const loader = new THREE.TextureLoader();
   const withSkies = keys.every((k) => k.skyUrl);
@@ -282,6 +317,7 @@ export async function loadDaylightMaps(
     map.flipY = false;
     map.colorSpace = THREE.NoColorSpace; // decoded in the shader: decodeLightMaps
     map.channel = 1;
+    map.anisotropy = anisotropy;
   }
   for (const sky of skies ?? []) {
     sky.colorSpace = THREE.SRGBColorSpace;

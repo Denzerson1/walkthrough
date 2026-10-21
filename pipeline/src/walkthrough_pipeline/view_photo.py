@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import io
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import cv2
@@ -154,6 +154,17 @@ def wall_depths(distances: np.ndarray, least: float = 0.04) -> list[float]:
     return peaks or [float(np.median(distances))]
 
 
+def street_front(walls: list[float], within: float = 1.6) -> list[float]:
+    """
+    The walls with what stands within `within` times the street front's
+    distance folded into it: its roofs, a set-back storey, a side wall no
+    plane parallel to the street can follow. As planes of their own, a
+    house across tore down the middle as soon as you looked out of the
+    other window.
+    """
+    return [walls[0], *(d for d in walls[1:] if d > within * walls[0])]
+
+
 def nearest_wall(distances: np.ndarray, walls: list[float]) -> np.ndarray:
     """Each distance's wall: the nearest within 2.5 m or 12%, else -1."""
     walls_arr = np.asarray(walls)
@@ -189,11 +200,16 @@ def level_frame(up: np.ndarray) -> np.ndarray:
 
 
 def despeckle(rgb: np.ndarray) -> np.ndarray:
-    """Dust and drops on the window glass, small and round, painted out from around them."""
+    """
+    Dust and drops on the window glass, small and round, painted out from
+    around them. Up to 1/140 of the width across: at 1/200 and a contrast
+    of 16, the larger and fainter ones still showed as specks on the houses
+    and in the sky.
+    """
+    side = max(3, rgb.shape[1] // 140)
     grey = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY).astype(np.int16)
-    diff = np.abs(grey - cv2.medianBlur(rgb, 9)[..., 1].astype(np.int16))
-    count, labels, stats, _ = cv2.connectedComponentsWithStats((diff > 16).astype(np.uint8))
-    side = max(3, rgb.shape[1] // 200)
+    diff = np.abs(grey - cv2.medianBlur(rgb, 2 * side + 1)[..., 1].astype(np.int16))
+    count, labels, stats, _ = cv2.connectedComponentsWithStats((diff > 12).astype(np.uint8))
     small = (stats[:, cv2.CC_STAT_WIDTH] <= side) & (stats[:, cv2.CC_STAT_HEIGHT] <= side)
     small[0] = False
     mask = cv2.dilate(small[labels].astype(np.uint8), np.ones((3, 3), np.uint8))
@@ -227,17 +243,27 @@ def photo_mesh(rgb: np.ndarray, camera: Camera, planes_scene: list[tuple[np.ndar
     """
     The photo as a mesh: points on a grid and along the outline of `solid`
     (what is not sky), triangulated, each moved out along its ray onto the
-    wall its pixel votes for (then drawn `in_front`).
+    wall its pixel votes for (then drawn `in_front`). Near the outline the
+    grid is four times finer: a triangle is kept or dropped whole, and at
+    the coarse grid's size that cut the roofs and the photo's edges into teeth.
     Returns positions, uvs (v down) and triangles.
     """
     h, w = solid.shape
-    near = cv2.dilate(solid.astype(np.uint8), np.ones((2 * step + 1, 2 * step + 1), np.uint8)) > 0
-    gy, gx = np.mgrid[0 : h + step : step, 0 : w + step : step]
-    grid = np.column_stack([np.minimum(gx.ravel(), w - 1), np.minimum(gy.ravel(), h - 1)])
-    grid = grid[near[grid[:, 1], grid[:, 0]]]
+
+    def grid_points(spacing: int, where: np.ndarray) -> np.ndarray:
+        gy, gx = np.mgrid[0 : h + spacing : spacing, 0 : w + spacing : spacing]
+        grid = np.column_stack([np.minimum(gx.ravel(), w - 1), np.minimum(gy.ravel(), h - 1)])
+        return grid[where[grid[:, 1], grid[:, 0]]]
+
+    def grown(mask: np.ndarray, by: int) -> np.ndarray:
+        return cv2.dilate(mask.astype(np.uint8), np.ones((2 * by + 1, 2 * by + 1), np.uint8)) > 0
+
+    edge = grown(solid, 1) & grown(~solid, 1)  # either side of the outline
     contours, _ = cv2.findContours(solid.astype(np.uint8), cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
     outline = [cv2.approxPolyDP(c, 0.8, True).reshape(-1, 2) for c in contours if len(c) > 8]
-    points = np.unique(np.vstack([grid, *outline]).astype(np.float64), axis=0)
+    points = np.unique(np.vstack([grid_points(step, grown(solid, step)),
+                                  grid_points(step // 4, grown(edge, step // 2)),
+                                  *outline]).astype(np.float64), axis=0)
     tri = Delaunay(points).simplices
     centre = points[tri].mean(axis=1)
     cx, cy = centre[:, 0].astype(int).clip(0, w - 1), centre[:, 1].astype(int).clip(0, h - 1)
@@ -277,6 +303,26 @@ class View:
     info: dict  # what was measured, for the record
 
 
+def outside_of(view: View, other: View) -> View:
+    """
+    `view` without what `other` already shows. Two photos of the same houses,
+    each stood at the depths its own pair of photos gave, showed the houses
+    twice, one copy torn across the other, as soon as you looked out from
+    anywhere but the window a photo was taken from.
+    """
+    positions, uvs, tri, jpeg = view.mesh
+    cam = other.camera
+    d = positions[tri].mean(axis=1) - cam.centre
+    z = d @ cam.forward
+    w, h = cam.size
+    u = cam.f * (d @ cam.right) / np.maximum(z, 1e-6) + w / 2
+    v = h / 2 - cam.f * (d @ cam.up) / np.maximum(z, 1e-6)
+    inside = (z > 0) & (u >= 0) & (u < w) & (v >= 0) & (v < h)
+    covered = np.zeros(len(tri), bool)
+    covered[inside] = (other.solid | other.sky)[v[inside].astype(int), u[inside].astype(int)]
+    return replace(view, mesh=(positions, uvs, tri[~covered], jpeg))
+
+
 def taken(path: Path) -> tuple[str, str] | None:
     """When a photo was taken, as ("YYYY-MM-DD", "HH:MM"), from its EXIF."""
     stamp = Image.open(path).getexif().get_ifd(_EXIF_IFD).get(_DATE_TAKEN)
@@ -305,7 +351,7 @@ def build(photo: Path, partner: Path, centre: np.ndarray, partner_centre: np.nda
     turn = facade_turn(rgb, f, up)
     n = np.array([-math.sin(turn), math.cos(turn)])  # the street front's normal, (right, forward)
     distance = level[:, [0, 2]] @ n
-    walls = wall_depths(distance[distance > 1.0])
+    walls = street_front(wall_depths(distance[distance > 1.0]))
     label = nearest_wall(distance, walls)
     # Scene (x, z) of a level (right, forward) vector: along the normal is
     # the facade's outward direction; along t (the normal turned to the
@@ -324,7 +370,8 @@ def build(photo: Path, partner: Path, centre: np.ndarray, partner_centre: np.nda
     normal = np.array([out_h[0], 0.0, out_h[1]])
     planes_scene = [(normal, float(normal @ centre + d)) for d in walls]
 
-    texture, _ = load(photo, side)
+    # Without the dust on the glass: the sky panorama is made from it too.
+    texture = despeckle(load(photo, side)[0])
     h, w = texture.shape[:2]
     scale = w / rgb.shape[1]
     camera = Camera(centre, camera_axes[0], -camera_axes[1], camera_axes[2], f * scale, (w, h))
@@ -341,7 +388,7 @@ def build(photo: Path, partner: Path, centre: np.ndarray, partner_centre: np.nda
     votes[0] += 1e-4  # where no feature says otherwise: the street front
     positions, uvs, tri = photo_mesh(texture, camera, planes_scene, votes, solid)
     jpeg = io.BytesIO()
-    Image.fromarray(despeckle(texture)).save(jpeg, "JPEG", quality=90)
+    Image.fromarray(texture).save(jpeg, "JPEG", quality=90)
     tilt = math.degrees(math.asin(float(np.clip(camera.forward[1], -1, 1))))
     return View((positions, uvs, tri, jpeg.getvalue()), camera, texture, solid, sky, {
         "points": int(len(points)), "walls": [round(d, 1) for d in walls],

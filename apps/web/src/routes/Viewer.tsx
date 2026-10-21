@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { Assistant, type AssistantAction } from '../components/Assistant';
+import { DaylightControl } from '../components/DaylightControl';
 import { FloorPlan } from '../components/FloorPlan';
 import { FloorPanel, FurniturePanel, Sheet } from '../components/Panels';
 import { RoomStrip } from '../components/RoomStrip';
 import { SplatScene } from '../components/SplatScene';
 import { StagedBadge } from '../components/StagedBadge';
 import { IS_STATIC, apiUrl, fileUrl, getJson, postEvent, sessionId } from '../lib/api';
-import { formatMinutes, toMinutes } from '../lib/daylight';
+import { toMinutes } from '../lib/daylight';
 import type { Manifest } from '../lib/manifest';
 import { type CatalogItem, stagedRoomIds, useStore } from '../lib/store';
 import { isStaged } from '../lib/viewerState';
@@ -55,9 +56,9 @@ export function Viewer() {
   const [progress, setProgress] = useState(0);
   // The time of day shown, for a rebuilt flat baked at several; it opens at
   // the time the pipeline made the default.
-  const daylightRange = useMemo((): [number, number] | null => {
+  const daylightKeys = useMemo(() => {
     const times = manifest?.assets?.lighting?.map((l) => toMinutes(l.time)) ?? [];
-    return times.length > 1 ? [Math.min(...times), Math.max(...times)] : null;
+    return [...new Set(times)].sort((a, b) => a - b);
   }, [manifest]);
   const opening = useMemo(() => {
     const lighting = manifest?.assets?.lighting;
@@ -261,30 +262,9 @@ export function Viewer() {
     }
   }
 
-  /**
-   * The time of day, for a rebuilt flat baked at several: how the light
-   * falls in the morning, at noon, in the evening. Top right on a big
-   * screen; on a phone, at the bottom where a thumb reaches it.
-   */
-  const daylightControl = manifest && ready && daylightRange && daylight !== null && (
-    <>
-      <label className="flex items-baseline justify-between text-[11px]" htmlFor="daylight">
-        <span className="opacity-65">Daylight</span>
-        <span className="font-medium tabular-nums" data-testid="daylight-time">
-          {formatMinutes(daylight)}
-        </span>
-      </label>
-      <input
-        id="daylight"
-        type="range"
-        className="mt-1 w-full accent-[var(--accent)]"
-        min={daylightRange[0]}
-        max={daylightRange[1]}
-        step={5}
-        value={daylight}
-        onChange={(e) => setDaylight(Number(e.target.value))}
-      />
-    </>
+  // Top right on a big screen; on a phone, at the bottom where a thumb reaches it.
+  const daylightControl = manifest && ready && daylightKeys.length > 1 && daylight !== null && (
+    <DaylightControl keys={daylightKeys} value={daylight} onChange={setDaylight} />
   );
 
   if (error) {
@@ -417,7 +397,7 @@ export function Viewer() {
 
       {!compact && daylightControl && (
         <div
-          className="panel absolute right-3 w-[min(220px,46vw)] px-3 py-2"
+          className="panel absolute right-3 w-[min(260px,46vw)] px-3 py-2"
           style={{ top: 'calc(5.5rem + var(--safe-top))' }}
         >
           {daylightControl}
