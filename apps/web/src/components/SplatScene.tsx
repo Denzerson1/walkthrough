@@ -35,6 +35,7 @@ import { FLOOR_DEFAULT_COLOR, floorColor } from '../lib/floorColors';
 import { apiUrl } from '../lib/api';
 import { Daylight, type DaylightKey, decodeLightMaps, loadDaylightMaps } from '../lib/daylight';
 import { AutoExposure } from '../lib/exposure';
+import { fetchGlb } from '../lib/glb';
 import type { CatalogItem } from '../lib/store';
 import type { PlacedItem, ViewerState } from '../lib/viewerState';
 
@@ -1302,9 +1303,9 @@ async function loadBakedModel(
   onProgress: (fraction: number) => void,
 ): Promise<THREE.Group> {
   const [gltf, lightMap] = await Promise.all([
-    gltfLoader().loadAsync(model.url, (e) => {
-      if (e.lengthComputable) onProgress(e.loaded / e.total);
-    }),
+    fetchGlb(model.url, onProgress).then((buffer) =>
+      gltfLoader().parseAsync(buffer, model.url.slice(0, model.url.lastIndexOf('/') + 1)),
+    ),
     new THREE.TextureLoader().loadAsync(model.lightmapUrl),
   ]);
   // Same convention as the glTF's own textures, on its second UV set;
