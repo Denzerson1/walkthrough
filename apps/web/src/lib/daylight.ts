@@ -5,9 +5,13 @@
  * `sun.times`). Between two of them the viewer blends: the room's light maps
  * in the shader, the neighbourhood's per-vertex sunlight on the CPU, the sky
  * dome's tint. Blending baked light is not the same as baking the time in
- * between, but at an hour or two apart the eye does not tell.
+ * between, but at an hour or two apart the eye does not tell: with the sun's
+ * direct light left out of the bakes and drawn live (sun.ts), what is blended
+ * is the soft light of the sky and the bounces.
  */
 import * as THREE from 'three';
+import type { SunSample } from './manifest';
+import { SUN_FRAGMENT, SUN_VERTEX, sunAt, type SunShadow, type SunUniforms } from './sun';
 
 export interface DaylightKey {
   /** Minutes after midnight. */
@@ -43,6 +47,7 @@ const SKY: Array<[number, [number, number, number]]> = [
   [15 * 60, [190, 211, 230]],
   [17.5 * 60, [240, 170, 102]],
   [20 * 60, [111, 106, 160]],
+  [21 * 60, [72, 70, 118]],
 ];
 
 /** The sky's colour at `minutes`, between the stops above. */
@@ -55,18 +60,14 @@ export function skyColour(minutes: number): string {
   return `rgb(${a.map((v, k) => Math.round(v + (b[k] - v) * f)).join(',')})`;
 }
 
-/** What a time of day is called. */
+/** What a time of day is called (at midsummer, as the flat's sun is). */
 export function mood(minutes: number): string {
   if (minutes < 10 * 60) return 'Morning';
   if (minutes < 14 * 60) return 'Midday';
   if (minutes < 16.5 * 60) return 'Afternoon';
-  if (minutes < 19 * 60) return 'Evening';
-  return 'Dusk';
-}
-
-/** The baked time nearest `minutes`. */
-export function nearestKey(keys: number[], minutes: number): number {
-  return keys.reduce((best, k) => (Math.abs(k - minutes) < Math.abs(best - minutes) ? k : best));
+  if (minutes < 19.5 * 60) return 'Evening';
+  if (minutes < 20.5 * 60) return 'Golden hour';
+  return 'Sunset';
 }
 
 /**
@@ -100,36 +101,62 @@ export interface LightMapUniforms {
 
 /**
  * Teach a baked material to decode its light map and mix in a second,
- * each at its own scale. The light map itself stays `material.lightMap`.
+ * each at its own scale, and add the sun's direct light when it is drawn
+ * live (`sun`). The light map itself stays `material.lightMap`.
  */
-export function decodeLightMaps(material: THREE.MeshBasicMaterial, uniforms: LightMapUniforms) {
+export function decodeLightMaps(
+  material: THREE.MeshBasicMaterial,
+  uniforms: LightMapUniforms,
+  sun?: SunUniforms,
+) {
   material.lightMapIntensity = Math.PI; // the scales are in the uniforms
   const decode = (map: string) =>
     `pow( texture2D( ${map}, vLightMapUv ).rgb, vec3( ${LIGHT_MAP_GAMMA.toFixed(1)} ) )`;
   material.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, uniforms);
+    Object.assign(shader.uniforms, uniforms, sun);
+    if (sun) {
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', `#include <common>\n${SUN_VERTEX.declare}`)
+        .replace('#include <project_vertex>', `#include <project_vertex>\n${SUN_VERTEX.compute}`);
+    }
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <common>',
         '#include <common>\nuniform sampler2D lightMap2;\nuniform float lightMix;\n' +
-          'uniform float lightScale1;\nuniform float lightScale2;',
+          `uniform float lightScale1;\nuniform float lightScale2;\n${sun ? SUN_FRAGMENT : ''}`,
       )
       .replace(
         'vec4 lightMapTexel = texture2D( lightMap, vLightMapUv );',
         `vec4 lightMapTexel = vec4( mix( ${decode('lightMap')} * lightScale1, ` +
-          `${decode('lightMap2')} * lightScale2, lightMix ), 1.0 );`,
+          `${decode('lightMap2')} * lightScale2, lightMix )${sun ? ' + sunDirect()' : ''}, 1.0 );`,
       );
   };
+  // The same source either way, so three would share one program between them.
+  material.customProgramCacheKey = () => (sun ? 'baked-sun' : 'baked');
   material.needsUpdate = true;
 }
+
+// A type, not an interface: ShaderMaterial wants an index signature.
+type SkyUniforms = {
+  sky1: { value: THREE.Texture };
+  sky2: { value: THREE.Texture };
+  skyMix: { value: number };
+  /** Towards the sun. */
+  sunDirection: { value: THREE.Vector3 };
+  /** The sun's disc, as displayed; black when it is not drawn. */
+  sunDisc: { value: THREE.Color };
+};
+
+/** The sun's angular radius, radians. */
+const SUN_RADIUS = (0.27 * Math.PI) / 180;
 
 /**
  * The sky dome, painted from two panoramas mixed: looked up by the view
  * direction, so it sits at infinity whatever the dome's size. As the
- * photos out of the windows, it is shown as is, not tone mapped.
+ * photos out of the windows, it is shown as is, not tone mapped. The sun
+ * is drawn on it where it stands (the panoramas have none, sky.py).
  */
-function skyMaterial(uniforms: { sky1: { value: THREE.Texture }; sky2: { value: THREE.Texture };
-  skyMix: { value: number } }): THREE.ShaderMaterial {
+function skyMaterial(uniforms: SkyUniforms): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     name: 'sky',
     uniforms,
@@ -147,31 +174,45 @@ function skyMaterial(uniforms: { sky1: { value: THREE.Texture }; sky2: { value: 
       uniform sampler2D sky1;
       uniform sampler2D sky2;
       uniform float skyMix;
+      uniform vec3 sunDirection;
+      uniform vec3 sunDisc;
       varying vec3 vWorld;
       #define PI 3.141592653589793
       void main() {
         vec3 d = normalize( vWorld - cameraPosition );
         vec2 uv = vec2( atan( d.x, -d.z ) / ( 2.0 * PI ) + 0.5,
                         0.5 + asin( clamp( d.y, -1.0, 1.0 ) ) / PI );
-        gl_FragColor = vec4( mix( texture2D( sky1, uv ).rgb, texture2D( sky2, uv ).rgb, skyMix ), 1.0 );
+        vec3 sky = mix( texture2D( sky1, uv ).rgb, texture2D( sky2, uv ).rgb, skyMix );
+        // The disc with a soft rim, and a little glare round it. Angles by
+        // 1 - cos, half the angle squared: the cosine of a quarter degree is
+        // 1 to five places, where a float's precision runs out.
+        float off = 1.0 - dot( d, sunDirection );
+        float r = ${(SUN_RADIUS ** 2 / 2).toExponential(4)};
+        float disc = 1.0 - smoothstep( r, r * 2.6, off );
+        float glare = 0.25 * exp( -off * 4000.0 );
+        sky = mix( sky, sunDisc, disc ) + sunDisc * glare;
+        gl_FragColor = vec4( sky, 1.0 );
         #include <colorspace_fragment>
       }`,
   });
 }
 
-/** The light of a rebuilt flat at any time between its baked keys. */
+/**
+ * The light of a rebuilt flat at any time between its baked keys. A key
+ * whose light map or sky has not arrived yet (null) is stood in for by
+ * the nearest one that has, until `provide` brings it.
+ */
 export class Daylight {
   readonly keys: DaylightKey[];
-  private readonly maps: THREE.Texture[];
+  private readonly maps: Array<THREE.Texture | null>;
+  /** Where each key given to the constructor sits in `keys`, earliest first. */
+  private readonly sorted: number[];
+  private shown: number | null = null;
   private readonly baked: THREE.MeshBasicMaterial[] = [];
   private readonly sites: Array<{ colour: Colours; sets: Float32Array[] }> = [];
   private sky: THREE.MeshBasicMaterial | null = null;
-  private readonly skies: THREE.Texture[] | null;
-  private readonly skyUniforms: {
-    sky1: { value: THREE.Texture };
-    sky2: { value: THREE.Texture };
-    skyMix: { value: number };
-  } | null = null;
+  private readonly skies: Array<THREE.Texture | null> | null;
+  private readonly skyUniforms: SkyUniforms | null = null;
   private readonly photos: THREE.MeshBasicMaterial[] = [];
   /** Per key: the photo's colour, its light relative to the light it was taken in. */
   private photoTints: number[][] = [];
@@ -182,15 +223,23 @@ export class Daylight {
     lightScale2: { value: 1 },
   };
 
-  constructor(keys: DaylightKey[], maps: THREE.Texture[], model: THREE.Object3D,
-    photoMinutes?: number, skies?: THREE.Texture[] | null) {
+  /** The sun drawn live, when the bakes leave its direct light out (sun.ts). */
+  private readonly sun: { shadow: SunShadow; path: SunSample[] } | null;
+
+  constructor(keys: DaylightKey[], maps: Array<THREE.Texture | null>, model: THREE.Object3D,
+    photoMinutes?: number, skies?: Array<THREE.Texture | null> | null,
+    sun?: { shadow: SunShadow; path: SunSample[] } | null) {
     const order = keys.map((_, i) => i).sort((a, b) => keys[a].minutes - keys[b].minutes);
     this.keys = order.map((i) => keys[i]);
+    this.sorted = keys.map((_, i) => order.indexOf(i));
     this.maps = order.map((i) => maps[i]);
     this.skies = skies ? order.map((i) => skies[i]) : null;
+    this.sun = sun?.path.length ? sun : null;
     if (this.skies) {
-      this.skyUniforms = { sky1: { value: this.skies[0] }, sky2: { value: this.skies[0] },
-        skyMix: { value: 0 } };
+      const first = this.ready(this.skies, 0);
+      this.skyUniforms = { sky1: { value: first }, sky2: { value: first },
+        skyMix: { value: 0 }, sunDirection: { value: new THREE.Vector3(0, 1, 0) },
+        sunDisc: { value: new THREE.Color(0, 0, 0) } };
     }
     model.traverse((node) => {
       if (!(node instanceof THREE.Mesh)) return;
@@ -244,8 +293,28 @@ export class Daylight {
     }
   }
 
+  /** The texture of key `i` (in `keys`), or of the nearest key whose has arrived. */
+  private ready(list: Array<THREE.Texture | null>, i: number): THREE.Texture {
+    let best = -1;
+    list.forEach((texture, k) => {
+      const nearer = best < 0 ||
+        Math.abs(this.keys[k].minutes - this.keys[i].minutes) <
+          Math.abs(this.keys[best].minutes - this.keys[i].minutes);
+      if (texture && nearer) best = k;
+    });
+    return list[best] as THREE.Texture;
+  }
+
+  /** Key `index` (as given to the constructor) has arrived: its light map and sky. */
+  provide(index: number, map: THREE.Texture, sky: THREE.Texture | null): void {
+    const k = this.sorted[index];
+    this.maps[k] = map;
+    if (this.skies && sky) this.skies[k] = sky;
+    if (this.shown !== null) this.set(this.shown);
+  }
+
   private prepare(material: THREE.MeshBasicMaterial): void {
-    decodeLightMaps(material, this.uniforms);
+    decodeLightMaps(material, this.uniforms, this.sun?.shadow.uniforms);
     this.baked.push(material);
   }
 
@@ -255,8 +324,9 @@ export class Daylight {
       this.keys.map((k) => k.minutes),
       minutes,
     );
-    for (const material of this.baked) material.lightMap = this.maps[i];
-    this.uniforms.lightMap2.value = this.maps[j];
+    this.shown = minutes;
+    for (const material of this.baked) material.lightMap = this.ready(this.maps, i);
+    this.uniforms.lightMap2.value = this.ready(this.maps, j);
     this.uniforms.lightMix.value = t;
     this.uniforms.lightScale1.value = this.keys[i].lightmapScale;
     this.uniforms.lightScale2.value = this.keys[j].lightmapScale;
@@ -283,9 +353,23 @@ export class Daylight {
       }
     }
     if (this.skyUniforms && this.skies) {
-      this.skyUniforms.sky1.value = this.skies[i];
-      this.skyUniforms.sky2.value = this.skies[j];
+      this.skyUniforms.sky1.value = this.ready(this.skies, i);
+      this.skyUniforms.sky2.value = this.ready(this.skies, j);
       this.skyUniforms.skyMix.value = t;
+    }
+    if (this.sun) {
+      const { direction, light } = sunAt(this.sun.path, minutes);
+      const towards = new THREE.Vector3(...direction);
+      this.sun.shadow.set(towards, light);
+      if (this.skyUniforms) {
+        // The disc in the sunlight's colour, as bright as a display goes,
+        // fading as the sun sets (SunShadow dims its light at the horizon).
+        const lit = this.sun.shadow.uniforms.sunLight.value;
+        const peak = Math.max(lit.x, lit.y, lit.z);
+        const shown = peak > 0 ? Math.min(peak / Math.max(...light), 1) / peak : 0;
+        this.skyUniforms.sunDirection.value.copy(towards);
+        this.skyUniforms.sunDisc.value.setRGB(lit.x * shown, lit.y * shown, lit.z * shown);
+      }
     }
     if (this.sky) {
       const ta = this.keys[i].skyTint ?? [1, 1, 1];
@@ -300,30 +384,27 @@ export class Daylight {
 }
 
 /**
- * Load each key's light map, as the model's own one is set up, and its sky.
+ * Load a key's light map, set up as the model's own one is, and its sky.
  * Apart from the model, so both can be fetched at once.
  */
-export async function loadDaylightMaps(
-  keys: DaylightKey[],
+export async function loadDaylightKey(
+  key: DaylightKey,
   anisotropy = 1,
-): Promise<{ maps: THREE.Texture[]; skies: THREE.Texture[] | null }> {
+): Promise<{ map: THREE.Texture; sky: THREE.Texture | null }> {
   const loader = new THREE.TextureLoader();
-  const withSkies = keys.every((k) => k.skyUrl);
-  const [maps, skies] = await Promise.all([
-    Promise.all(keys.map((k) => loader.loadAsync(k.lightmapUrl))),
-    withSkies ? Promise.all(keys.map((k) => loader.loadAsync(k.skyUrl as string))) : null,
+  const [map, sky] = await Promise.all([
+    loader.loadAsync(key.lightmapUrl),
+    key.skyUrl ? loader.loadAsync(key.skyUrl) : null,
   ]);
-  for (const map of maps) {
-    map.flipY = false;
-    map.colorSpace = THREE.NoColorSpace; // decoded in the shader: decodeLightMaps
-    map.channel = 1;
-    map.anisotropy = anisotropy;
-  }
-  for (const sky of skies ?? []) {
+  map.flipY = false;
+  map.colorSpace = THREE.NoColorSpace; // decoded in the shader: decodeLightMaps
+  map.channel = 1;
+  map.anisotropy = anisotropy;
+  if (sky) {
     sky.colorSpace = THREE.SRGBColorSpace;
     // No mipmaps: the lookup's seam behind the viewer would pick the smallest.
     sky.generateMipmaps = false;
     sky.minFilter = THREE.LinearFilter;
   }
-  return { maps, skies };
+  return { map, sky };
 }

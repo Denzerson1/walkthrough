@@ -35,7 +35,6 @@ OZONE_CENTRE, OZONE_WIDTH = 25_000.0, 15_000.0
 
 def _ozone(h: np.ndarray) -> np.ndarray:
     return np.maximum(0.0, 1 - np.abs(h - OZONE_CENTRE) / OZONE_WIDTH)
-SUN_RADIUS = math.radians(0.27)
 
 
 def directions(width: int, height: int) -> np.ndarray:
@@ -118,14 +117,6 @@ def atmosphere(sun: np.ndarray, width: int = 256, height: int = 128, steps: int 
     return sky * (1 - 0.6 * below)
 
 
-def sun_disc(width: int, height: int, sun: np.ndarray, colour: np.ndarray) -> np.ndarray:
-    """The sun itself, with a soft rim, as linear radiance (zero away from it)."""
-    d = directions(width, height)
-    angle = np.arccos(np.clip(d @ (sun / np.linalg.norm(sun)), -1, 1))
-    disc = np.clip((SUN_RADIUS * 1.6 - angle) / (SUN_RADIUS * 0.6), 0, 1)
-    return disc[..., None] * colour * 40.0
-
-
 def project_photo(width: int, height: int, rgb_linear: np.ndarray, sky: np.ndarray,
                   right: np.ndarray, up: np.ndarray, forward: np.ndarray, f: float
                   ) -> tuple[np.ndarray, np.ndarray]:
@@ -190,7 +181,8 @@ def panorama(sun: np.ndarray, photo_sun: np.ndarray | None, photo: tuple | None,
              width: int = 2048, height: int = 1024, adapt: float = 0.5,
              reference: float | None = None) -> tuple[np.ndarray, float]:
     """
-    The sky at one time of day as display-ready sRGB (uint8), and the
+    The sky at one time of day as display-ready sRGB (uint8), without the
+    sun itself (the viewer draws it where it stands at any time), and the
     brightness it was exposed for (pass the first time's as `reference`
     for the rest, so a camera follows the light only halfway: dusk stays
     darker). `photo` = (colour, weight) from project_photo and the
@@ -214,22 +206,5 @@ def panorama(sun: np.ndarray, photo_sun: np.ndarray | None, photo: tuple | None,
     brightness = float(np.mean(upper @ [0.2126, 0.7152, 0.0722]))
     if reference is not None:
         model = model * (reference / max(brightness, 1e-6)) ** adapt
-    sun_colour = np.clip(atmosphere_transmittance(sun), 0, None)
-    model = model + sun_disc(width, height, sun, sun_colour)
     return (linear_to_srgb(np.clip(model, 0, 1)) * 255).astype(np.uint8), (
         reference if reference is not None else brightness)
-
-
-def atmosphere_transmittance(sun: np.ndarray) -> np.ndarray:
-    """The sun's colour as it reaches the ground: white high up, red at the horizon."""
-    sun = np.asarray(sun, float) / np.linalg.norm(sun)
-    eye = np.array([0.0, EARTH + 2.0, 0.0])
-    if sun[1] < -0.02:
-        return np.zeros(3)
-    length = _sphere_exit(eye, sun[None], TOP)[0]
-    n = 64
-    ds = length / n
-    h = np.linalg.norm(eye + sun * ((np.arange(n) + 0.5) * ds)[:, None], axis=-1) - EARTH
-    tau = (RAYLEIGH * np.exp(-h / RAYLEIGH_HEIGHT).sum() * ds
-           + MIE_EXTINCTION * np.exp(-h / MIE_HEIGHT).sum() * ds + OZONE * _ozone(h).sum() * ds)
-    return np.exp(-tau)

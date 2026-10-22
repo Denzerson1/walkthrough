@@ -82,9 +82,6 @@ def test_sky_panorama_conventions_and_colour():
     zenith, low = noon[2].mean(axis=0), noon[14].mean(axis=0)
     assert zenith[2] > zenith[0]  # blue overhead
     assert (low[2] / low[0]) < (zenith[2] / zenith[0])  # paler towards the horizon
-    high = sky.atmosphere_transmittance(np.array([0.0, 1.0, 0.0]))
-    setting = sky.atmosphere_transmittance(np.array([0.0, 0.05, -1.0]))
-    assert setting[2] / setting[0] < high[2] / high[0]  # a low sun is redder
 
 
 def test_sky_model_is_matched_row_by_row_to_the_photo():

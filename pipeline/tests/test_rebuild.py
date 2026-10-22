@@ -18,7 +18,7 @@ from walkthrough_pipeline.manifest import (
     Opening,
 )
 from walkthrough_pipeline.paths import ProjectPaths
-from walkthrough_pipeline.rebuild import facing, scene_spec, stand_in
+from walkthrough_pipeline.rebuild import facing, scene_spec, stand_in, sun_path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from test_roomplan import _captured_room  # noqa: E402
@@ -132,6 +132,41 @@ def test_spec_carries_rooms_openings_items_and_outputs(tmp_path):
     (sofa,) = spec["items"]
     assert sofa["model"] is None and sofa["own"] is False
     assert spec["out"]["glb"].endswith("flat.glb")
+
+
+def test_a_model_named_in_the_dressing_draws_the_piece(tmp_path):
+    room, items, _ = roomplan.to_rooms(roomplan.load_json(_captured_room()), room_id="room")
+    manifest = Manifest(id="p", name="p", rooms=[room], items=items)
+    paths = ProjectPaths(tmp_path / "p")
+    paths.ensure()
+    (paths.input / "sofa.glb").write_bytes(b"glTF")
+    floor = {"id": "oak", "tileSizeM": [0.6, 0.6], "maps": {}, "baseColor": "#c49a63"}
+    stool = {"id": "stool-2", "finish": "stool", "min": [0, 0, 0], "max": [0.46, 1.04, 0.46],
+             "front": [0, -1], "model": "input/sofa.glb"}
+    dressing = {"items": {items[0].id: {"finish": "sofa", "model": "input/sofa.glb"}},
+                "extras": [stool]}
+    spec = scene_spec(paths, manifest, {"main": floor}, [], "#eeeae3", 1024, 64,
+                      dressing=dressing)
+    for piece in spec["items"]:  # the model wins over the finish, for a scanned piece or an extra
+        assert piece["own"] is True and piece["finish"] is None
+        assert piece["model"] == str(paths.input / "sofa.glb")
+    stool["model"] = "input/missing.glb"
+    with pytest.raises(FileNotFoundError):
+        scene_spec(paths, manifest, {"main": floor}, [], "#eeeae3", 1024, 64, dressing=dressing)
+
+
+def test_the_sun_path_runs_from_the_first_bake_to_the_last():
+    dressing = {"location": {"latitude": 48.21, "longitude": 16.37, "utcOffset": 2},
+                "sun": {"date": "2026-06-21", "time": "17:30", "times": ["20:45", "08:00"]},
+                "windowsFace": 324}
+    path = sun_path(dressing, (0.0, 1.0))
+    minutes = [p["minutes"] for p in path]
+    assert minutes[0] == 480 and minutes[-1] == 1245
+    assert all(b - a == 10 for a, b in zip(minutes[:-2], minutes[1:-1], strict=True))
+    assert all(math.hypot(*p["direction"]) == pytest.approx(1) for p in path)
+    # Up in the morning, low in the west at a quarter to nine on midsummer's evening.
+    assert path[0]["direction"][1] > 0.3 and 0 < path[-1]["direction"][1] < 0.1
+    assert path[-1]["energy"] < path[len(path) // 2]["energy"]
 
 
 # The scanned attic flat's shape: a flat ceiling at 2.57 m that slopes down

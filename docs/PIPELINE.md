@@ -293,8 +293,9 @@ cannot see; placed by hand from the capture photos):
   `window` it was taken from, `keep`: the part to use, as fractions, to cut
   the window's own frame away). They are the view: see "The view out" below.
 - `windowsFace` (compass bearing), `location`, `sun` (date, `time`, and
-  `times` for the viewer's daylight slider): the real sun for each moment,
-  warmer and weaker as it sinks, the sky dimming and warming into dusk.
+  `times` for the viewer's daylight slider, which spans them): the real sun
+  for each moment, warmer and weaker as it sinks, the sky dimming and
+  warming into dusk.
 - `surfaces`: materials cut from the capture photos (`photo_patch`): a
   `box` of the photo (fractions), the `size` it spans in metres, and a
   `wall` box of white wall in the same light (85% albedo) or a `colour`
@@ -315,7 +316,20 @@ cannot see; placed by hand from the capture photos):
   `tv`; `min`/`max`
   correct a scanned box, `front` names the side a piece faces. `extras`:
   what the scanner missed (panels, shelves, the air conditioner, a
-  pendant, more stools, the corner wardrobe's second wing).
+  pendant, more stools, the corner wardrobe's second wing). A piece or
+  extra with a `model` (a .glb in the project's folder, e.g. the owner's
+  generated ones in `input/models/`) is drawn by it instead of its finish,
+  stretched to its box, front along glTF +Z; delete the `model` to go back
+  to the parts. A generated model (~200k triangles, split along every UV
+  seam, 2048 px maps) is welded, decimated to 8k triangles per metre of
+  its largest side, unwrapped afresh with its colour baked across from the
+  original into a 1024 map (decimating smeared its UVs, and decimating it
+  unwelded tore holes in the duvet; texels no ray reached, which left
+  black flecks, start magenta and are filled from their neighbours),
+  smooth shaded below 40 degrees, and
+  stripped of emission, normal and roughness maps the viewer does not
+  draw; `options.colour` brings its colour map's median to a colour read
+  off a photo (the generated sofa came grey; the real one is cream).
 - `doors`: how each door is hung, by the index of its wall: `latch`
   (`start` or `end` of the wall: the handle's side) and `frame` (false: a
   concealed frame, the leaf flush with the wall in a 4 mm dark gap).
@@ -337,7 +351,17 @@ it, and 90 left blocks on white fronts once exposed) and
 exposed against the owner's photos (sun spots clip, as they do in a
 photo). With `sun.times`, once per time of day: `flat_light-HHMM.jpg`
 each, listed in the manifest's `assets.lighting`; a camera's exposure
-follows each time halfway, so the evening stays darker. Faces nobody sees from inside stay in for the
+follows each time halfway, so the evening stays darker. The sun's direct
+light is not in them: it is baked alone (128 samples, the sky off, the
+other lamps hidden) and taken away from the full bake, so the light maps
+hold the sky's light and every bounce, the sun's included, and the viewer
+draws the sun itself. The manifest's `assets.sunPath` gives it every 10
+minutes from the first time to the last: the direction towards it, and
+its light on a surface facing it in the light maps' units (a diffuse bake
+holds a sun of strength E as E cos θ / π, checked against a plane in
+Cycles; times the bakes' colour balance and exposure, blended between
+them as the maps are). The sky panoramas have no sun disc; the viewer
+draws it where the sun stands. Faces nobody sees from inside stay in for the
 bake, so the room's solids block light, but get no atlas: each shrinks to
 the nearest point of a seen face, so one that shows after all (the slope's
 cut beside a roof window's lining) carries the light beside it, not black.
@@ -350,7 +374,11 @@ unwrapped on its own without aspect correction (with it, a photo
 texture's aspect squashed a piece's islands up to 16x and thin parts
 baked black). Furniture gets 1.5x its share of the atlas and its light a
 smoothing (σ 2 texels), as the trim does: on few texels the kitchen's white
-fronts came out blotchy. Oak, worktop and
+fronts came out blotchy. A generated model's folds unwrap into ~800
+islands whatever the angle; spaced as a box's few are, the bed's triangles
+got half a texel each and many of them showed black. Its islands are packed
+tight (`pack_islands`, concave) at 4x its share, some 6 texels a triangle,
+with less smoothing (σ 1), which would blend islands packed side by side. Oak, worktop and
 fabric carry generated textures (`photo_texture.surface_texture`).
 
 **Viewer:** shows `flat.glb` unlit (colour × baked light), antialiased,
@@ -360,10 +388,20 @@ looked up a mip level down, its faces being drawn without antialiasing), haze ov
 the distant houses, a lens's corner falloff, and auto exposure like a
 phone camera (it meters the view and follows it most of the way: the
 bounce-lit hall opens up, a view into a window stops down). The daylight slider
-blends the two nearest baked times while dragged (light maps in the
-shader, the neighbourhood's vertex light on the CPU, the sky's tint) and,
-let go, glides to the nearest one: between two, the floor had two
-half-strength suns on it. It renders at the device's full pixel ratio (up
+blends the two nearest baked times (light maps in the shader, the
+neighbourhood's vertex light on the CPU, the sky's tint) and draws the
+sun live (`sun.ts`): its direct light from where it stands at that
+minute, shadowed by a 2048 depth map of the flat and the houses round it
+(an orthographic view along the sunlight framed on the flat, reaching
+150 m back, drawn again only when the time changes; twelve hardware
+comparisons over a 2.5 cm penumbra, as Cycles' 1.2 degree sun throws from
+a roof window to the floor), and its disc on the sky. So its patch walks
+across the floor and up the walls as the time is dragged, and any time
+can be rested on; before, between two bakes the floor had two
+half-strength suns on it, and letting go glided to the nearest bake.
+It shows the flat as soon as the time it opens at has its light map and
+sky; the other times' (some 750 KB each) arrive after, the nearest one
+standing in until then. It renders at the device's full pixel ratio (up
 to 3), half a step lower at a time while it cannot keep 45 fps.
 Floor swaps change only the texture under the light. The walk stops where a
 slope drops below 1.8 m (the manifest's `ceilings`) and keeps out of every

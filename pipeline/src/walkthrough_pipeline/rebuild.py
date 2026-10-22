@@ -15,7 +15,8 @@ Blender and nothing there needs this package.
 What a floor-plan scan cannot see comes from the project's dressing file,
 `input/dressing.json`, read off the customer's photos: roof windows in a
 slope, which way the windows face, floors re-laid from photos of them, the
-finish of each piece, built-ins the scanner missed, and the preview's view.
+finish of each piece (or its own model, `"model"`: a .glb in the project's
+folder), built-ins the scanner missed, and the preview's view.
 """
 
 from __future__ import annotations
@@ -356,6 +357,45 @@ def sun(dressing: dict, facing_dir: tuple[float, float], bearing: float | None =
             "sky": round(0.5 * dusk, 3), "tint": [round(c * dusk, 3) for c in tint]}
 
 
+#: Minutes between the samples of the sun's path the viewer moves the sun along.
+SUN_PATH_STEP = 10
+
+
+def sun_path(dressing: dict, facing_dir: tuple[float, float],
+             bearing: float | None = None) -> list[dict]:
+    """
+    The sun every SUN_PATH_STEP minutes from the first baked time to the
+    last: its light is drawn live in the viewer, so it moves as the time of
+    day does instead of fading between where it stood at two bakes.
+    """
+    times = [clock_minutes(t) for t in (dressing.get("sun") or {}).get("times", [])]
+    if not times:
+        return []
+    path = []
+    for minutes in [*range(min(times), max(times), SUN_PATH_STEP), max(times)]:
+        entry = sun(dressing, facing_dir, bearing, f"{minutes // 60:02d}:{minutes % 60:02d}")
+        if entry:
+            path.append({"minutes": minutes, "direction": entry["direction"],
+                         "colour": entry["colour"], "energy": entry["energy"]})
+    return path
+
+
+def clock_minutes(time: str) -> int:
+    """"17:30" -> 1050."""
+    hours, minutes = (int(v) for v in time.split(":"))
+    return hours * 60 + minutes
+
+
+def own_model(paths: ProjectPaths, entry: dict) -> Path | None:
+    """The piece's own model, when the dressing names one (relative to the project's folder)."""
+    if not entry.get("model"):
+        return None
+    path = paths.root / entry["model"]
+    if not path.is_file():
+        raise FileNotFoundError(f"The dressing names a model that is not there: {path}")
+    return path
+
+
 def scene_spec(
     paths: ProjectPaths,
     manifest: Manifest,
@@ -422,9 +462,9 @@ def scene_spec(
     dressed = dressing.get("items", {})
     items = []
     for item in manifest.items:
-        own = paths.scene / item.model if item.model else None
-        has_own = bool(own and own.is_file())
         dress = dressed.get(item.id, {})
+        own = own_model(paths, dress) or (paths.scene / item.model if item.model else None)
+        has_own = bool(own and own.is_file())
         # A scan box has no front; the dressing names it where the wall rule
         # guesses wrong (an island's drawers face the kitchen, not a wall).
         front = list(dress.get("front") or facing(item, room_of[item.roomId]))
@@ -450,15 +490,18 @@ def scene_spec(
         )
     for extra in dressing.get("extras", []):
         centre, size = box_from_corners(extra["min"], extra["max"], extra["front"])
+        own = own_model(paths, extra)
         items.append({"id": extra["id"], "label": extra["finish"], "center": centre,
-                      "size": size, "front": list(extra["front"]), "finish": extra["finish"],
-                      "options": extra.get("options", {}), "model": None, "own": False})
+                      "size": size, "front": list(extra["front"]),
+                      "finish": None if own else extra["finish"],
+                      "options": extra.get("options", {}),
+                      "model": str(own) if own else None, "own": bool(own)})
 
     wanted = dressing.get("roofWindows", [])
     skylights = roof_windows(rooms[0]["ceilings"], wanted) if rooms else []
     surroundings = (site_spec(paths, dressing, max(p[1] for p in rooms[0]["polygon"]))
                     if rooms else None)
-    light, suns, windows_face = None, [], None
+    light, suns, path, windows_face = None, [], [], None
     if skylights:
         n = skylights[0]["frame"]["n"]
         across = math.hypot(n[0], n[2])
@@ -467,6 +510,7 @@ def scene_spec(
         light = sun(dressing, facing_dir, true_bearing)
         times = (dressing.get("sun") or {}).get("times", [])
         suns = [sun(dressing, facing_dir, true_bearing, t) for t in times]
+        path = sun_path(dressing, facing_dir, true_bearing)
         windows_face = {"dir": list(facing_dir), "bearing": true_bearing}
     return {
         "rooms": rooms,
@@ -479,6 +523,7 @@ def scene_spec(
         "surfaces": surfaces(paths, dressing.get("surfaces")),
         "sun": light,
         "suns": suns,
+        "sun_path": path,
         "facing": windows_face,
         "hero": dressing.get("hero"),
         "wall_colour": wall_colour,

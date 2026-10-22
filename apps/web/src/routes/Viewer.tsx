@@ -303,6 +303,7 @@ export function Viewer() {
                     skyUrl: l.sky ? fileUrl(projectId, l.sky) : null,
                     colourSet: i,
                   })),
+                  sunPath: manifest.assets.sunPath,
                   viewPhoto: manifest.assets.viewPhoto
                     ? {
                         url: fileUrl(projectId, manifest.assets.viewPhoto.model),

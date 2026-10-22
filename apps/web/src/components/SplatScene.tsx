@@ -30,12 +30,13 @@ import {
   moveWithCollision,
   roomAt,
 } from '../lib/geometry';
-import type { Manifest, Room, Vec2 } from '../lib/manifest';
+import type { Manifest, Room, SunSample, Vec2 } from '../lib/manifest';
 import { FLOOR_DEFAULT_COLOR, floorColor } from '../lib/floorColors';
 import { apiUrl } from '../lib/api';
-import { Daylight, type DaylightKey, decodeLightMaps, loadDaylightMaps } from '../lib/daylight';
+import { Daylight, type DaylightKey, decodeLightMaps, loadDaylightKey } from '../lib/daylight';
 import { AutoExposure } from '../lib/exposure';
 import { fetchGlb } from '../lib/glb';
+import { SunShadow } from '../lib/sun';
 import type { CatalogItem } from '../lib/store';
 import type { PlacedItem, ViewerState } from '../lib/viewerState';
 
@@ -53,6 +54,8 @@ export interface BakedModel {
   lightmapScale: number;
   /** The light at other times of day, when the flat was baked at several. */
   lighting?: DaylightKey[];
+  /** The sun's path, when its direct light is drawn live rather than baked (sun.ts). */
+  sunPath?: SunSample[];
   /** The view out of the windows from the owner's photos, and when they were taken. */
   viewPhoto?: { url: string; minutes: number };
 }
@@ -226,6 +229,7 @@ export function SplatScene({
     floorSplat?: SplatMesh;
     model?: THREE.Group;
     daylight?: Daylight;
+    sun?: SunShadow;
     exposure?: AutoExposure;
   } | null>(null);
   // Effects that touch the rebuilt flat or the splats must run again once
@@ -346,26 +350,59 @@ export function SplatScene({
       // Haze over the neighbourhood: distance is what makes a view read as
       // real. Nothing inside the flat is near the fog's start.
       scene.fog = new THREE.Fog(0xd6e0e8, 40, 420);
-      const lighting = model.lighting && model.lighting.length > 1 ? model.lighting : null;
+      const sunPath = model.sunPath?.length ? model.sunPath : null;
+      // A rig for the time of day; also for one bake, when the sun is drawn live.
+      const lighting =
+        model.lighting && (model.lighting.length > 1 || sunPath) ? model.lighting : null;
+      const anisotropy = renderer.capabilities.getMaxAnisotropy();
+      // The time it opens at first; the other times' light (some 750 KB
+      // each) after the flat is shown.
+      const at = daylightRef.current ?? lighting?.[0].minutes ?? 0;
+      const opening = (lighting ?? []).reduce(
+        (best, key, i, keys) =>
+          Math.abs(key.minutes - at) < Math.abs(keys[best].minutes - at) ? i : best,
+        0,
+      );
       // Every file at once rather than one after another. The model is the
       // largest of them, so how much of it has arrived is the progress shown.
       Promise.all([
-        loadBakedModel(model, renderer.capabilities.getMaxAnisotropy(), (fraction) =>
-          onProgress?.(fraction * 0.95),
-        ),
+        loadBakedModel(model, anisotropy, (fraction) => onProgress?.(fraction * 0.95)),
         model.viewPhoto ? loadViewPhoto(model.viewPhoto.url) : null,
-        lighting ? loadDaylightMaps(lighting, renderer.capabilities.getMaxAnisotropy()) : null,
+        lighting ? loadDaylightKey(lighting[opening], anisotropy) : null,
       ])
-        .then(([group, view, daylightMaps]) => {
+        .then(([group, view, first]) => {
           if (disposed || !sceneRef.current) return;
           if (view) group.add(view);
           scene.add(group);
           sceneRef.current.model = group;
-          if (lighting && daylightMaps) {
-            const { maps, skies } = daylightMaps;
-            const rig = new Daylight(lighting, maps, group, model.viewPhoto?.minutes, skies);
+          if (lighting && first) {
+            const maps = lighting.map((_, i) => (i === opening ? first.map : null));
+            const skies = lighting.every((k) => k.skyUrl)
+              ? lighting.map((_, i) => (i === opening ? first.sky : null))
+              : null;
+            if (sunPath) {
+              // Framed on what was baked: the flat, not the houses round it.
+              const flat = new THREE.Box3();
+              group.traverse((node) => {
+                if (node instanceof THREE.Mesh && node.geometry.getAttribute('uv1')) {
+                  flat.expandByObject(node);
+                }
+              });
+              sceneRef.current.sun = new SunShadow(renderer, scene, group, flat);
+            }
+            const { sun: shadow } = sceneRef.current;
+            const sun = shadow && sunPath ? { shadow, path: sunPath } : null;
+            const rig = new Daylight(lighting, maps, group, model.viewPhoto?.minutes, skies, sun);
             sceneRef.current.daylight = rig;
             rig.set(daylightRef.current ?? rig.keys[0].minutes);
+            lighting.forEach((key, i) => {
+              if (i === opening) return;
+              loadDaylightKey(key, anisotropy)
+                .then(({ map, sky }) => {
+                  if (sceneRef.current?.daylight === rig) rig.provide(i, map, sky);
+                })
+                .catch(() => {}); // the nearest time that did arrive stands in
+            });
           }
           addReflections(scene, renderer, group, manifest.rooms[0]?.waypoint.position);
           sceneRef.current.exposure = new AutoExposure(METER_KEY);
@@ -582,6 +619,7 @@ export function SplatScene({
       sceneRef.current?.floorSplat?.dispose?.();
       if (sceneRef.current?.model) disposeChildren(sceneRef.current.model);
       sceneRef.current?.exposure?.dispose();
+      sceneRef.current?.sun?.dispose();
       scene.clear();
       renderer.dispose();
       // dispose() alone leaves the GL context alive. Browsers cap concurrent

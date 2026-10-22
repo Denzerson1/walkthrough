@@ -7,6 +7,49 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-10-22 — The owner's generated sofa, bed and stools; a sun that moves
+
+- **Models:** the owner's Higgsfield (Forge 3D) sofa, bed and bar stool
+  draw `sofa-1`, `bed-1`, `chair-1` and the two extra stools (dressing
+  `model`, files in `input/models/`; delete the key to go back to the
+  parts). Each came at ~200k triangles with 2048 px maps; now welded (it
+  came split along every UV seam and decimating it unwelded tore holes in
+  the duvet), decimated to 8k triangles per metre (bed 16.7k, sofa 15.3k,
+  stool 8.1k), its colour baked onto a fresh unwrap (decimating smeared its
+  UVs; texels no ray reached are filled from their neighbours, they had
+  left black flecks), stripped of emission, normal and roughness maps. The
+  sofa came grey; its colour map is brought to the cream read off the
+  owner's photo. Its folds unwrap into ~800 islands: at the furniture's
+  share of the light map the bed's triangles had half a texel each and
+  showed black; packed tight at 4x the share they have about six.
+  Not for commercial use: the owner's test run.
+- **The sun moves:** the bakes no longer hold the sun's direct light (it is
+  baked alone and taken away); the viewer draws it live from where the sun
+  stands at that minute (`sunPath`, every 10 minutes), shadowed by a depth
+  map of the flat and the houses round it, and puts its disc on the sky.
+  The patch walks across the floor and up the lining as the time is
+  dragged; the slider rests anywhere, 08:00 to 20:45 (two more bakes, 19:00
+  and 20:45). Before, between two bakes the light faded from one patch to
+  another, and letting go glided to a bake.
+- The flat shows once the opening time's light has arrived; the other six
+  times' (some 770 KB each) load after.
+
+Verified: rebuilt in 41.9 min; the live sun set beside Cycles' own render
+from the same camera at 17:30 (the dressing's hero view): the patch on the
+floor lands in the same place with the same shape. The units were checked
+first: a Cycles diffuse bake of a sun of strength 1 is 1/π at normal
+incidence, cos θ/π at θ. Close-ups of the bed and sofa on the dev server
+(light map alone, colour map alone, both). The day from 08:00 to 20:30 at
+iPhone resolution. The built Pages site on an iPhone profile: ready in
+1.5 s locally, no console errors. 340 Python and 92 web tests, lint clean.
+
+Not verified: on a real phone (the live sun is a shadow map and twelve
+lookups per lit pixel; checked in desktop Chrome only). A few flecks a few
+pixels across are left on the duvet up close, in its light map. The views
+out of the windows are unchanged: from where the owner's photos were taken
+they are the photos, from elsewhere the generated houses show; more photos
+of each window from other spots would let them stand in 3D better.
+
 ## 2026-10-21 — From the owner's phone: sharper, warmer, the island and stools refined
 
 The owner walked the live site on an iPhone (Firefox) and sent screenshots.

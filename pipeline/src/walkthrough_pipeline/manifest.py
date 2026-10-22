@@ -136,6 +136,16 @@ class Lighting(BaseModel):
     sky: str | None = None
 
 
+class SunSample(BaseModel):
+    """The sun at one time of day, as the viewer draws its direct light (rebuild)."""
+
+    minutes: int  # after midnight
+    #: Towards the sun, in scene space.
+    direction: tuple[float, float, float]
+    #: Its direct light on a surface facing it, in the light maps' units.
+    light: tuple[float, float, float]
+
+
 class ViewPhoto(BaseModel):
     """The view out of the windows, from the owner's photos of it (view_photo.py)."""
 
@@ -157,6 +167,10 @@ class SceneAssets(BaseModel):
     lightmapScale: float = 1.0
     #: The same at other times of day, for the viewer's daylight slider.
     lighting: list[Lighting] = Field(default_factory=list)
+    #: The sun along the slider's span, every few minutes: the light maps
+    #: hold all but its direct light, which the viewer draws, so it moves.
+    #: Empty: the sun is in the light maps.
+    sunPath: list[SunSample] = Field(default_factory=list)
     viewPhoto: ViewPhoto | None = None
 
 

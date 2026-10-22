@@ -27,7 +27,7 @@ from . import rebuild as rebuild_mod
 from . import roomplan as roomplan_mod
 from . import stray as stray_mod
 from . import train as train_mod
-from .manifest import Lighting, Manifest, Obstacle, Waypoint
+from .manifest import Lighting, Manifest, Obstacle, SunSample, Waypoint
 from .paths import ProjectPaths, repo_root
 from .scene import AlignmentFailed, align_scene, export_scene, trained_ply
 
@@ -562,6 +562,7 @@ def rebuild(
         manifest.assets.lightmap = meta["lightmap"]
         manifest.assets.lightmapScale = meta["lightmapScale"]
         manifest.assets.lighting = [Lighting(**t) for t in meta["lighting"] if t["time"]]
+        manifest.assets.sunPath = [SunSample(**t) for t in meta.get("sunPath", [])]
         manifest.rooms[0].obstacles = [Obstacle(**o) for o in meta.get("obstacles", [])]
         _outside(paths, manifest, spec, dressing)
         manifest.write(paths.manifest)

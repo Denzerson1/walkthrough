@@ -1312,7 +1312,154 @@ def finished(item: dict, surfaces: dict) -> bpy.types.Object:
     return obj
 
 
-def furniture(item: dict, surfaces: dict) -> bpy.types.Object:
+#: A generated model comes at ~200k triangles and 2048 px maps. The baked
+#: light cannot show that detail and a phone pays for it in download and
+#: memory: cut to this many triangles per metre of the piece's largest side
+#: (as placed), its colour to a map this size.
+MODEL_FACES_PER_M, MODEL_MAP = 8_000, 1024
+#: Each model file made light once, as a mesh to copy for every placement.
+LIGHTENED: dict[str, bpy.types.Mesh] = {}
+
+
+def lighten(obj: bpy.types.Object, model: str, size: float, scratch: Path,
+            colour: str | None = None) -> None:
+    """
+    An imported model made light enough for a phone: decimated, unwrapped
+    afresh and its colour baked onto that from the original, smooth shaded,
+    and with nothing the viewer does not draw (it shows colour x baked
+    light): no glow, relief or sheen maps. A generated model comes split
+    along its every UV seam, into thousands of loose patches: decimated so,
+    they shrank apart and the duvet showed holes, so it is welded first;
+    its colour is baked onto a fresh unwrap because decimating smears UVs
+    across seams. Its emission map is near black but not quite, and would
+    glow in the bake. `size`, the piece's largest side as placed, sets how
+    far it is decimated; `colour` (sRGB hex, read off a photo of the piece)
+    is what its colour map's median is brought to: a generated sofa came
+    grey where the real one is cream.
+    """
+    if model in LIGHTENED:
+        imported = obj.data
+        obj.data = LIGHTENED[model].copy()
+        bpy.data.meshes.remove(imported)
+        return
+    original = obj.copy()
+    original.data = obj.data.copy()
+    bpy.context.collection.objects.link(original)
+    target = int(MODEL_FACES_PER_M * size)
+    faces = sum(len(p.vertices) - 2 for p in obj.data.polygons)
+    bpy.ops.object.select_all(action="DESELECT")
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
+    bm.to_mesh(obj.data)
+    bm.free()
+    if faces > target:
+        decimate = obj.modifiers.new("lighten", "DECIMATE")
+        decimate.ratio = target / faces
+        bpy.ops.object.modifier_apply(modifier=decimate.name)
+    obj.data.shade_smooth()
+    obj.data.set_sharp_from_angle(angle=math.radians(40))
+    for layer in list(obj.data.uv_layers):
+        obj.data.uv_layers.remove(layer)
+    obj.data.uv_layers.new(name="colour")
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.004)
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+    colour_map = bpy.data.images.new(f"{Path(model).stem}-colour", MODEL_MAP, MODEL_MAP)
+    colour_map.generated_color = UNBAKED
+    nodes = []
+    for slot, source in enumerate(obj.data.materials):
+        mat = source.copy()
+        obj.data.materials[slot] = mat
+        tree = mat.node_tree
+        bsdf = next(n for n in tree.nodes if n.type == "BSDF_PRINCIPLED")
+        for node in [n for n in tree.nodes if n.type == "TEX_IMAGE"]:
+            tree.nodes.remove(node)
+        bsdf.inputs["Emission Strength"].default_value = 0.0
+        bsdf.inputs["Metallic"].default_value = 0.0
+        bsdf.inputs["Roughness"].default_value = 0.8
+        node = tree.nodes.new("ShaderNodeTexImage")
+        node.image = colour_map
+        tree.nodes.active = node
+        nodes.append((tree, node, bsdf))
+    scene = bpy.context.scene
+    samples, scene.cycles.samples = scene.cycles.samples, 16
+    original.select_set(True)
+    bake = scene.render.bake
+    bake.use_selected_to_active, bake.cage_extrusion, bake.max_ray_distance = True, 0.03, 0.1
+    # Not cleared, and no margin (it blended island edges into UNBAKED):
+    # what no ray reached keeps UNBAKED, to be filled in from its neighbours.
+    bpy.ops.object.bake(type="DIFFUSE", pass_filter={"COLOR"}, margin=0, use_clear=False)
+    bake.use_selected_to_active = False
+    scene.cycles.samples = samples
+    original_mesh = original.data
+    bpy.data.objects.remove(original, do_unlink=True)
+    bpy.data.meshes.remove(original_mesh)
+    fill_unbaked(colour_map)
+    if colour:
+        match_colour(colour_map, colour)
+    # Saved as a JPEG and loaded back, so the exporter writes the file as is.
+    path = scratch / f"{Path(model).stem}-colour.jpg"
+    colour_map.file_format = "JPEG"
+    colour_map.save(filepath=str(path), quality=90)
+    bpy.data.images.remove(colour_map)
+    saved = bpy.data.images.load(str(path))
+    for tree, node, bsdf in nodes:
+        node.image = saved
+        tree.links.new(node.outputs["Color"], bsdf.inputs["Base Color"])
+    LIGHTENED[model] = obj.data.copy()
+
+
+#: A colour map's texels start out this, so those the bake missed can be told
+#: from black ones: a ray that missed the original left a black fleck on the
+#: white duvet.
+UNBAKED = (1.0, 0.0, 1.0, 1.0)
+
+
+def fill_unbaked(image: bpy.types.Image) -> None:
+    """Each texel the bake missed takes its baked neighbours' colour, spreading in from them."""
+    import numpy as np
+
+    pixels = np.empty(len(image.pixels), dtype=np.float32)
+    image.pixels.foreach_get(pixels)
+    size = image.size[0]
+    rgb = pixels.reshape(size, size, 4)[..., :3]
+    missing = (rgb[..., 0] > 0.99) & (rgb[..., 1] < 0.01) & (rgb[..., 2] > 0.99)
+    for _ in range(64):
+        if not missing.any():
+            break
+        known = (~missing).astype(np.float32)
+        total = np.zeros_like(rgb)
+        count = np.zeros(missing.shape, np.float32)
+        for axis, step in ((0, 1), (0, -1), (1, 1), (1, -1)):
+            total += np.roll(rgb * known[..., None], step, axis=axis)
+            count += np.roll(known, step, axis=axis)
+        reached = missing & (count > 0)
+        rgb[reached] = total[reached] / count[reached][:, None]
+        missing &= ~reached
+    rgb[missing] = rgb[~missing].mean(axis=0) if (~missing).any() else 0.5
+    image.pixels.foreach_set(pixels)
+
+
+def match_colour(image: bpy.types.Image, colour: str) -> None:
+    """Scale an sRGB colour map per channel, in linear light: its texels' median to `colour`."""
+    import numpy as np
+
+    pixels = np.empty(len(image.pixels), dtype=np.float32)
+    image.pixels.foreach_get(pixels)
+    rgb = pixels.reshape(-1, 4)[:, :3]
+    linear = np.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
+    gain = np.array(hex_rgba(colour)[:3]) / np.maximum(np.median(linear, axis=0), 1e-4)
+    linear = np.clip(linear * gain, 0.0, 1.0)
+    rgb[:] = np.where(linear <= 0.0031308, linear * 12.92, 1.055 * linear ** (1 / 2.4) - 0.055)
+    image.pixels.foreach_set(pixels)
+
+
+def furniture(item: dict, surfaces: dict, scratch: Path) -> bpy.types.Object:
     """The piece's model (or a block), fitted to its scanned box and turned to face `front`."""
     w, h, d = item["size"]
     if item.get("finish") and not item["model"]:
@@ -1337,6 +1484,9 @@ def furniture(item: dict, surfaces: dict) -> bpy.types.Object:
             leftover = bpy.data.objects.get(name)
             if leftover is not None and leftover is not obj:
                 bpy.data.objects.remove(leftover, do_unlink=True)
+        lighten(obj, item["model"], max(w, h, d), scratch,
+                (item.get("options") or {}).get("colour"))
+        MODEL_PIECES.add(item["id"])
     else:
         mesh = bpy.data.meshes.new(item["id"])
         bm = bmesh.new()
@@ -1626,6 +1776,15 @@ SMOOTH = {"trim": 2.5}
 #: The same for every piece of furniture: on few texels its light came out
 #: in blotches on the kitchen's white fronts once exposed.
 PIECE_WEIGHT, PIECE_SMOOTH = 1.5, 2.0
+#: A generated model's folds unwrap into ~800 islands whatever the angle:
+#: spaced as a box's few are, at the furniture's share, the bed's triangles
+#: got half a texel each and many of them showed black. Its islands
+#: are packed tight and it gets more of the atlas (some 6 texels a
+#: triangle), and less smoothing, which would blend islands packed side by
+#: side.
+MODEL_WEIGHT, MODEL_SMOOTH = 4.0, 1.0
+#: The pieces drawn by a model (furniture() adds them).
+MODEL_PIECES: set[str] = set()
 
 
 def layout_lightmap(objects: list[bpy.types.Object], margin: float = 0.006) -> None:
@@ -1655,8 +1814,13 @@ def layout_lightmap(objects: list[bpy.types.Object], margin: float = 0.006) -> N
         # Not corrected for a texture's aspect: that squashed the islands of
         # pieces with a photo texture (the wardrobe's oak, 1:4) up to 16x
         # across, and a drawer front's light came out black.
-        bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.02,
-                                 correct_aspect=False)
+        if obj.name in MODEL_PIECES:
+            bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.004,
+                                     correct_aspect=False)
+            bpy.ops.uv.pack_islands(margin=0.002, rotate=True, shape_method="CONCAVE")
+        else:
+            bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.02,
+                                     correct_aspect=False)
         bpy.ops.object.mode_set(mode="OBJECT")
         # Unseen faces shrink to a point: in the bake, but on no texels. The
         # point is the nearest point of a seen face, not the atlas's empty
@@ -1780,10 +1944,13 @@ WARMTH = (1.08, 1.0, 0.86)
 LIGHTMAP_GAMMA = 4.0
 
 
-def save_lightmap(baked: bpy.types.Image, path: str, scratch: Path) -> tuple[float, float]:
+def save_lightmap(baked: bpy.types.Image, path: str,
+                  scratch: Path) -> tuple[float, float, list[float]]:
     """
-    The float bake as an 8-bit JPEG (light ** 1/LIGHTMAP_GAMMA), plus the scale that undoes it and
-    the exposure the room wants.
+    The float bake as an 8-bit JPEG (light ** 1/LIGHTMAP_GAMMA), plus the
+    scale that undoes it, the exposure the room wants, and the colour
+    balance applied (white balance and warmth, per channel: the viewer's
+    live sun gets the same).
 
     A float EXR of a 2048 atlas is ~50 MB; light is smooth, so 8 bits in a
     perceptual curve lose nothing visible and come to a megabyte or two. The
@@ -1812,10 +1979,11 @@ def save_lightmap(baked: bpy.types.Image, path: str, scratch: Path) -> tuple[flo
             rgb[rows, cols] = smooth_within_islands(clean[rows, cols], covered[rows, cols], sigma)
     rgb = rgb.reshape(-1, 3)
     covered = covered.ravel()
+    balance = np.array(WARMTH, dtype=np.float32)
     if covered.any():
         shade = np.median(rgb[covered], axis=0)
-        rgb = rgb * (shade.mean() / np.maximum(shade, 1e-6)) ** WHITE_BALANCE
-    rgb = rgb * np.array(WARMTH, dtype=np.float32)
+        balance = balance * (shade.mean() / np.maximum(shade, 1e-6)) ** WHITE_BALANCE
+    rgb = rgb * balance
     # The room's typical light: on its walls and ceilings, which are what a
     # camera exposes for. Over the whole atlas, the trim's larger share of
     # it (ATLAS_WEIGHT) and a lit hall pulled the median up, the room down.
@@ -1842,16 +2010,46 @@ def save_lightmap(baked: bpy.types.Image, path: str, scratch: Path) -> tuple[flo
     # Image.save's own quality: the scene's render setting does not reach it,
     # and the default (90) left blocks on white fronts once exposed.
     out.save(quality=95)
-    return scale, exposure
+    return scale, exposure, [float(c) for c in balance]
+
+
+#: Samples for the bake of the sun's direct light alone: one small light
+#: with nothing in the way but the room converges in a few.
+SUN_SAMPLES = 128
+
+
+def bake_sun_direct(image: bpy.types.Image) -> None:
+    """
+    The sun's direct light alone into `image`: the sky off, the other lamps
+    hidden, no bounces. Taken away from the full bake, it leaves what the
+    viewer cannot draw live: the sky's light and every bounce, the sun's
+    included.
+    """
+    scene = bpy.context.scene
+    background = scene.world.node_tree.nodes["Background"].inputs["Strength"]
+    sky, samples = background.default_value, scene.cycles.samples
+    lamps = [o for o in scene.objects if o.type == "LIGHT" and o.name != "sun"]
+    background.default_value, scene.cycles.samples = 0.0, SUN_SAMPLES
+    for lamp in lamps:
+        lamp.hide_render = True
+    bpy.ops.object.bake(type="DIFFUSE", pass_filter={"DIRECT"}, uv_layer="lightmap",
+                        margin=6, use_clear=True)
+    background.default_value, scene.cycles.samples = sky, samples
+    for lamp in lamps:
+        lamp.hide_render = False
 
 
 def bake(objects: list[bpy.types.Object], size: int, path: str,
-         scratch: Path) -> tuple[float, float]:
+         scratch: Path, live_sun: bool) -> tuple[float, float, list[float]]:
     """
     All objects' diffuse light (no colour) into one atlas on their second UV
-    set (laid out by layout_lightmap). Returns the scale save_lightmap
-    stored it at and the exposure the room wants in this light.
+    set (laid out by layout_lightmap); with `live_sun`, all but the sun's
+    direct light, which the viewer draws. Returns the scale save_lightmap
+    stored it at, the exposure the room wants in this light and the colour
+    balance it was given.
     """
+    import numpy as np
+
     bpy.ops.object.select_all(action="DESELECT")
     for obj in objects:
         obj.select_set(True)
@@ -1867,12 +2065,51 @@ def bake(objects: list[bpy.types.Object], size: int, path: str,
     # A wide margin, so the denoiser blends island edges with island, not black.
     bpy.ops.object.bake(type="DIFFUSE", pass_filter={"DIRECT", "INDIRECT"}, uv_layer="lightmap",
                         margin=6, use_clear=True)
-    scale, exposure = save_lightmap(image, path, scratch)
+    if live_sun:
+        full = np.empty(size * size * 4, dtype=np.float32)
+        image.pixels.foreach_get(full)
+        bake_sun_direct(image)
+        direct = np.empty_like(full)
+        image.pixels.foreach_get(direct)
+        full, direct = full.reshape(-1, 4), direct.reshape(-1, 4)
+        # Kept above zero where baked: save_lightmap tells baked texels by it.
+        rest = np.where(full[:, :3] > 0, np.maximum(full[:, :3] - direct[:, :3], 1e-6), 0.0)
+        full[:, :3] = rest
+        image.pixels.foreach_set(full.ravel())
+    scale, exposure, balance = save_lightmap(image, path, scratch)
     for mat, node in targets:
         mat.node_tree.nodes.remove(node)
     for obj in objects:
         obj.data.uv_layers.active = obj.data.uv_layers[0]
-    return scale, exposure
+    return scale, exposure, balance
+
+
+def sun_path(path: list[dict], lighting: list[dict]) -> list[dict]:
+    """
+    The viewer's sun: per sample of its path, the direction towards it and
+    its direct light on a surface facing it, in the light maps' units: the
+    colour balance and exposure of the bakes either side, as the viewer
+    blends their maps. A diffuse bake holds a sun's light / pi.
+    """
+    keys = sorted(((clock(k["time"]), k["sunGain"]) for k in lighting), key=lambda k: k[0])
+    out = []
+    for sample in path:
+        t = sample["minutes"]
+        i = max([n for n, (m, _) in enumerate(keys) if m <= t], default=0)
+        j = min(i + 1, len(keys) - 1)
+        span = keys[j][0] - keys[i][0]
+        f = min(max((t - keys[i][0]) / span, 0.0), 1.0) if span else 0.0
+        gain = [a + (b - a) * f for a, b in zip(keys[i][1], keys[j][1], strict=True)]
+        light = [c * sample["energy"] * g / math.pi
+                 for c, g in zip(sample["colour"], gain, strict=True)]
+        out.append({"minutes": t, "direction": [round(v, 5) for v in sample["direction"]],
+                    "light": [round(v, 5) for v in light]})
+    return out
+
+
+def clock(time: str) -> int:
+    hours, minutes = (int(v) for v in time.split(":"))
+    return hours * 60 + minutes
 
 
 def main() -> None:
@@ -1919,10 +2156,12 @@ def main() -> None:
             floor_uvs(obj, spec["floors"][obj.name.removeprefix("floorzone-")]["tile"])
         else:
             plain_uvs(obj)
-    pieces = [furniture(item, spec["surfaces"]) for item in spec["items"]]
+    scratch = Path(spec["out"]["meta"]).parent
+    pieces = [furniture(item, spec["surfaces"], scratch) for item in spec["items"]]
     for piece in pieces:
-        ATLAS_WEIGHT.setdefault(piece.name, PIECE_WEIGHT)
-        SMOOTH.setdefault(piece.name, PIECE_SMOOTH)
+        model = piece.name in MODEL_PIECES
+        ATLAS_WEIGHT.setdefault(piece.name, MODEL_WEIGHT if model else PIECE_WEIGHT)
+        SMOOTH.setdefault(piece.name, MODEL_SMOOTH if model else PIECE_SMOOTH)
     views = outside(spec)
     site = neighbourhood(spec)
     patch = light(spec, windows)
@@ -1945,18 +2184,22 @@ def main() -> None:
     # reference, and its neighbourhood light sets the scale for the others.
     default = spec.get("sun")
     times = [default] + [t for t in spec.get("suns") or [] if t != default] if default else [None]
+    # With a path for it, the sun's direct light is the viewer's to draw.
+    live_sun = bool(spec.get("sun_path"))
     lighting, reference, site_scale = [], None, None
     for entry in times:
         if entry:
             set_sun(entry)
         label = entry["time"].replace(":", "") if entry else "default"
         path = out["lightmap"].replace(".jpg", f"-{label}.jpg")
-        scale, auto = bake(lit, spec["lightmap_size"], path, Path(out["meta"]).parent)
+        scale, auto, balance = bake(lit, spec["lightmap_size"], path, Path(out["meta"]).parent,
+                                    live_sun)
         # A camera adjusts to the light, but only halfway: evenings stay darker.
         reference = reference or auto
         exposure_t = math.sqrt(reference * auto)
         lighting.append({"time": entry["time"] if entry else None, "lightmap": Path(path).name,
                          "lightmapScale": scale * exposure_t, "exposure": exposure_t,
+                         "sunGain": [c * exposure_t for c in balance],
                          "skyTint": entry.get("tint") if entry else None,
                          "colours": f"light-{label}" if site else None})
         if site:
@@ -1973,6 +2216,8 @@ def main() -> None:
                                              "lightmap": lighting[0]["lightmap"],
                                              "exposure": exposure,
                                              "lighting": lighting,
+                                             "sunPath": (sun_path(spec["sun_path"], lighting)
+                                                         if live_sun else []),
                                              "obstacles": obstacles(pieces)}))
     for obj in glass + views:
         obj.hide_render = False

@@ -2,24 +2,26 @@
  * The time of day, for a rebuilt flat baked at several: how the light falls
  * in the morning, at noon, in the evening.
  *
- * A drag crossfades between the bakes either side. Let go and it glides to
- * the nearest bake: halfway between two, the light is two half-strength suns
- * on the floor rather than one, which no real afternoon has. The bakes are
- * marked under the track and can be tapped; the track is the sky's colour
- * through the day.
+ * The sun is drawn live (sun.ts), so any time on the track is a real one:
+ * dragging walks its patch across the room, and the hours marked under the
+ * track glide there. The track is the sky's colour through the day.
  */
 
 import { useEffect, useRef } from 'react';
-import { formatMinutes, mood, nearestKey, skyColour } from '../lib/daylight';
+import { formatMinutes, mood, skyColour } from '../lib/daylight';
 
 interface Props {
-  /** The baked times, minutes after midnight, earliest first. */
+  /** The baked times, minutes after midnight, earliest first: the track's span. */
   keys: number[];
   value: number;
   onChange: (minutes: number) => void;
 }
 
 const THUMB = 22;
+/** Hours marked under the track. */
+const MARKS = [8, 12, 16, 20].map((h) => h * 60);
+/** How far an arrow key moves the time, minutes. */
+const NUDGE = 15;
 
 export function DaylightControl({ keys, value, onChange }: Props) {
   const [lo, hi] = [keys[0], keys[keys.length - 1]];
@@ -44,13 +46,13 @@ export function DaylightControl({ keys, value, onChange }: Props) {
     };
     glide.current = requestAnimationFrame(step);
   };
-  const settle = () => glideTo(nearestKey(keys, latest.current));
 
   const at = (minutes: number) => (minutes - lo) / (hi - lo);
-  const track = `linear-gradient(to right, ${keys
-    .map((k) => `${skyColour(k)} ${(at(k) * 100).toFixed(1)}%`)
+  const stops = Array.from({ length: 9 }, (_, k) => lo + ((hi - lo) * k) / 8);
+  const track = `linear-gradient(to right, ${stops
+    .map((m) => `${skyColour(m)} ${(at(m) * 100).toFixed(1)}%`)
     .join(', ')})`;
-  const current = nearestKey(keys, value);
+  const marks = MARKS.filter((m) => m >= lo && m <= hi);
 
   return (
     <div>
@@ -77,32 +79,28 @@ export function DaylightControl({ keys, value, onChange }: Props) {
           cancelAnimationFrame(glide.current);
           onChange(Number(e.target.value));
         }}
-        onPointerUp={settle}
-        onPointerCancel={settle}
         onKeyDown={(e) => {
-          // A key goes from one bake to the next, as the stops below do.
           const forward = e.key === 'ArrowRight' || e.key === 'ArrowUp';
           const back = e.key === 'ArrowLeft' || e.key === 'ArrowDown';
           if (!forward && !back) return;
           e.preventDefault();
-          const i = keys.indexOf(current);
-          glideTo(keys[Math.max(0, Math.min(keys.length - 1, i + (forward ? 1 : -1)))]);
+          glideTo(Math.max(lo, Math.min(hi, latest.current + (forward ? NUDGE : -NUDGE))));
         }}
       />
       <div className="relative h-4" aria-hidden="true">
-        {keys.map((k) => (
+        {marks.map((m) => (
           <button
-            key={k}
+            key={m}
             type="button"
             tabIndex={-1}
-            onClick={() => glideTo(k)}
+            onClick={() => glideTo(m)}
             className={[
               'measure absolute top-0 -translate-x-1/2 px-1 text-[10px] leading-4',
-              k === current ? 'font-semibold opacity-90' : 'opacity-55',
+              Math.abs(m - value) < 30 ? 'font-semibold opacity-90' : 'opacity-55',
             ].join(' ')}
-            style={{ left: `calc(${THUMB / 2}px + (100% - ${THUMB}px) * ${at(k)})` }}
+            style={{ left: `calc(${THUMB / 2}px + (100% - ${THUMB}px) * ${at(m)})` }}
           >
-            {formatMinutes(k)}
+            {formatMinutes(m)}
           </button>
         ))}
       </div>

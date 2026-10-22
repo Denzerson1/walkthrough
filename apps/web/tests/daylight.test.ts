@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bracket, formatMinutes, mood, nearestKey, skyColour, toMinutes } from '../src/lib/daylight';
+import { bracket, formatMinutes, mood, skyColour, toMinutes } from '../src/lib/daylight';
 
 describe('daylight times', () => {
   it('reads and writes clock times', () => {
@@ -20,22 +20,17 @@ describe('daylight times', () => {
 });
 
 describe('daylight control', () => {
-  const keys = [480, 720, 900, 1050, 1200];
-
-  it('settles on the nearest bake', () => {
-    expect(nearestKey(keys, 1010)).toBe(1050);
-    expect(nearestKey(keys, 800)).toBe(720);
-    expect(nearestKey(keys, 2000)).toBe(1200);
-  });
-
   it('names the time of day', () => {
-    expect(keys.map(mood)).toEqual(['Morning', 'Midday', 'Afternoon', 'Evening', 'Dusk']);
+    expect([480, 720, 900, 1050, 1200, 1245].map(mood)).toEqual([
+      'Morning', 'Midday', 'Afternoon', 'Evening', 'Golden hour', 'Sunset',
+    ]);
   });
 
   it('colours the track between its stops and clamps past them', () => {
     expect(skyColour(12 * 60)).toBe('rgb(168,203,233)');
     expect(skyColour(0)).toBe('rgb(243,196,141)');
-    expect(skyColour(24 * 60)).toBe('rgb(111,106,160)');
+    expect(skyColour(20 * 60)).toBe('rgb(111,106,160)');
+    expect(skyColour(24 * 60)).toBe('rgb(72,70,118)');
     expect(skyColour(11 * 60)).toBe('rgb(191,212,224)');
   });
 });

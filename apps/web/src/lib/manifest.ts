@@ -83,6 +83,16 @@ export interface Obstacle {
   footprint: Vec2[];
 }
 
+/** The sun at one time of day, as the viewer draws its direct light. */
+export interface SunSample {
+  /** After midnight. */
+  minutes: number;
+  /** Towards the sun, in scene space. */
+  direction: [number, number, number];
+  /** Its direct light on a surface facing it, in the light maps' units. */
+  light: [number, number, number];
+}
+
 /** A rebuilt flat's light at one time of day. */
 export interface Lighting {
   /** "17:30" */
@@ -145,6 +155,12 @@ export interface Manifest {
     lightmapScale?: number;
     /** The same at other times of day, in the order they were baked. */
     lighting?: Lighting[];
+    /**
+     * The sun along the slider's span, every few minutes: the light maps hold
+     * all but its direct light, which the viewer draws, so it moves. Absent
+     * or empty: the sun is in the light maps.
+     */
+    sunPath?: SunSample[];
     /** The view out of the windows from the owner's photos: a .glb, and when it was taken. */
     viewPhoto?: { model: string; time: string } | null;
   };
