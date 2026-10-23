@@ -130,7 +130,8 @@ class Lighting(BaseModel):
     exposure: float = 1.0
     #: Multiplies the sky dome's colours: warm and dim towards dusk.
     skyTint: list[float] | None = None
-    #: The vertex colour set holding the neighbourhood's light at this time.
+    #: The vertex attribute (glTF `_LIGHT_<time>`) holding the light in
+    #: vertices at this time: the neighbourhood's, the vertex-lit pieces'.
     colours: str | None = None
     #: The sky at this time, an equirectangular panorama (sky.py).
     sky: str | None = None

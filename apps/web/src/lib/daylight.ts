@@ -23,8 +23,8 @@ export interface DaylightKey {
   skyTint?: number[] | null;
   /** The sky at this time, an equirectangular panorama (pipeline sky.py). */
   skyUrl?: string | null;
-  /** Which of the model's vertex colour sets holds the neighbourhood's light then. */
-  colourSet: number;
+  /** The vertex attribute holding the light in vertices then (the neighbourhood's, vertex-lit pieces'). */
+  colours?: string | null;
 }
 
 /** "17:30" -> 1050. */
@@ -82,8 +82,6 @@ export function bracket(times: number[], minutes: number): [number, number, numb
   while (times[i + 1] < minutes) i++;
   return [i, i + 1, (minutes - times[i]) / (times[i + 1] - times[i])];
 }
-
-type Colours = THREE.BufferAttribute | THREE.InterleavedBufferAttribute;
 
 /**
  * The light maps hold light ** (1 / LIGHT_MAP_GAMMA), scaled: a steeper
@@ -151,6 +149,54 @@ type SkyUniforms = {
 const SUN_RADIUS = (0.27 * Math.PI) / 180;
 
 /**
+ * A light set as stored (build_flat.store_light): RGB light, square rooted
+ * so 8 bits keep the dark, times `gain`.
+ */
+export function decodeLightSet(
+  set: THREE.BufferAttribute | THREE.InterleavedBufferAttribute,
+  gain: number,
+): Float32Array {
+  const light = new Float32Array(set.count * 3);
+  for (let k = 0; k < light.length; k++) {
+    const v = set.getComponent(Math.floor(k / 3), k % 3);
+    light[k] = v * v * gain;
+  }
+  return light;
+}
+
+/**
+ * What a piece lit from its vertices says it is (a glTF extra, build_flat
+ * `vertexLight`): "sun" when the bake left the sun's direct light out, for
+ * the viewer to draw, "baked" when it kept it (the pendant's fabric, which
+ * the sun shines through). The extra sits on the node: a mesh, or the group
+ * of a multi-material one.
+ */
+export function vertexLight(node: THREE.Object3D): 'sun' | 'baked' | undefined {
+  return node.userData.vertexLight ?? node.parent?.userData.vertexLight;
+}
+
+/**
+ * Teach a piece lit from its vertices to add the sun's direct light to
+ * them (`sun`). Its vertex colours hold its light in the light maps' units,
+ * scaled on the CPU (Daylight); the colour attribute is RGB.
+ */
+export function decodeVertexLight(material: THREE.MeshBasicMaterial, sun?: SunUniforms) {
+  material.vertexColors = true;
+  material.onBeforeCompile = (shader) => {
+    if (!sun) return;
+    Object.assign(shader.uniforms, sun);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>\n${SUN_VERTEX.declare}`)
+      .replace('#include <project_vertex>', `#include <project_vertex>\n${SUN_VERTEX.compute}`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>\n${SUN_FRAGMENT}`)
+      .replace('#include <color_fragment>', 'diffuseColor.rgb *= vColor.rgb + sunDirect();');
+  };
+  material.customProgramCacheKey = () => (sun ? 'vertex-sun' : 'vertex');
+  material.needsUpdate = true;
+}
+
+/**
  * The sky dome, painted from two panoramas mixed: looked up by the view
  * direction, so it sits at infinity whatever the dome's size. As the
  * photos out of the windows, it is shown as is, not tone mapped. The sun
@@ -209,7 +255,10 @@ export class Daylight {
   private readonly sorted: number[];
   private shown: number | null = null;
   private readonly baked: THREE.MeshBasicMaterial[] = [];
-  private readonly sites: Array<{ colour: Colours; sets: Float32Array[] }> = [];
+  /** The neighbourhood: per key its RGB light, shown as is. */
+  private readonly sites: Array<{ colour: THREE.BufferAttribute; sets: Float32Array[] }> = [];
+  /** Pieces lit from their vertices: per key their RGB light, at that key's scale. */
+  private readonly vertexLit: Array<{ colour: THREE.BufferAttribute; sets: Float32Array[] }> = [];
   private sky: THREE.MeshBasicMaterial | null = null;
   private readonly skies: Array<THREE.Texture | null> | null;
   private readonly skyUniforms: SkyUniforms | null = null;
@@ -255,17 +304,13 @@ export class Daylight {
       if (material.name === 'view-photo') this.photos.push(material);
       if (material.lightMap) this.prepare(material);
       const geometry = node.geometry as THREE.BufferGeometry;
-      const colour = geometry.getAttribute('color');
-      if (colour) {
-        // glTF's COLOR_0 loads as `color`, COLOR_n as `color_n`.
-        const sets = this.keys.map((key) => {
-          const attr = key.colourSet === 0 ? colour : geometry.getAttribute(`color_${key.colourSet}`);
-          return Float32Array.from({ length: colour.count * colour.itemSize }, (_, k) =>
-            attr ? attr.getComponent(Math.floor(k / colour.itemSize), k % colour.itemSize) : 1,
-          );
-        });
-        this.sites.push({ colour, sets });
+      const lit = vertexLight(node);
+      if (lit) {
+        this.prepareVertexLit(geometry, material, lit);
+        return;
       }
+      const colour = geometry.getAttribute('color') as THREE.BufferAttribute | undefined;
+      if (colour) this.sites.push({ colour, sets: this.lightSets(geometry, 1) });
     });
     // The photo out of the window was taken in one light; at other times it
     // takes on the neighbourhood's change in light from then, as baked.
@@ -275,7 +320,7 @@ export class Daylight {
         let n = 0;
         for (const { colour, sets } of this.sites) {
           for (let v = 0; v < colour.count; v++) {
-            for (let c = 0; c < 3; c++) sum[c] += sets[k][v * colour.itemSize + c];
+            for (let c = 0; c < 3; c++) sum[c] += sets[k][v * 3 + c];
             n++;
           }
         }
@@ -313,6 +358,29 @@ export class Daylight {
     if (this.shown !== null) this.set(this.shown);
   }
 
+  /**
+   * Per key, the RGB light in `geometry`'s vertices then (its light set),
+   * times the key's light map scale for a vertex-lit piece; where a set is
+   * missing, the light loadBakedModel opened with (`color`, decoded).
+   */
+  private lightSets(geometry: THREE.BufferGeometry, scale: 1 | 'lightmap'): Float32Array[] {
+    const colour = geometry.getAttribute('color');
+    return this.keys.map((key) => {
+      const set = key.colours ? geometry.getAttribute(key.colours) : undefined;
+      if (!set) return Float32Array.from(colour.array as ArrayLike<number>);
+      return decodeLightSet(set, scale === 1 ? 1 : key.lightmapScale);
+    });
+  }
+
+  private prepareVertexLit(geometry: THREE.BufferGeometry, material: THREE.MeshBasicMaterial,
+    lit: 'sun' | 'baked'): void {
+    this.vertexLit.push({
+      colour: geometry.getAttribute('color') as THREE.BufferAttribute,
+      sets: this.lightSets(geometry, 'lightmap'),
+    });
+    decodeVertexLight(material, lit === 'sun' ? this.sun?.shadow.uniforms : undefined);
+  }
+
   private prepare(material: THREE.MeshBasicMaterial): void {
     decodeLightMaps(material, this.uniforms, this.sun?.shadow.uniforms);
     this.baked.push(material);
@@ -330,15 +398,11 @@ export class Daylight {
     this.uniforms.lightMix.value = t;
     this.uniforms.lightScale1.value = this.keys[i].lightmapScale;
     this.uniforms.lightScale2.value = this.keys[j].lightmapScale;
-    for (const { colour, sets } of this.sites) {
+    for (const { colour, sets } of [...this.sites, ...this.vertexLit]) {
       const a = sets[i];
       const b = sets[j];
-      for (let v = 0; v < colour.count; v++) {
-        for (let c = 0; c < colour.itemSize; c++) {
-          const k = v * colour.itemSize + c;
-          colour.setComponent(v, c, a[k] + (b[k] - a[k]) * t);
-        }
-      }
+      const values = colour.array as Float32Array;
+      for (let k = 0; k < values.length; k++) values[k] = a[k] + (b[k] - a[k]) * t;
       colour.needsUpdate = true;
     }
     if (this.photoTints.length) {

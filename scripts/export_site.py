@@ -48,6 +48,8 @@ MESHOPT = ["@gltf-transform/cli@4.2.1", "meshopt"]
 MESHOPT_OPTIONS = [
     "--level", "medium",
     "--quantize-position", "16", "--quantize-texcoord", "16", "--quantize-color", "12",
+    # The light in vertices, per time of day (_LIGHT_*), square rooted.
+    "--quantize-generic", "8",
 ]
 
 

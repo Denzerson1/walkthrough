@@ -393,7 +393,8 @@ def surface_texture(kind: str, colour: str, px: int = 1024, seed: int = 0) -> Im
     """
     A seamless texture for one metre of a surface, around its colour:
     `veneer` (oak: long fibres and growth bands along x), `stone` (a
-    concrete-look worktop: soft mottling), `boucle` (nubbly fabric) or
+    concrete-look worktop: a fine sandy grain over faint clouds, the odd
+    pore), `boucle` (nubbly fabric) or
     `linen` (bedding: soft creases over a fine weave).
     Plain colour read as plastic on big oak and fabric surfaces; this is
     the grain a camera sees at walking distance, not a scan of the piece.
@@ -409,8 +410,14 @@ def surface_texture(kind: str, colour: str, px: int = 1024, seed: int = 0) -> Im
         value = 0.65 * fibres + 0.35 * bands - 0.12 * pores
         spread = 0.14
     elif kind == "stone":
-        value = 0.6 * _tiling_noise(rng, (12, 12), px) + 0.4 * _tiling_noise(rng, (96, 96), px)
-        spread = 0.12
+        # Soft mottling alone read as a blur up close (the owner's island):
+        # the grain is what makes it read as stone.
+        grain = rng.standard_normal((px, px)).astype(np.float32)
+        grain = (grain + np.roll(grain, 1, 0) + np.roll(grain, 1, 1)) / 3
+        pores = (rng.random((px, px)) > 0.9985).astype(np.float32)
+        value = (0.55 * grain / grain.std() + 0.3 * _tiling_noise(rng, (160, 160), px)
+                 + 0.35 * _tiling_noise(rng, (5, 5), px) - 1.5 * pores)
+        spread = 0.08
     elif kind == "boucle":
         value = 0.7 * _tiling_noise(rng, (300, 300), px) + 0.3 * _tiling_noise(rng, (40, 40), px)
         spread = 0.18

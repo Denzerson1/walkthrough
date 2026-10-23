@@ -637,6 +637,34 @@ def own_roof(mesh: SiteMesh, spec: dict) -> None:
             mesh.quad(corners, [(u0, v0), (u1, v0), (u1, v1), (u0, v1)], frame["n"])
 
 
+def light_set(label: str) -> str:
+    """
+    The attribute that holds a time of day's light in vertices. Its leading
+    underscore exports it as a glTF custom attribute (`_LIGHT_1730`):
+    exported as vertex colours (COLOR_n), every set but the last came out
+    white, so the houses outside stood unshaded at all but one time.
+    """
+    return f"_light_{label}"
+
+
+#: The colour attribute the vertex bakes write into, before store_light.
+BAKING = "baking"
+
+
+def store_light(mesh: bpy.types.Mesh, label: str, rgb, domain: str) -> None:
+    """
+    Keep a time of day's light (RGB, 0-1) in `mesh` as its light set, square
+    rooted (the viewer squares it): published at 8 bits, the dark keeps
+    enough levels. Three channels, not a colour attribute's four: seven sets
+    on 120,000 vertices were most of the model.
+    """
+    import numpy as np
+
+    attr = mesh.attributes.new(light_set(label), "FLOAT_VECTOR", domain)
+    attr.data.foreach_set("vector", np.sqrt(np.clip(rgb, 0.0, 1.0)).astype(np.float32).ravel())
+    mesh.color_attributes.remove(mesh.color_attributes[BAKING])
+
+
 def bake_neighbourhood(objects: list[bpy.types.Object], label: str,
                        scale: float | None = None) -> float:
     """
@@ -647,9 +675,8 @@ def bake_neighbourhood(objects: list[bpy.types.Object], label: str,
     """
     import numpy as np
 
-    name = f"light-{label}"
     for obj in objects:
-        attr = obj.data.color_attributes.new(name, "FLOAT_COLOR", "CORNER")
+        attr = obj.data.color_attributes.new(BAKING, "FLOAT_COLOR", "CORNER")
         obj.data.color_attributes.active_color = attr
     bpy.ops.object.select_all(action="DESELECT")
     for obj in objects:
@@ -659,16 +686,14 @@ def bake_neighbourhood(objects: list[bpy.types.Object], label: str,
                         target="VERTEX_COLORS")
     values = []
     for obj in objects:
-        data = np.empty(len(obj.data.color_attributes[name].data) * 4, np.float32)
-        obj.data.color_attributes[name].data.foreach_get("color", data)
-        values.append(data.reshape(-1, 4))
+        data = np.empty(len(obj.data.color_attributes[BAKING].data) * 4, np.float32)
+        obj.data.color_attributes[BAKING].data.foreach_get("color", data)
+        values.append(data.reshape(-1, 4)[:, :3])
     if scale is None:  # the first time of day sets the scale for all of them
-        every = np.concatenate([v[:, :3].max(axis=1) for v in values])
+        every = np.concatenate([v.max(axis=1) for v in values])
         scale = 0.95 / max(float(np.percentile(every, 95)), 1e-6)
-    for obj, data in zip(objects, values, strict=True):
-        data[:, :3] = np.clip(data[:, :3] * scale, 0.0, 1.0)
-        data[:, 3] = 1.0
-        obj.data.color_attributes[name].data.foreach_set("color", data.ravel())
+    for obj, rgb in zip(objects, values, strict=True):
+        store_light(obj.data, label, rgb * scale, "CORNER")
     return scale
 
 
@@ -984,9 +1009,9 @@ def finish_parts(finish: str, w: float, h: float, d: float, opts: dict) -> list[
         return parts
     if finish == "open-wardrobe":
         # An open wardrobe section: both sides full height, top, plinth and
-        # back, two shelves at the top, a rail with clothes, a glass shelf
-        # with boxes, drawers and a wire basket below.
-        ym, inner = (y0 + y1) / 2, xi1 - xi0
+        # back, two shelves at the top, a rail (its clothes: hang_clothes), a
+        # glass shelf with boxes, drawers and a wire basket below.
+        ym = (y0 + y1) / 2
         drawers = opts.get("drawers", 3)
         parts = [("oak", (x0, xi0, y0, y1, 0, h)), ("oak", (xi1, x1, y0, y1, 0, h)),
                  ("oak", (xi0, xi1, y0, y1, h - 0.018, h)),
@@ -994,13 +1019,7 @@ def finish_parts(finish: str, w: float, h: float, d: float, opts: dict) -> list[
                  ("oak", (xi0, xi1, y1 - 0.008, y1, 0.06, h - 0.018)),
                  ("oak", (xi0, xi1, y0 + 0.01, y1 - 0.008, h - 0.38, h - 0.362)),
                  ("oak", (xi0, xi1, y0 + 0.01, y1 - 0.008, h - 0.2, h - 0.182)),
-                 ("steel", (xi0, xi1, ym - 0.01, ym + 0.01, h - 0.46, h - 0.44)),
-                 # As photographed (garderobe3): a leather jacket and a pale
-                 # coat at the right, the oak back open beside them.
-                 ("wenge", (xi0 + 0.66 * inner, xi0 + 0.89 * inner, ym - 0.17, ym + 0.17,
-                            1.23, h - 0.47)),
-                 ("coat-light", (xi0 + 0.9 * inner, xi1 - 0.01, ym - 0.15, ym + 0.15,
-                                 1.15, h - 0.47))]
+                 ("steel", (xi0, xi1, ym - 0.01, ym + 0.01, h - 0.46, h - 0.44))]
         if drawers:
             parts += [("glass-shelf", (xi0, xi1, y0 + 0.02, y1 - 0.01, 0.98, 0.99)),
                       ("boxes", (xi0 + 0.03, xi0 + 0.3, y0 + 0.05, y0 + 0.36, 0.99, 1.13)),
@@ -1016,8 +1035,8 @@ def finish_parts(finish: str, w: float, h: float, d: float, opts: dict) -> list[
     if finish == "coat-niche":
         # The hall's coat niche (photo wall4), a wall on its left and a
         # partition on its right, both outside the box: rustic oak lining and
-        # a shelf near the top, a rail under it with coats hanging down to a
-        # white two-drawer unit with an oak top, on a plinth.
+        # a shelf near the top, a rail under it (its coats: hang_clothes)
+        # above a white two-drawer unit with an oak top, on a plinth.
         ym, top = (y0 + y1) / 2, h - 0.40
         parts = [("oak-warm", (x0, xi0, y0, y1, 0, h)),
                  ("oak-warm", (xi0, x1, y1 - 0.018, y1, 0, h)),
@@ -1027,13 +1046,6 @@ def finish_parts(finish: str, w: float, h: float, d: float, opts: dict) -> list[
                  ("white", (xi0, x1, y0 + FRONT_T, y1 - 0.018, 0.08, 0.5)),
                  ("oak-warm", (xi0, x1, y0, y1 - 0.018, 0.5, 0.518)),
                  *fronts(xi0, x1, 0.08 + GAP, 0.5 - GAP, y0, [[0, 2]], surface="white")]
-        # Coats side by side, long dark ones and a pale trench.
-        x = xi0 + 0.02
-        for share, bottom, surface in ((0.42, 0.6, "coats"), (0.18, 0.88, "coat-light"),
-                                       (0.4, 0.66, "coats")):
-            width = share * (x1 - 0.04 - (xi0 + 0.02))
-            parts.append((surface, (x, x + width - 0.01, ym - 0.2, ym + 0.2, bottom, top - 0.02)))
-            x += width
         return parts
     if finish == "bed":
         base = min(0.26, h * 0.4)
@@ -1231,6 +1243,153 @@ def stool(bm: bmesh.types.BMesh, w: float, h: float, d: float, slot, surfaces: d
     box_uvs(bm, wood, (0.03, 0.03, seat), surfaces["beech"].get("tile", (1.0, 1.0)))
 
 
+#: What hangs on a rail, from the left: (surface, length, thickness,
+#: facing), hung sideways as a full rail is, so the front shows a row of
+#: sleeves, or facing out. The open wardrobe as photographed (garderobe1-3):
+#: the burgundy leather jacket facing out at the right, a pale trench beside
+#: it; the hall niche: long coats.
+CLOTHES = {
+    # Short enough to clear the boxes on the glass shelf below the rail.
+    "open-wardrobe": [("coat-navy", 0.72, 0.12, False), ("knit-grey", 0.62, 0.11, False),
+                      ("coat-light", 0.72, 0.12, False), ("leather", 0.58, 0.14, True)],
+    "coat-niche": [("coat-camel", 1.0, 0.13, False), ("coat-navy", 1.05, 0.12, False),
+                   ("puffer", 0.72, 0.18, False), ("coat-light", 1.08, 0.12, False),
+                   ("denim", 0.6, 0.1, False)],
+}
+
+
+#: Zipped rather than buttoned: their placket is a steel zip.
+ZIPPED = {"leather", "puffer"}
+
+
+def loft(bm: bmesh.types.BMesh, sections: list[tuple], frame: tuple, material: int,
+         n: int = 24, power: float = 3.0, phase: float = 0.0) -> None:
+    """
+    A closed tube through `sections` (height, centre across and along the
+    garment's own frame, half-sizes there, folds 0-1), capped both ends: a
+    rounded rectangle (superellipse of `power`) at each, with loose folds
+    where asked. `frame` = (x, y, turn) places the garment's frame.
+    """
+    x, y, turn = frame
+    c, s_ = math.cos(turn), math.sin(turn)
+    loops = []
+    for z, ox, oy, ax, ay, fold in sections:
+        loop = []
+        for k in range(n):
+            t = 2 * math.pi * k / n
+            ct, st = math.cos(t), math.sin(t)
+            f = 1 + fold * (0.05 * math.sin(5 * t + phase) + 0.03 * math.sin(9 * t - phase))
+            lx = ox + ax * math.copysign(abs(ct) ** (2 / power), ct) * f
+            ly = oy + ay * math.copysign(abs(st) ** (2 / power), st) * f
+            loop.append(bm.verts.new((x + lx * c - ly * s_, y + lx * s_ + ly * c, z)))
+        loops.append(loop)
+    for upper, lower in zip(loops, loops[1:], strict=False):
+        for k in range(n):
+            bm.faces.new((upper[k], upper[(k + 1) % n], lower[(k + 1) % n],
+                          lower[k])).material_index = material
+    for loop, (z, ox, oy, *_) in ((loops[0], sections[0]), (loops[-1], sections[-1])):
+        hub = bm.verts.new((x + ox * c - oy * s_, y + ox * s_ + oy * c, z))
+        for k in range(n):
+            bm.faces.new((loop[k], loop[(k + 1) % n], hub)).material_index = material
+
+
+def garment(bm: bmesh.types.BMesh, x: float, ym: float, rail: float, length: float,
+            thick: float, body: float, turn: float, seed: int, cloth: int, closure: int,
+            steel: int) -> None:
+    """
+    A jacket or coat on a hanger hooked over a rail along x at depth `ym`,
+    height `rail`, in its own frame: across its front (local x, `thick`
+    deep) and along its shoulders (local y, `body` wide), turned by `turn`
+    (0: hung sideways, shoulders across the depth). A body lofted from a
+    collar over sloping shoulders down to a slightly flared hem with loose
+    folds; two sleeves hanging at its sides to cuffs above the hem; a
+    placket (or a zip) down the front. Rounded tubes alone read as sacks.
+    """
+    import random
+
+    rng = random.Random(seed)
+    top, t, half = rail - 0.075, thick / 2, body / 2
+    frame = (x, ym, turn)
+    sections = [(top + 0.02, -0.01, 0, 0.04, 0.065, 0),
+                (top - 0.005, -0.005, 0, 0.05, 0.08, 0),
+                (top - 0.035, 0, 0, t * 0.8, half * 0.75, 0),
+                (top - 0.075, 0, 0, t, half + 0.015, 0)]
+    for f in (0.0, 0.25, 0.5, 0.75, 1.0):
+        sections.append((top - 0.14 - f * (length - 0.14), 0, 0, t * (1 - 0.1 * f),
+                         half * (0.98 + 0.06 * f), 0.3 + 0.7 * f))
+    loft(bm, sections, frame, cloth, n=32, power=4.0, phase=rng.uniform(0, 6.3))
+    sleeve = min(0.62, length - 0.05)
+    for side in (-1, 1):
+        oy = side * (half + 0.035)
+        cuff = top - sleeve
+        rings = [(top - 0.05 - (top - 0.05 - cuff) * f, -0.005, oy - side * 0.012 * f,
+                  0.05 - 0.008 * f, 0.055 - 0.012 * f, 0.4 * f) for f in (0, 0.2, 0.4, 0.6, 0.8, 1)]
+        loft(bm, rings, frame, cloth, n=16, power=2.2, phase=rng.uniform(0, 6.3))
+    # The placket, or a zip, down the middle of the front.
+    strip = [(z, ax + 0.002, 0, 0.003, 0.009, 0) for z, _, _, ax, _, _ in sections[3:]]
+    loft(bm, strip, frame, closure, n=8, power=8.0)
+    # The hanger's hook, up from the collar and over the rail.
+    for box in ((x - 0.002, x + 0.002, ym - 0.002, ym + 0.002, top + 0.02, rail + 0.016),
+                (x - 0.002, x + 0.002, ym - 0.022, ym + 0.002, rail + 0.012, rail + 0.016),
+                (x - 0.002, x + 0.002, ym - 0.022, ym - 0.018, rail - 0.012, rail + 0.014)):
+        cube = bmesh.ops.create_cube(bm, size=1.0)
+        bmesh.ops.scale(bm, verts=cube["verts"],
+                        vec=(box[1] - box[0], box[3] - box[2], box[5] - box[4]))
+        bmesh.ops.translate(bm, verts=cube["verts"], vec=((box[0] + box[1]) / 2,
+                                                          (box[2] + box[3]) / 2,
+                                                          (box[4] + box[5]) / 2))
+        for face in {f for v in cube["verts"] for f in v.link_faces}:
+            face.material_index = steel
+
+
+def hang_clothes(item: dict, piece: bpy.types.Object, surfaces: dict) -> bpy.types.Object | None:
+    """
+    The clothes on an open wardrobe's or the coat niche's rail, as their own
+    object (lit per vertex: folded cloth unwrapped into many small islands,
+    as the generated models did), placed as the piece is.
+    """
+    hung = CLOTHES.get(item.get("finish") or "")
+    if not hung:
+        return None
+    w, h, d = item["size"]
+    x0, x1, y0, y1 = -w / 2, w / 2, -d / 2, d / 2
+    ym = (y0 + y1) / 2
+    rail = h - 0.45 if item["finish"] == "open-wardrobe" else h - 0.39
+    xi0, xi1 = x0 + 0.04, x1 - 0.04
+    # Shoulder to shoulder; with the sleeves it all fits the depth.
+    body = min(0.34, d - 0.2)
+    spans = [body + 0.18 if facing else thick + 0.03 for _, _, thick, facing in hung]
+    room = max((xi1 - xi0) - sum(spans), 0.0)
+    surfaces_used = sorted({name for name, *_ in hung}) + ["steel"]
+    mesh = bpy.data.meshes.new(f"{item['id']}-clothes")
+    bm = bmesh.new()
+    x = xi0
+    for i, ((name, length, thick, facing), span) in enumerate(zip(hung, spans, strict=True)):
+        x += span / 2
+        # Facing out: its front (local x) to the piece's front, -y.
+        turn = math.radians(-90 + (-1) ** i * 4 if facing else (-1) ** i * 6)
+        material = surfaces_used.index(name)
+        closure = surfaces_used.index("steel") if name in ZIPPED else material
+        garment(bm, x, ym, rail, length, thick, body, turn, seed=i, cloth=material,
+                closure=closure, steel=surfaces_used.index("steel"))
+        x += span / 2 + room / len(hung)
+    # Lofted top down, the sections' faces came out facing in, and the bake
+    # lit them from inside the cloth: black.
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(mesh)
+    bm.free()
+    for name in surfaces_used:
+        mesh.materials.append(surface_material(name, surfaces[name]))
+    mesh.shade_smooth()
+    mesh.set_sharp_from_angle(angle=math.radians(50))
+    obj = bpy.data.objects.new(mesh.name, mesh)
+    bpy.context.collection.objects.link(obj)
+    plain_uvs(obj)
+    obj.matrix_world = piece.matrix_world.copy()
+    VERTEX_LIT.add(obj.name)
+    return obj
+
+
 def surface_material(name: str, surface: dict) -> bpy.types.Material:
     """A surface from the spec: its colour or its texture, and its roughness."""
     mat = bpy.data.materials.get(f"surface-{name}")
@@ -1275,11 +1434,15 @@ def finished(item: dict, surfaces: dict) -> bpy.types.Object:
     if item["finish"] == "stool":
         stool(bm, w, h, d, slot, surfaces)
     elif item["finish"] == "pendant":
-        # A drum shade on a cable from the ceiling.
+        # A drum shade on a cable from the ceiling. Its light is baked per
+        # vertex through the fabric (vertex_light), so its side is cut into
+        # rings for the light to vary down it.
         radius, shade = min(w, d) / 2, 0.28
-        cone = bmesh.ops.create_cone(bm, cap_ends=True, segments=40, radius1=radius,
+        cone = bmesh.ops.create_cone(bm, cap_ends=True, segments=48, radius1=radius,
                                      radius2=radius, depth=shade)
         bmesh.ops.translate(bm, verts=cone["verts"], vec=(0, 0, shade / 2))
+        sides = [e for e in bm.edges if abs(e.verts[0].co.z - e.verts[1].co.z) > shade / 2]
+        bmesh.ops.subdivide_edges(bm, edges=sides, cuts=6, use_grid_fill=True)
         cable = bmesh.ops.create_cube(bm, size=1.0)
         bmesh.ops.scale(bm, verts=cable["verts"], vec=(0.008, 0.008, h - shade))
         bmesh.ops.translate(bm, verts=cable["verts"], vec=(0, 0, shade + (h - shade) / 2))
@@ -1304,6 +1467,11 @@ def finished(item: dict, surfaces: dict) -> bpy.types.Object:
         mesh.materials.append(surface_material(surface, surfaces[surface]))
     obj = bpy.data.objects.new(item["id"], mesh)
     bpy.context.collection.objects.link(obj)
+    if item["finish"] == "pendant":
+        mesh.shade_smooth()
+        mesh.set_sharp_from_angle(angle=math.radians(40))
+        VERTEX_LIT.add(obj.name)
+        TRANSLUCENT.add(obj.name)
     if item["finish"] in SOFTNESS:
         bevel = obj.modifiers.new("soft", "BEVEL")
         bevel.width, bevel.segments = SOFTNESS[item["finish"]]
@@ -1334,8 +1502,9 @@ def lighten(obj: bpy.types.Object, model: str, size: float, scratch: Path,
     across seams. Its emission map is near black but not quite, and would
     glow in the bake. `size`, the piece's largest side as placed, sets how
     far it is decimated; `colour` (sRGB hex, read off a photo of the piece)
-    is what its colour map's median is brought to: a generated sofa came
-    grey where the real one is cream.
+    is what its fabric is brought to (match_colour): a generated sofa came
+    grey where the real one is cream, the stools a pale grey where theirs is
+    a mid grey.
     """
     if model in LIGHTENED:
         imported = obj.data
@@ -1446,15 +1615,22 @@ def fill_unbaked(image: bpy.types.Image) -> None:
 
 
 def match_colour(image: bpy.types.Image, colour: str) -> None:
-    """Scale an sRGB colour map per channel, in linear light: its texels' median to `colour`."""
+    """
+    Bring a colour map's fabric to `colour`: scaled per channel, in linear
+    light, so its near-grey texels' median matches. Coloured ones (a
+    stool's beech legs) are left as they are, fading between the two.
+    """
     import numpy as np
 
     pixels = np.empty(len(image.pixels), dtype=np.float32)
     image.pixels.foreach_get(pixels)
     rgb = pixels.reshape(-1, 4)[:, :3]
     linear = np.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
-    gain = np.array(hex_rgba(colour)[:3]) / np.maximum(np.median(linear, axis=0), 1e-4)
-    linear = np.clip(linear * gain, 0.0, 1.0)
+    saturation = (rgb.max(axis=1) - rgb.min(axis=1)) / np.maximum(rgb.max(axis=1), 1e-4)
+    fabric = np.clip((0.25 - saturation) / 0.1, 0.0, 1.0)
+    target = np.array(hex_rgba(colour)[:3])
+    gain = target / np.maximum(np.median(linear[fabric > 0.99], axis=0), 1e-4)
+    linear = np.clip(linear * (1 + fabric[:, None] * (gain - 1)), 0.0, 1.0)
     rgb[:] = np.where(linear <= 0.0031308, linear * 12.92, 1.055 * linear ** (1 / 2.4) - 0.055)
     image.pixels.foreach_set(pixels)
 
@@ -1486,7 +1662,7 @@ def furniture(item: dict, surfaces: dict, scratch: Path) -> bpy.types.Object:
                 bpy.data.objects.remove(leftover, do_unlink=True)
         lighten(obj, item["model"], max(w, h, d), scratch,
                 (item.get("options") or {}).get("colour"))
-        MODEL_PIECES.add(item["id"])
+        VERTEX_LIT.add(item["id"])
     else:
         mesh = bpy.data.meshes.new(item["id"])
         bm = bmesh.new()
@@ -1766,45 +1942,56 @@ def preview(spec: dict, windows: list[dict], patch: tuple[float, float] | None,
 #: Atlas share per object, as a multiple of its surface: the trim (door
 #: frames, leaves, skirtings, window frames) gets 6x, 2.5x the texels per
 #: metre. At the walls' density a 7 cm architrave was 4 texels wide and its
-#: light came out in grey blotches.
-ATLAS_WEIGHT = {"trim": 6.0}
+#: light came out in grey blotches. Walls and ceilings, their light smooth
+#: since the sun's patches are drawn live, give up a little to the
+#: furniture, whose narrow sides baked speckled.
+ATLAS_WEIGHT = {"trim": 6.0, "wall": 0.8, "ceiling": 0.8}
+#: Texels between two islands in the atlas, at least: wider than the
+#: smoothing kernel (smooth_within_islands, 3 sigma), so neighbours never mix.
+ISLAND_GAP = 8
 #: Where each object's light lies in the atlas, (x, y, side) in UV units.
 CELLS: dict[str, tuple[float, float, float]] = {}
 #: Extra smoothing for an object's light: painted trim's light is smooth,
-#: and on few texels the denoiser leaves blotches.
-SMOOTH = {"trim": 2.5}
+#: and on few texels the denoiser leaves blotches. So is a white wall's: the
+#: hall, lit only by bounce, showed the denoiser's blotches as grey bands.
+SMOOTH = {"trim": 2.5, "wall": 3.5, "ceiling": 3.5}
 #: The same for every piece of furniture: on few texels its light came out
 #: in blotches on the kitchen's white fronts once exposed.
 PIECE_WEIGHT, PIECE_SMOOTH = 1.5, 2.0
-#: A generated model's folds unwrap into ~800 islands whatever the angle:
-#: spaced as a box's few are, at the furniture's share, the bed's triangles
-#: got half a texel each and many of them showed black. Its islands
-#: are packed tight and it gets more of the atlas (some 6 texels a
-#: triangle), and less smoothing, which would blend islands packed side by
-#: side.
-MODEL_WEIGHT, MODEL_SMOOTH = 4.0, 1.0
-#: The pieces drawn by a model (furniture() adds them).
-MODEL_PIECES: set[str] = set()
+#: What is lit per vertex instead of from the atlas (vertex_light): the
+#: generated models, whose folds unwrapped into ~800 islands of a few
+#: texels each and baked black specks, the clothes, and the pendant.
+VERTEX_LIT: set[str] = set()
+#: Of them, what light passes through: the pendant's fabric shade, lit
+#: through from its bright side as a real one is. Its sun stays baked.
+TRANSLUCENT: set[str] = set()
 
 
-def layout_lightmap(objects: list[bpy.types.Object], margin: float = 0.006) -> None:
+def layout_lightmap(objects: list[bpy.types.Object], size: int, margin: float = 0.006) -> None:
     """
     A second UV set laid out so no two objects share atlas space.
 
-    Each object is unwrapped on its own into the unit square, then shrunk
-    into its own square cell, sized by the root of its surface area so
-    texel density stays roughly even. Unwrapping several objects at once
-    and packing them together left their islands on top of each other, and
-    each object's bake overwrote the last — walls came out near black.
+    Each object gets its own square cell of the `size` atlas, sized by the
+    root of its surface area so texel density stays roughly even, and is
+    unwrapped on its own into it, its islands packed tight (rotated, by
+    their outlines) but ISLAND_GAP texels apart. Unwrapping several objects
+    at once and packing them together left their islands on top of each
+    other, and each object's bake overwrote the last — walls came out near
+    black. Packed as the unwrap leaves them, half of each cell was gaps.
     """
     bpy.context.tool_settings.mesh_select_mode = (False, False, True)
-    areas = []
+    hiddens, areas = [], []
     for obj in objects:
-        layer = obj.data.uv_layers.new(name="lightmap")
-        obj.data.uv_layers.active = layer
         flag = obj.data.attributes.get("unseen")
         count = len(obj.data.polygons)
         hidden = [bool(flag.data[i].value) for i in range(count)] if flag else [False] * count
+        hiddens.append(hidden)
+        seen = sum(p.area for p, h in zip(obj.data.polygons, hidden, strict=True) if not h)
+        areas.append(ATLAS_WEIGHT.get(obj.name, 1.0) * seen)
+    corners, sides = atlas_cells(areas, margin)
+    for obj, hidden, side, (cx, cy) in zip(objects, hiddens, sides, corners, strict=True):
+        layer = obj.data.uv_layers.new(name="lightmap")
+        obj.data.uv_layers.active = layer
         for poly, is_hidden in zip(obj.data.polygons, hidden, strict=True):
             poly.select = not is_hidden
         bpy.ops.object.select_all(action="DESELECT")
@@ -1814,13 +2001,11 @@ def layout_lightmap(objects: list[bpy.types.Object], margin: float = 0.006) -> N
         # Not corrected for a texture's aspect: that squashed the islands of
         # pieces with a photo texture (the wardrobe's oak, 1:4) up to 16x
         # across, and a drawer front's light came out black.
-        if obj.name in MODEL_PIECES:
-            bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.004,
-                                     correct_aspect=False)
-            bpy.ops.uv.pack_islands(margin=0.002, rotate=True, shape_method="CONCAVE")
-        else:
-            bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.02,
-                                     correct_aspect=False)
+        bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.0,
+                                 correct_aspect=False)
+        gap = max(ISLAND_GAP, 3 * SMOOTH.get(obj.name, 1.0) + 2)
+        bpy.ops.uv.pack_islands(margin=min(gap / (side * size), 0.2),
+                                margin_method="FRACTION", rotate=True, shape_method="CONCAVE")
         bpy.ops.object.mode_set(mode="OBJECT")
         # Unseen faces shrink to a point: in the bake, but on no texels. The
         # point is the nearest point of a seen face, not the atlas's empty
@@ -1828,10 +2013,6 @@ def layout_lightmap(objects: list[bpy.types.Object], margin: float = 0.006) -> N
         # window's lining, a lining board's edge), it carries the light
         # beside it rather than black.
         shrink_unseen(obj.data, hidden)
-        areas.append(ATLAS_WEIGHT.get(obj.name, 1.0)
-                     * sum(p.area for p, h in zip(obj.data.polygons, hidden, strict=True) if not h))
-    corners, sides = atlas_cells(areas, margin)
-    for obj, side, (cx, cy) in zip(objects, sides, corners, strict=True):
         CELLS[obj.name] = (cx, cy, side)
         for loop in obj.data.uv_layers["lightmap"].data:
             loop.uv = (cx + loop.uv[0] * side, cy + loop.uv[1] * side)
@@ -2018,12 +2199,12 @@ def save_lightmap(baked: bpy.types.Image, path: str,
 SUN_SAMPLES = 128
 
 
-def bake_sun_direct(image: bpy.types.Image) -> None:
+def bake_sun_direct(**target) -> None:
     """
-    The sun's direct light alone into `image`: the sky off, the other lamps
-    hidden, no bounces. Taken away from the full bake, it leaves what the
-    viewer cannot draw live: the sky's light and every bounce, the sun's
-    included.
+    The sun's direct light alone, baked with `target` (the atlas's light map
+    UVs, or vertex colours): the sky off, the other lamps hidden, no
+    bounces. Taken away from the full bake, it leaves what the viewer cannot
+    draw live: the sky's light and every bounce, the sun's included.
     """
     scene = bpy.context.scene
     background = scene.world.node_tree.nodes["Background"].inputs["Strength"]
@@ -2032,8 +2213,7 @@ def bake_sun_direct(image: bpy.types.Image) -> None:
     background.default_value, scene.cycles.samples = 0.0, SUN_SAMPLES
     for lamp in lamps:
         lamp.hide_render = True
-    bpy.ops.object.bake(type="DIFFUSE", pass_filter={"DIRECT"}, uv_layer="lightmap",
-                        margin=6, use_clear=True)
+    bpy.ops.object.bake(type="DIFFUSE", pass_filter={"DIRECT"}, **target)
     background.default_value, scene.cycles.samples = sky, samples
     for lamp in lamps:
         lamp.hide_render = False
@@ -2068,7 +2248,7 @@ def bake(objects: list[bpy.types.Object], size: int, path: str,
     if live_sun:
         full = np.empty(size * size * 4, dtype=np.float32)
         image.pixels.foreach_get(full)
-        bake_sun_direct(image)
+        bake_sun_direct(uv_layer="lightmap", margin=6, use_clear=True)
         direct = np.empty_like(full)
         image.pixels.foreach_get(direct)
         full, direct = full.reshape(-1, 4), direct.reshape(-1, 4)
@@ -2082,6 +2262,120 @@ def bake(objects: list[bpy.types.Object], size: int, path: str,
     for obj in objects:
         obj.data.uv_layers.active = obj.data.uv_layers[0]
     return scale, exposure, balance
+
+
+def vertex_light(objects: list[bpy.types.Object], label: str, live_sun: bool,
+                 balance: list[float], scale: float) -> None:
+    """
+    The light of the vertex-lit pieces at this time of day, into their
+    light set (store_light), in the light map's units over its
+    `scale` (the viewer multiplies by lightmapScale, as for the atlas). With
+    `live_sun`, without the sun's direct light on what is opaque. A vertex
+    far darker than those round it (inside a fold that cuts through
+    another) takes theirs, and each is smoothed with them a little: a
+    vertex's light is a single sample of the surface.
+    """
+    import numpy as np
+
+    for obj in objects:
+        obj.data.color_attributes.active_color = obj.data.color_attributes.new(
+            BAKING, "FLOAT_COLOR", "POINT")
+    opaque = [o for o in objects if o.name not in TRANSLUCENT]
+    through = [o for o in objects if o.name in TRANSLUCENT]
+    light = {}
+    if opaque:
+        light |= bake_vertices(opaque, BAKING, live_sun)
+    if through:
+        light |= bake_vertices(through, BAKING, live_sun=False, translucent=True)
+    gain = np.array(balance, np.float32) / scale
+    for obj in objects:
+        store_light(obj.data, label, smooth_vertices(obj.data, light[obj.name]) * gain, "POINT")
+
+
+def bake_vertices(objects: list[bpy.types.Object], name: str, live_sun: bool,
+                  translucent: bool = False) -> dict:
+    """
+    Diffuse light into the `name` colour attribute of `objects`, as
+    {name: (vertices, 3)}; with `live_sun`, less the sun's direct light.
+    `translucent`: as fabric that lets half the light through, the light
+    on either side averaged: a white half-diffuse, half-translucent stand-in
+    for the bake (COMBINED, which counts what passes through).
+    """
+    import numpy as np
+
+    bpy.ops.object.select_all(action="DESELECT")
+    for obj in objects:
+        obj.select_set(True)
+    bpy.context.view_layer.objects.active = objects[0]
+    kept = {}
+    if translucent:
+        fabric = bpy.data.materials.get("bake-translucent") or translucent_material()
+        for obj in objects:
+            kept[obj.name] = list(obj.data.materials)
+            for i in range(len(obj.data.materials)):
+                obj.data.materials[i] = fabric
+        bpy.ops.object.bake(type="COMBINED", target="VERTEX_COLORS",
+                            pass_filter={"DIRECT", "INDIRECT", "DIFFUSE", "TRANSMISSION"})
+    else:
+        bpy.ops.object.bake(type="DIFFUSE", pass_filter={"DIRECT", "INDIRECT"},
+                            target="VERTEX_COLORS")
+
+    def read() -> dict:
+        out = {}
+        for obj in objects:
+            data = np.empty(len(obj.data.vertices) * 4, np.float32)
+            obj.data.color_attributes[name].data.foreach_get("color", data)
+            out[obj.name] = data.reshape(-1, 4)[:, :3].copy()
+        return out
+
+    light = read()
+    if live_sun:
+        bake_sun_direct(target="VERTEX_COLORS")
+        light = {k: np.maximum(v - read()[k], 0.0) for k, v in light.items()}
+    for obj in objects:
+        for i, mat in enumerate(kept.get(obj.name, [])):
+            obj.data.materials[i] = mat
+    return light
+
+
+def translucent_material() -> bpy.types.Material:
+    mat = bpy.data.materials.new("bake-translucent")
+    mat.use_nodes = True
+    nodes, links = mat.node_tree.nodes, mat.node_tree.links
+    nodes.clear()
+    out = nodes.new("ShaderNodeOutputMaterial")
+    mix = nodes.new("ShaderNodeMixShader")
+    diffuse = nodes.new("ShaderNodeBsdfDiffuse")
+    through = nodes.new("ShaderNodeBsdfTranslucent")
+    for node in (diffuse, through):
+        node.inputs["Color"].default_value = (1.0, 1.0, 1.0, 1.0)
+    mix.inputs["Fac"].default_value = 0.5
+    links.new(diffuse.outputs[0], mix.inputs[1])
+    links.new(through.outputs[0], mix.inputs[2])
+    links.new(mix.outputs[0], out.inputs["Surface"])
+    return mat
+
+
+def smooth_vertices(mesh: bpy.types.Mesh, rgb):
+    """A vertex's light: its neighbours' where far darker, then blended with theirs."""
+    import numpy as np
+
+    edges = np.empty(len(mesh.edges) * 2, np.int32)
+    mesh.edges.foreach_get("vertices", edges)
+    edges = edges.reshape(-1, 2)
+
+    def around(values):
+        total = np.zeros_like(values)
+        count = np.zeros(len(values), np.float32)
+        for a, b in ((0, 1), (1, 0)):
+            np.add.at(total, edges[:, a], values[edges[:, b]])
+            np.add.at(count, edges[:, a], 1.0)
+        return total / np.maximum(count, 1.0)[:, None]
+
+    mean = around(rgb)
+    dark = rgb.mean(axis=1) < 0.4 * mean.mean(axis=1)
+    rgb = np.where(dark[:, None], mean, rgb)
+    return 0.5 * rgb + 0.5 * around(rgb)
 
 
 def sun_path(path: list[dict], lighting: list[dict]) -> list[dict]:
@@ -2159,9 +2453,15 @@ def main() -> None:
     scratch = Path(spec["out"]["meta"]).parent
     pieces = [furniture(item, spec["surfaces"], scratch) for item in spec["items"]]
     for piece in pieces:
-        model = piece.name in MODEL_PIECES
-        ATLAS_WEIGHT.setdefault(piece.name, MODEL_WEIGHT if model else PIECE_WEIGHT)
-        SMOOTH.setdefault(piece.name, MODEL_SMOOTH if model else PIECE_SMOOTH)
+        ATLAS_WEIGHT.setdefault(piece.name, PIECE_WEIGHT)
+        SMOOTH.setdefault(piece.name, PIECE_SMOOTH)
+    clothes = [c for item, piece in zip(spec["items"], pieces, strict=True)
+               if (c := hang_clothes(item, piece, spec["surfaces"]))]
+    vertex_lit = [o for o in pieces + clothes if o.name in VERTEX_LIT]
+    for obj in vertex_lit:
+        # Exported as a glTF extra: the viewer lights it from its vertices,
+        # and draws the sun on it when the bake left the sun out.
+        obj["vertexLight"] = "baked" if obj.name in TRANSLUCENT else "sun"
     views = outside(spec)
     site = neighbourhood(spec)
     patch = light(spec, windows)
@@ -2178,8 +2478,8 @@ def main() -> None:
     glass = [o for o in shell if o.name == "glass"]
     for obj in glass + views:
         obj.hide_render = True  # let the sun and sky through the openings while baking
-    lit = [o for o in shell if o not in glass] + pieces
-    layout_lightmap(lit)
+    lit = [o for o in shell if o not in glass] + [p for p in pieces if p.name not in VERTEX_LIT]
+    layout_lightmap(lit, spec["lightmap_size"])
     # One bake per time of day, the default first: its exposure is the
     # reference, and its neighbourhood light sets the scale for the others.
     default = spec.get("sun")
@@ -2201,13 +2501,13 @@ def main() -> None:
                          "lightmapScale": scale * exposure_t, "exposure": exposure_t,
                          "sunGain": [c * exposure_t for c in balance],
                          "skyTint": entry.get("tint") if entry else None,
-                         "colours": f"light-{label}" if site else None})
+                         "colours": light_set(label) if site or vertex_lit else None})
+        if vertex_lit:
+            vertex_light(vertex_lit, label, live_sun, balance, scale)
         if site:
             site_scale = bake_neighbourhood(site, label, site_scale)
     if default:
         set_sun(default)
-    for obj in site:  # the default time's light is the one the file opens with
-        obj.data.color_attributes.active_color = obj.data.color_attributes[lighting[0]["colours"]]
     exposure = lighting[0]["exposure"]
     # The viewer shows colour x light x lightmapScale, so the exposure rides
     # on the scale; the views out of the windows carry no baked light and
@@ -2225,7 +2525,7 @@ def main() -> None:
     preview(spec, windows, patch, out["preview"])
     bpy.ops.export_scene.gltf(filepath=out["glb"], export_format="GLB", export_apply=True,
                               export_lights=False, export_cameras=False, export_extras=True,
-                              export_vertex_color="ACTIVE", export_all_vertex_colors=True)
+                              export_vertex_color="NONE", export_attributes=True)
 
 
 main()

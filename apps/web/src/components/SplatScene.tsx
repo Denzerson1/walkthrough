@@ -33,7 +33,15 @@ import {
 import type { Manifest, Room, SunSample, Vec2 } from '../lib/manifest';
 import { FLOOR_DEFAULT_COLOR, floorColor } from '../lib/floorColors';
 import { apiUrl } from '../lib/api';
-import { Daylight, type DaylightKey, decodeLightMaps, loadDaylightKey } from '../lib/daylight';
+import {
+  Daylight,
+  type DaylightKey,
+  decodeLightMaps,
+  decodeLightSet,
+  decodeVertexLight,
+  loadDaylightKey,
+  vertexLight,
+} from '../lib/daylight';
 import { AutoExposure } from '../lib/exposure';
 import { fetchGlb } from '../lib/glb';
 import { SunShadow } from '../lib/sun';
@@ -1392,6 +1400,9 @@ async function loadBakedModel(
     lightScale1: { value: model.lightmapScale },
     lightScale2: { value: model.lightmapScale },
   };
+  // The light in vertices it opens with: the neighbourhood's, and the
+  // vertex-lit pieces' (glTF `_LIGHT_<time>`, which three lowercases).
+  const opening = model.lighting?.find((k) => k.lightmapUrl === model.lightmapUrl)?.colours;
   gltf.scene.traverse((node) => {
     if (!(node instanceof THREE.Mesh)) return;
     const source = node.material as THREE.MeshStandardMaterial;
@@ -1412,7 +1423,20 @@ async function loadBakedModel(
       material.lightMap = lightMap;
       decodeLightMaps(material, single);
     }
-    if (!baked && source.name !== "glass") material.toneMapped = false;
+    // Lit from its vertices instead: the neighbourhood (light shown as is)
+    // and the vertex-lit pieces (the generated models, clothes, the pendant:
+    // light in the light map's units over its scale). Shown from an RGB copy
+    // of the opening time's set, which Daylight then blends between times.
+    const lit = vertexLight(node);
+    const attributes = node.geometry.attributes;
+    const set = (opening && attributes[opening]) ||
+      Object.entries(attributes).find(([name]) => name.startsWith("_light_"))?.[1];
+    if (set) {
+      const light = decodeLightSet(set, lit ? model.lightmapScale : 1);
+      node.geometry.setAttribute("color", new THREE.BufferAttribute(light, 3));
+    }
+    if (lit) decodeVertexLight(material);
+    if (!baked && !lit && source.name !== "glass") material.toneMapped = false;
     // A ceiling light that is on: as bright as a lit panel, whatever the exposure.
     if (source.name === "lamp") material.color.setRGB(1.6, 1.55, 1.45);
     if (source.name === "sky") material.fog = false;

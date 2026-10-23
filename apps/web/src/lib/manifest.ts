@@ -102,7 +102,7 @@ export interface Lighting {
   exposure?: number;
   /** Multiplies the sky dome's colours: warm and dim towards dusk. */
   skyTint?: number[] | null;
-  /** The vertex colour set holding the neighbourhood's light at this time. */
+  /** The vertex attribute (glTF `_LIGHT_<time>`) holding the light in vertices at this time. */
   colours?: string | null;
   /** The sky at this time: an equirectangular panorama, u = 0.5 along -z, zenith at the top. */
   sky?: string | null;

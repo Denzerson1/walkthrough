@@ -294,14 +294,14 @@ export function Viewer() {
                   url: fileUrl(projectId, manifest.assets.model),
                   lightmapUrl: fileUrl(projectId, manifest.assets.lightmap),
                   lightmapScale: manifest.assets.lightmapScale ?? 1,
-                  // The bake order is the order of the neighbourhood's colour sets.
-                  lighting: manifest.assets.lighting?.map((l, i) => ({
+                  lighting: manifest.assets.lighting?.map((l) => ({
                     minutes: toMinutes(l.time),
                     lightmapUrl: fileUrl(projectId, l.lightmap),
                     lightmapScale: l.lightmapScale,
                     skyTint: l.skyTint,
                     skyUrl: l.sky ? fileUrl(projectId, l.sky) : null,
-                    colourSet: i,
+                    // three lowercases a glTF custom attribute's name.
+                    colours: l.colours?.toLowerCase() ?? null,
                   })),
                   sunPath: manifest.assets.sunPath,
                   viewPhoto: manifest.assets.viewPhoto

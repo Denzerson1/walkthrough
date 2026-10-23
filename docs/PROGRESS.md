@@ -7,6 +7,41 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-10-23 — Smooth light everywhere, jackets on the rails, a fabric lamp
+
+From the owner's phone: pixelated light above the kitchen and on the
+island, black triangles on the bed, patchy stools, blotchy hall walls, a
+dull lamp, and jackets wanted in both wardrobes.
+
+- **Light in vertices** for the generated models, the clothes and the
+  pendant: no atlas islands, so no black triangles or patches; a vertex far
+  darker than its neighbours takes theirs.
+- **Sharper atlas:** freed of the models; each object's islands packed tight
+  (concave, rotated) but further apart than its smoothing; walls and
+  ceilings 0.8x the share with stronger smoothing (σ 3.5), the hall's grey
+  bands gone; 4096 samples.
+- **The neighbourhood was unshaded:** exported as vertex colours, every
+  light set but the last came out white. All sets now go out as custom
+  attributes (`_LIGHT_HHMM`), RGB, square rooted, 8 bits when published.
+- **Jackets:** five coats in the hall niche, four in the open wardrobe
+  (the burgundy leather jacket facing out, as photographed), lofted with
+  collar, shoulders, sleeves, folds, a placket or zip, on hangers.
+- **Pendant:** baked as fabric, half translucent: an even cream drum, not a
+  dark one with a seam.
+- **Island:** a fine concrete grain in the photos' grey. **Stools:** their
+  fabric brought to the photos' mid grey (the legs left as they are).
+
+Verified: rebuilt in 52.3 min at 4096 samples; the owner's spots
+(kitchen wall units, island, both wardrobes, bed, stools, pendant, hall)
+re-shot at iPhone resolution on the dev server, no console errors; the
+built site ready in 1.5 s on an iPhone profile; 340 Python and 92 web
+tests, lint clean. Published model 5.0 MB (was 3.2; the houses' light now
+carries real data).
+
+Not verified: on a real phone. The views out of the windows are as before
+apart from the houses now being shaded; more photos from other spots are
+still what would help most.
+
 ## 2026-10-22 — The owner's generated sofa, bed and stools; a sun that moves
 
 - **Models:** the owner's Higgsfield (Forge 3D) sofa, bed and bar stool

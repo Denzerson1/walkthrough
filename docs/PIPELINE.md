@@ -310,7 +310,11 @@ cannot see; placed by hand from the capture photos):
   stone lies 3.5 cm below the oak, which stands round it as a step),
   `wardrobe` (`doors`, or door widths as `columns`;
   `handles` as fractions across the front, `[]` for none), `open-wardrobe`
-  (`drawers`), `coat-niche`, `bed`, `sofa`, `stool` (an upholstered shell
+  (`drawers`), `coat-niche` (both with clothes on the rail: coats and
+  jackets lofted through rounded sections from collar to sloping
+  shoulders, sleeves and a hem, loose folds growing downwards, on hangers,
+  hung sideways as a full rail is, in the colours of the owner's photos:
+  `CLOTHES`), `bed`, `sofa`, `stool` (an upholstered shell
   smoothed by subdivision from a cage of sections, on splayed tapering
   round legs with stretchers, meeting the seat well inside its outline),
   `tv`; `min`/`max`
@@ -372,14 +376,36 @@ A roof window's sash is one closed ring: four bars meeting end to end hid
 faces whose dark the bake spread into its corners. Each object is
 unwrapped on its own without aspect correction (with it, a photo
 texture's aspect squashed a piece's islands up to 16x and thin parts
-baked black). Furniture gets 1.5x its share of the atlas and its light a
-smoothing (σ 2 texels), as the trim does: on few texels the kitchen's white
-fronts came out blotchy. A generated model's folds unwrap into ~800
-islands whatever the angle; spaced as a box's few are, the bed's triangles
-got half a texel each and many of them showed black. Its islands are packed
-tight (`pack_islands`, concave) at 4x its share, some 6 texels a triangle,
-with less smoothing (σ 1), which would blend islands packed side by side. Oak, worktop and
-fabric carry generated textures (`photo_texture.surface_texture`).
+baked black), its islands packed tight (`pack_islands`, concave, rotated)
+but further apart than its smoothing reaches (8 texels at least): as the
+unwrap left them, half of each cell was gaps. Furniture gets 1.5x its
+share of the atlas and its light a smoothing (σ 2 texels), as the trim
+does: on few texels the kitchen's white fronts came out blotchy. Walls and
+ceilings get 0.8x and σ 3.5: their light is smooth now the sun's patches
+are drawn live, and the hall, lit only by bounce, showed the denoiser's
+blotches as grey bands.
+
+**Light in vertices:** the generated models, the clothes and the pendant
+are lit per vertex, not from the atlas: the models' folds unwrap into ~800
+islands whatever the angle, and the bed's triangles got half a texel each
+and showed black; at 4x the share, packed tight, a few still did and the
+stools' rims came out in patches. Each time of day is baked into a colour
+attribute (`_light_HHMM`, as the neighbourhood's), without the sun's
+direct light, in the light map's units over its scale; a vertex far darker
+than those round it (inside a fold cutting through another) takes theirs,
+and each is blended with them a little. The pendant's shade is fabric:
+baked as half diffuse, half translucent (COMBINED, with what passes
+through), it is lit through from its bright side as the real one is, not
+a dark drum lit from the kitchen; its sun stays baked. The sets go out as
+glTF custom attributes (`_LIGHT_1730`): as vertex colours the exporter
+wrote every set but the last as white, and the neighbourhood's houses had
+stood unshaded at all times but one. They are RGB (a colour attribute's
+fourth channel was a quarter of the model) and square rooted, so the site
+export's 8 bits (`--quantize-generic 8`) keep the dark; the viewer squares
+them. Seven sets on 120,000 vertices: the published model is 5.2 MB. Oak, worktop and fabric carry
+generated textures (`photo_texture.surface_texture`); the worktop's is a
+fine sandy grain over faint clouds (a soft mottling alone read as a blur
+up close), in the grey of the owner's photos.
 
 **Viewer:** shows `flat.glb` unlit (colour × baked light), antialiased,
 with neutral tone mapping (AgX greyed colours into a render's look),

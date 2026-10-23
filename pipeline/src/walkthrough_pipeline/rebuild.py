@@ -54,7 +54,7 @@ SURFACES: dict[str, tuple[str, float, str | None]] = {
     "gloss": ("#f4f4f2", 0.12, None),        # kitchen fronts, high gloss
     "white": ("#efefec", 0.6, None),         # carcasses, appliances
     "plinth": ("#dedcd8", 0.6, None),
-    "stone": ("#7d7c79", 0.45, "stone"),     # concrete-look worktop
+    "stone": ("#8b8a87", 0.45, "stone"),     # concrete-look worktop (kitchentray1-3)
     "alu": ("#a3a4a2", 0.35, None),          # grip channels
     "steel": ("#b6b7b5", 0.3, None),         # handles, tap, oven trim
     "black": ("#0f1011", 0.15, None),        # hob, oven glass, TV
@@ -66,8 +66,13 @@ SURFACES: dict[str, tuple[str, float, str | None]] = {
     "boucle": ("#e8e3d9", 1.0, "boucle"),
     "fabric": ("#8c8884", 0.9, None),        # bar stools: a smooth grey suede
     "beech": ("#c4915f", 0.45, None),        # the stools' legs
-    "coats": ("#2e2b2c", 0.95, None),
-    "coat-light": ("#b3a792", 0.95, None),  # a trench in the hall niche
+    "coat-light": ("#b3a792", 0.95, None),   # clothes on the rails: a pale trench,
+    "coat-navy": ("#262c38", 0.95, None),    # a navy wool coat,
+    "coat-camel": ("#9c7a58", 0.95, None),   # a camel one,
+    "knit-grey": ("#8a8781", 1.0, None),     # a grey knit jacket,
+    "leather": ("#4a1f22", 0.45, None),      # the burgundy leather jacket (garderobe1),
+    "puffer": ("#1d1f24", 0.5, None),        # a black puffer
+    "denim": ("#44556e", 0.9, None),         # and a denim jacket
     "shade": ("#f3efe5", 0.8, None),
     "glass-shelf": ("#dfe7e6", 0.05, None),
     "frame": ("#6b5038", 0.5, None),
