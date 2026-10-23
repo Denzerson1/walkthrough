@@ -310,11 +310,13 @@ cannot see; placed by hand from the capture photos):
   stone lies 3.5 cm below the oak, which stands round it as a step),
   `wardrobe` (`doors`, or door widths as `columns`;
   `handles` as fractions across the front, `[]` for none), `open-wardrobe`
-  (`drawers`), `coat-niche` (both with clothes on the rail: coats and
-  jackets lofted through rounded sections from collar to sloping
-  shoulders, sleeves and a hem, loose folds growing downwards, on hangers,
-  hung sideways as a full rail is, in the colours of the owner's photos:
-  `CLOTHES`), `bed`, `sofa`, `stool` (an upholstered shell
+  (`drawers`), `coat-niche` (both with coats and jackets on the rail,
+  facing out and fanned as in the owner's photos, `CLOTHES`: each body its
+  front-view outline inflated, a V the lining shows through with lapels
+  along it, a collar band, a placket or zip, pocket flaps, folds growing
+  to the hem, sleeves hanging from rounded shoulders, on a hook; hung
+  sideways, a rail of tubes read as rolled-up sacks), `bed`, `sofa`,
+  `stool` (an upholstered shell
   smoothed by subdivision from a cage of sections, on splayed tapering
   round legs with stretchers, meeting the seat well inside its outline),
   `tv`; `min`/`max`

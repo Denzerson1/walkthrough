@@ -69,10 +69,9 @@ SURFACES: dict[str, tuple[str, float, str | None]] = {
     "coat-light": ("#b3a792", 0.95, None),   # clothes on the rails: a pale trench,
     "coat-navy": ("#262c38", 0.95, None),    # a navy wool coat,
     "coat-camel": ("#9c7a58", 0.95, None),   # a camel one,
-    "knit-grey": ("#8a8781", 1.0, None),     # a grey knit jacket,
     "leather": ("#4a1f22", 0.45, None),      # the burgundy leather jacket (garderobe1),
-    "puffer": ("#1d1f24", 0.5, None),        # a black puffer
-    "denim": ("#44556e", 0.9, None),         # and a denim jacket
+    "denim": ("#44556e", 0.9, None),         # and a denim jacket;
+    "lining": ("#1f1d1e", 0.8, None),        # their insides, seen in the V
     "shade": ("#f3efe5", 0.8, None),
     "glass-shelf": ("#dfe7e6", 0.05, None),
     "frame": ("#6b5038", 0.5, None),

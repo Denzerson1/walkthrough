@@ -7,6 +7,16 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-10-23 — Jackets that read as jackets
+
+The owner: the clothes did not look like jackets (hung sideways, a row of
+rounded tubes). Now three per rail, facing out and fanned as in the
+owner's photo: bodies inflated from a front-view outline, a V with lapels
+and the lining showing, a collar band, a placket (a zip on the leather
+jacket), pocket flaps, folds, sleeves from rounded shoulders. The grid's
+middle columns follow the V, so its edges run straight. Checked in a
+Blender render of the clothes alone, then rebuilt and deployed.
+
 ## 2026-10-23 — Smooth light everywhere, jackets on the rails, a fabric lamp
 
 From the owner's phone: pixelated light above the kitchen and on the

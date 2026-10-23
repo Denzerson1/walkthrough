@@ -1243,93 +1243,159 @@ def stool(bm: bmesh.types.BMesh, w: float, h: float, d: float, slot, surfaces: d
     box_uvs(bm, wood, (0.03, 0.03, seat), surfaces["beech"].get("tile", (1.0, 1.0)))
 
 
-#: What hangs on a rail, from the left: (surface, length, thickness,
-#: facing), hung sideways as a full rail is, so the front shows a row of
-#: sleeves, or facing out. The open wardrobe as photographed (garderobe1-3):
-#: the burgundy leather jacket facing out at the right, a pale trench beside
-#: it; the hall niche: long coats.
+#: What hangs on a rail, from the left: (surface, length, turn in degrees,
+#: shift along the rail as a share of it). Facing out and fanned a little,
+#: as the owner's open wardrobe has them (garderobe1-3: the burgundy leather
+#: jacket in front, a pale one beside it); hung sideways, edge on, a rail of
+#: them read as rolled-up sacks.
 CLOTHES = {
-    # Short enough to clear the boxes on the glass shelf below the rail.
-    "open-wardrobe": [("coat-navy", 0.72, 0.12, False), ("knit-grey", 0.62, 0.11, False),
-                      ("coat-light", 0.72, 0.12, False), ("leather", 0.58, 0.14, True)],
-    "coat-niche": [("coat-camel", 1.0, 0.13, False), ("coat-navy", 1.05, 0.12, False),
-                   ("puffer", 0.72, 0.18, False), ("coat-light", 1.08, 0.12, False),
-                   ("denim", 0.6, 0.1, False)],
+    "open-wardrobe": [("coat-navy", 0.74, -28, 0.22), ("coat-light", 0.72, -14, 0.5),
+                      ("leather", 0.58, 8, 0.76)],
+    "coat-niche": [("coat-camel", 0.98, -24, 0.2), ("coat-navy", 1.02, -10, 0.5),
+                   ("denim", 0.6, 12, 0.8)],
 }
-
-
 #: Zipped rather than buttoned: their placket is a steel zip.
-ZIPPED = {"leather", "puffer"}
+ZIPPED = {"leather"}
 
 
-def loft(bm: bmesh.types.BMesh, sections: list[tuple], frame: tuple, material: int,
-         n: int = 24, power: float = 3.0, phase: float = 0.0) -> None:
+def loft(bm: bmesh.types.BMesh, sections: list[tuple], place, material: int,
+         n: int = 16, dome: bool = False) -> None:
     """
-    A closed tube through `sections` (height, centre across and along the
-    garment's own frame, half-sizes there, folds 0-1), capped both ends: a
-    rounded rectangle (superellipse of `power`) at each, with loose folds
-    where asked. `frame` = (x, y, turn) places the garment's frame.
+    A closed tube through round `sections` (centre across, along and up the
+    garment, radii across and along), capped at its foot and, with `dome`,
+    rounded over at its head: a sleeve. `place` maps the garment's (across
+    its front, along its shoulders, height) to the piece's frame.
     """
-    x, y, turn = frame
-    c, s_ = math.cos(turn), math.sin(turn)
     loops = []
-    for z, ox, oy, ax, ay, fold in sections:
-        loop = []
-        for k in range(n):
-            t = 2 * math.pi * k / n
-            ct, st = math.cos(t), math.sin(t)
-            f = 1 + fold * (0.05 * math.sin(5 * t + phase) + 0.03 * math.sin(9 * t - phase))
-            lx = ox + ax * math.copysign(abs(ct) ** (2 / power), ct) * f
-            ly = oy + ay * math.copysign(abs(st) ** (2 / power), st) * f
-            loop.append(bm.verts.new((x + lx * c - ly * s_, y + lx * s_ + ly * c, z)))
-        loops.append(loop)
+    for cx, cy, z, rx, ry in sections:
+        loops.append([bm.verts.new(place(cx + rx * math.cos(2 * math.pi * k / n),
+                                         cy + ry * math.sin(2 * math.pi * k / n), z))
+                      for k in range(n)])
     for upper, lower in zip(loops, loops[1:], strict=False):
         for k in range(n):
             bm.faces.new((upper[k], upper[(k + 1) % n], lower[(k + 1) % n],
                           lower[k])).material_index = material
-    for loop, (z, ox, oy, *_) in ((loops[0], sections[0]), (loops[-1], sections[-1])):
-        hub = bm.verts.new((x + ox * c - oy * s_, y + ox * s_ + oy * c, z))
-        for k in range(n):
-            bm.faces.new((loop[k], loop[(k + 1) % n], hub)).material_index = material
+    head, foot = sections[0], sections[-1]
+    top = bm.verts.new(place(head[0], head[1], head[2] + (head[4] if dome else 0.0)))
+    end = bm.verts.new(place(foot[0], foot[1], foot[2]))
+    for k in range(n):
+        bm.faces.new((loops[0][(k + 1) % n], loops[0][k], top)).material_index = material
+        bm.faces.new((loops[-1][k], loops[-1][(k + 1) % n], end)).material_index = material
 
 
 def garment(bm: bmesh.types.BMesh, x: float, ym: float, rail: float, length: float,
-            thick: float, body: float, turn: float, seed: int, cloth: int, closure: int,
-            steel: int) -> None:
+            turn: float, seed: int, cloth: int, lining: int, closure: int, steel: int) -> None:
     """
     A jacket or coat on a hanger hooked over a rail along x at depth `ym`,
-    height `rail`, in its own frame: across its front (local x, `thick`
-    deep) and along its shoulders (local y, `body` wide), turned by `turn`
-    (0: hung sideways, shoulders across the depth). A body lofted from a
-    collar over sloping shoulders down to a slightly flared hem with loose
-    folds; two sleeves hanging at its sides to cuffs above the hem; a
-    placket (or a zip) down the front. Rounded tubes alone read as sacks.
+    height `rail`, facing out (-y) when `turn` is 0, swung by `turn` about
+    its hook.
+
+    Its body is its outline inflated: a grid over the front-view outline
+    (collar band at the back of the neck, shoulders sloping down from it,
+    the chest, a slightly flared hem) whose front bulges up to 4 cm and back
+    3 cm, rounding off over the last 5 cm to the outline, where they meet.
+    On the front: a V opening the lining shows through, lapels standing up
+    along it, a placket (or a zip) below, two pocket flaps, and soft folds
+    growing towards the hem. Sleeves are tubes hanging from rounded
+    shoulders just in front of the body's sides, to cuffs above the hem.
     """
     import random
 
     rng = random.Random(seed)
-    top, t, half = rail - 0.075, thick / 2, body / 2
-    frame = (x, ym, turn)
-    sections = [(top + 0.02, -0.01, 0, 0.04, 0.065, 0),
-                (top - 0.005, -0.005, 0, 0.05, 0.08, 0),
-                (top - 0.035, 0, 0, t * 0.8, half * 0.75, 0),
-                (top - 0.075, 0, 0, t, half + 0.015, 0)]
-    for f in (0.0, 0.25, 0.5, 0.75, 1.0):
-        sections.append((top - 0.14 - f * (length - 0.14), 0, 0, t * (1 - 0.1 * f),
-                         half * (0.98 + 0.06 * f), 0.3 + 0.7 * f))
-    loft(bm, sections, frame, cloth, n=32, power=4.0, phase=rng.uniform(0, 6.3))
-    sleeve = min(0.62, length - 0.05)
+    c, s_ = math.cos(turn), math.sin(turn)
+    top = rail - 0.06
+
+    def place(front: float, across: float, z: float) -> tuple[float, float, float]:
+        # The garment's front (+front) faces -y at turn 0.
+        lx, ly = across, -front
+        return (x + lx * c - ly * s_, ym + lx * s_ + ly * c, z)
+
+    def half_width(v: float) -> float:
+        # Half the body's width `v` metres below the collar's top.
+        if v < 0.09:
+            return 0.075 + (0.205 - 0.075) * min(max((v - 0.01) / 0.08, 0.0), 1.0) ** 0.6
+        f = (v - 0.09) / max(length - 0.09, 0.1)
+        return 0.205 - 0.02 * math.sin(math.pi * min(f, 1.0)) + 0.012 * f
+
+    def shoulder(s: float) -> float:
+        # Where the body starts, down from the collar's top, across it (-1..1).
+        return 0.085 * max(0.0, abs(s) - 0.35) / 0.65
+
+    # The grid's middle columns follow the V (and below it the placket), so
+    # their edges run straight: across a plain grid they stepped.
+    outer, inner, rows = 10, 6, 44
+    cols = 2 * outer + inner
+    collar, depth_v, placket = 0.025, min(0.3, 0.42 * length), 0.045
+    phase = rng.uniform(0, 6.3)
+
+    def opening(v: float) -> float:
+        # The V's (or below it the placket's) half-width, as a share across.
+        f = min(max((v - collar) / (depth_v - collar), 0.0), 1.0)
+        return max(0.5 * (1 - f), placket)
+
+    def across(k: int, v: float) -> float:
+        w = opening(v)
+        if k <= outer:
+            return -1 + (1 - w) * k / outer
+        if k <= outer + inner:
+            return -w + 2 * w * (k - outer) / inner
+        return 1 - (1 - w) * (cols - k) / outer
+
+    front_v, back_v, rows_v = {}, {}, []
+    for j in range(rows + 1):
+        t = j / rows
+        v = t * length
+        rows_v.append(v)
+        for i in range(cols + 1):
+            s = across(i, v)
+            v_here = max(v, shoulder(s)) if j == 0 else shoulder(s) + t * (length - shoulder(s))
+            hw = half_width(v_here)
+            u = s * hw
+            edge = min((1 - abs(s)) * hw, (v_here - shoulder(s)) * 0.8, (length - v_here) * 1.5)
+            puff = min(edge / 0.05, 1.0)
+            puff = math.sqrt(max(0.0, puff * (2 - puff)))
+            drape = min(max(v_here / length, 0.0), 1.0) ** 1.5
+            fold = 0.009 * drape * (math.sin(14 * s + phase) + 0.6 * math.sin(31 * s - 2 * phase))
+            front = 0.04 * puff + fold * puff
+            back = -0.03 * puff
+            if i in (0, cols) or j in (0, rows):
+                vert = bm.verts.new(place(0.0, u, top - v_here))
+                front_v[i, j] = back_v[i, j] = vert
+                continue
+            in_v = outer < i < outer + inner and collar < v_here < depth_v
+            lapel = i in (outer, outer + inner) and v_here < depth_v + 0.02
+            if in_v:
+                front = 0.55 * front - 0.006  # the lining, a little way back inside
+            elif lapel:
+                front += 0.007  # the lapels stand up along the V
+            front_v[i, j] = bm.verts.new(place(front, u, top - v_here))
+            back_v[i, j] = bm.verts.new(place(back, u, top - v_here))
+    for j in range(rows):
+        v = (rows_v[j] + rows_v[j + 1]) / 2
+        for i in range(cols):
+            quad = [(i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1)]
+            face = bm.faces.new([front_v[k] for k in quad])
+            middle = outer <= i < outer + inner
+            face.material_index = (lining if middle and collar < v < depth_v
+                                   else closure if middle and v >= depth_v else cloth)
+            bm.faces.new([back_v[k] for k in reversed(quad)]).material_index = cloth
+    # Pocket flaps, a little proud of the front at the hips.
     for side in (-1, 1):
-        oy = side * (half + 0.035)
-        cuff = top - sleeve
-        rings = [(top - 0.05 - (top - 0.05 - cuff) * f, -0.005, oy - side * 0.012 * f,
-                  0.05 - 0.008 * f, 0.055 - 0.012 * f, 0.4 * f) for f in (0, 0.2, 0.4, 0.6, 0.8, 1)]
-        loft(bm, rings, frame, cloth, n=16, power=2.2, phase=rng.uniform(0, 6.3))
-    # The placket, or a zip, down the middle of the front.
-    strip = [(z, ax + 0.002, 0, 0.003, 0.009, 0) for z, _, _, ax, _, _ in sections[3:]]
-    loft(bm, strip, frame, closure, n=8, power=8.0)
+        v = 0.62 * length
+        for z0, z1, front in ((v, v + 0.035, 0.044),):
+            loft(bm, [(front, side * 0.11, top - z0, 0.004, 0.065),
+                      (front, side * 0.11, top - z1, 0.004, 0.065)], place, cloth, n=8)
+    # Sleeves from rounded shoulders, in front of the body's sides.
+    sleeve = min(0.6, length - 0.06)
+    for side in (-1, 1):
+        rings = []
+        for f in (0.0, 0.15, 0.35, 0.55, 0.75, 1.0):
+            v = 0.07 + f * (sleeve - 0.07)
+            rings.append((0.006, side * (half_width(0.1) + 0.01 - 0.012 * f), top - v,
+                          0.042 - 0.006 * f, 0.05 - 0.01 * f))
+        loft(bm, rings, place, cloth, n=16, dome=True)
     # The hanger's hook, up from the collar and over the rail.
-    for box in ((x - 0.002, x + 0.002, ym - 0.002, ym + 0.002, top + 0.02, rail + 0.016),
+    for box in ((x - 0.002, x + 0.002, ym - 0.002, ym + 0.002, top, rail + 0.016),
                 (x - 0.002, x + 0.002, ym - 0.022, ym + 0.002, rail + 0.012, rail + 0.016),
                 (x - 0.002, x + 0.002, ym - 0.022, ym - 0.018, rail - 0.012, rail + 0.014)):
         cube = bmesh.ops.create_cube(bm, size=1.0)
@@ -1356,32 +1422,23 @@ def hang_clothes(item: dict, piece: bpy.types.Object, surfaces: dict) -> bpy.typ
     ym = (y0 + y1) / 2
     rail = h - 0.45 if item["finish"] == "open-wardrobe" else h - 0.39
     xi0, xi1 = x0 + 0.04, x1 - 0.04
-    # Shoulder to shoulder; with the sleeves it all fits the depth.
-    body = min(0.34, d - 0.2)
-    spans = [body + 0.18 if facing else thick + 0.03 for _, _, thick, facing in hung]
-    room = max((xi1 - xi0) - sum(spans), 0.0)
-    surfaces_used = sorted({name for name, *_ in hung}) + ["steel"]
+    surfaces_used = sorted({name for name, *_ in hung}) + ["lining", "steel"]
     mesh = bpy.data.meshes.new(f"{item['id']}-clothes")
     bm = bmesh.new()
-    x = xi0
-    for i, ((name, length, thick, facing), span) in enumerate(zip(hung, spans, strict=True)):
-        x += span / 2
-        # Facing out: its front (local x) to the piece's front, -y.
-        turn = math.radians(-90 + (-1) ** i * 4 if facing else (-1) ** i * 6)
+    for i, (name, length, turn, along) in enumerate(hung):
         material = surfaces_used.index(name)
         closure = surfaces_used.index("steel") if name in ZIPPED else material
-        garment(bm, x, ym, rail, length, thick, body, turn, seed=i, cloth=material,
-                closure=closure, steel=surfaces_used.index("steel"))
-        x += span / 2 + room / len(hung)
-    # Lofted top down, the sections' faces came out facing in, and the bake
-    # lit them from inside the cloth: black.
+        garment(bm, xi0 + along * (xi1 - xi0), ym, rail, length, math.radians(turn), seed=i,
+                cloth=material, lining=surfaces_used.index("lining"), closure=closure,
+                steel=surfaces_used.index("steel"))
+    # Some faces come out wound inwards; the bake lit those from inside: black.
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     bm.to_mesh(mesh)
     bm.free()
     for name in surfaces_used:
         mesh.materials.append(surface_material(name, surfaces[name]))
     mesh.shade_smooth()
-    mesh.set_sharp_from_angle(angle=math.radians(50))
+    mesh.set_sharp_from_angle(angle=math.radians(60))
     obj = bpy.data.objects.new(mesh.name, mesh)
     bpy.context.collection.objects.link(obj)
     plain_uvs(obj)
