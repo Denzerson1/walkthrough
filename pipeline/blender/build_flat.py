@@ -882,29 +882,153 @@ def column_span(x0: float, x1: float, columns: list, tag: str) -> tuple[float, f
     return None
 
 
+#: The sink as photographed (kitchen2): a white composite inset sink, its
+#: rounded bowl over the sink cabinet and a ribbed drainboard to its right,
+#: a steel tap behind. Its bowl's opening across and deep, its depth, the
+#: bowl's corner radius, the flange round it, and the drainboard's width.
+BOWL_W, BOWL_D, BOWL_DEPTH, BOWL_R, FLANGE, DRAINBOARD = 0.38, 0.36, 0.17, 0.055, 0.035, 0.42
+
+
+def sink_outline(y0: float, lo: float,
+                 hi: float) -> tuple[float, float, float, float, float, float]:
+    """The bowl's centre (x, y) and the sink's outer edge (x0, x1, y0, y1), in the base's frame."""
+    cx, cy = (lo + hi) / 2, y0 + 0.06 + FLANGE + BOWL_D / 2
+    return (cx, cy, cx - BOWL_W / 2 - FLANGE, cx + BOWL_W / 2 + FLANGE + DRAINBOARD,
+            cy - BOWL_D / 2 - FLANGE, cy + BOWL_D / 2 + FLANGE)
+
+
 def sink(x0: float, x1: float, y0: float, y1: float, h: float, lo: float,
          hi: float) -> list[Part]:
-    """A worktop with an inset basin between lo and hi, and a tap behind it."""
-    cx = (lo + hi) / 2
-    hx0, hx1, hy0, hy1 = cx - 0.25, cx + 0.25, y0 + 0.08, y0 + 0.50
-    top, wall, rim = h - 0.04, 0.012, 0.02
-    return [
-        ("stone", (x0, hx0, y0 - 0.02, y1, top, h)),
-        ("stone", (hx1, x1, y0 - 0.02, y1, top, h)),
-        ("stone", (hx0, hx1, y0 - 0.02, hy0, top, h)),
-        ("stone", (hx0, hx1, hy1, y1, top, h)),
-        ("basin", (hx0, hx1, hy0, hy1, h - 0.19, h - 0.18)),
-        ("basin", (hx0, hx0 + wall, hy0, hy1, h - 0.18, h)),
-        ("basin", (hx1 - wall, hx1, hy0, hy1, h - 0.18, h)),
-        ("basin", (hx0 + wall, hx1 - wall, hy0, hy0 + wall, h - 0.18, h)),
-        ("basin", (hx0 + wall, hx1 - wall, hy1 - wall, hy1, h - 0.18, h)),
-        ("basin", (hx0 - rim, hx0, hy0 - rim, hy1 + rim, h, h + 0.006)),
-        ("basin", (hx1, hx1 + rim, hy0 - rim, hy1 + rim, h, h + 0.006)),
-        ("basin", (hx0, hx1, hy0 - rim, hy0, h, h + 0.006)),
-        ("basin", (hx0, hx1, hy1, hy1 + rim, h, h + 0.006)),
-        ("steel", (cx - 0.022, cx + 0.022, hy1 + 0.03, hy1 + 0.074, h, h + 0.30)),
-        ("steel", (cx - 0.012, cx + 0.012, hy1 - 0.16, hy1 + 0.07, h + 0.276, h + 0.30)),
-    ]
+    """The worktop round the sink's cut-out; the sink itself is build_sink's."""
+    _, _, hx0, hx1, hy0, hy1 = sink_outline(y0, lo, hi)
+    # Inside the flange's rounded corners, so the cut never shows past them.
+    hx0, hx1, hy0, hy1 = hx0 + 0.03, hx1 - 0.03, hy0 + 0.03, hy1 - 0.03
+    top = h - 0.04
+    return [("stone", (x0, hx0, y0 - 0.02, y1, top, h)),
+            ("stone", (hx1, x1, y0 - 0.02, y1, top, h)),
+            ("stone", (hx0, hx1, y0 - 0.02, hy0, top, h)),
+            ("stone", (hx0, hx1, hy1, y1, top, h))]
+
+
+def rounded_rect(cx: float, cy: float, half_w: float, half_d: float, r: float,
+                 n: int) -> list[tuple[float, float]]:
+    """`n` points round a rounded rectangle, evenly along its edge, from its right side's middle."""
+    r = max(min(r, half_w, half_d), 1e-4)
+    straight_w, straight_d = 2 * (half_w - r), 2 * (half_d - r)
+    arc = math.pi * r / 2
+    length = 2 * (straight_w + straight_d) + 4 * arc
+    corners = [(half_w - r, half_d - r), (-(half_w - r), half_d - r),
+               (-(half_w - r), -(half_d - r)), (half_w - r, -(half_d - r))]
+    # The edge as runs: (start point, direction) of the straights, arcs round the corners.
+    pts = []
+    for k in range(n):
+        t = length * k / n
+        t = (t + straight_d / 2) % length  # start at the right side's middle
+        for side in range(4):
+            run = straight_d if side % 2 == 0 else straight_w
+            if t < run:
+                if side == 0:
+                    x, y = half_w, -(half_d - r) + t
+                elif side == 1:
+                    x, y = (half_w - r) - t, half_d
+                elif side == 2:
+                    x, y = -half_w, (half_d - r) - t
+                else:
+                    x, y = -(half_w - r) + t, -half_d
+                break
+            t -= run
+            if t < arc:
+                ccx, ccy = corners[side]
+                angle = (side * math.pi / 2) + t / r
+                x, y = ccx + r * math.cos(angle), ccy + r * math.sin(angle)
+                break
+            t -= arc
+        pts.append((cx + x, cy + y))
+    return pts
+
+
+def build_sink(item: dict, piece: bpy.types.Object, surfaces: dict) -> bpy.types.Object | None:
+    """
+    The kitchen base's sink, as its own object lit per vertex (its curves
+    smooth): the bowl lofted through rounded sections from its flange down
+    its walls to a floor falling to the drain, a ribbed drainboard, and a
+    round steel tap, an L with its spout over the bowl.
+    """
+    if item.get("finish") != "kitchen-base":
+        return None
+    w, h, d = item["size"]
+    x0, x1, y0 = -w / 2, w / 2, -d / 2
+    span = column_span(x0, x1, (item.get("options") or {}).get("columns", [[0, 1]]), "sink")
+    if not span:
+        return None
+    cx, cy, sx0, sx1, sy0, sy1 = sink_outline(y0, *span)
+    white, steel = 0, 1
+    bm = bmesh.new()
+    n = 64
+    hw, hd = BOWL_W / 2, BOWL_D / 2
+    # The flange's outer edge square (barely rounded), so the drainboard
+    # meets it along a straight edge: rounded, it left a crack to the cut-out.
+    rings = [(hw + FLANGE, hd + FLANGE, 0.002, h),
+             (hw + FLANGE, hd + FLANGE, 0.002, h + 0.006),
+             (hw + 0.006, hd + 0.006, BOWL_R + 0.006, h + 0.006),
+             (hw, hd, BOWL_R, h - 0.004),
+             (hw - 0.006, hd - 0.006, BOWL_R - 0.006, h - 0.06),
+             (hw - 0.014, hd - 0.014, BOWL_R - 0.014, h - BOWL_DEPTH + 0.025),
+             (hw - 0.03, hd - 0.03, BOWL_R - 0.025, h - BOWL_DEPTH)]
+    loops = [[bm.verts.new((px, py, z))
+              for px, py in rounded_rect(cx, cy, a, b, r, n)] for a, b, r, z in rings]
+    for upper, lower in zip(loops, loops[1:], strict=False):
+        for k in range(n):
+            bm.faces.new((upper[k], upper[(k + 1) % n], lower[(k + 1) % n], lower[k]))
+    drain = [bm.verts.new((cx + 0.04 * math.cos(2 * math.pi * k / n),
+                           cy + 0.04 * math.sin(2 * math.pi * k / n), h - BOWL_DEPTH - 0.004))
+             for k in range(n)]
+    for k in range(n):  # the floor, falling to the drain
+        bm.faces.new((loops[-1][k], loops[-1][(k + 1) % n], drain[(k + 1) % n], drain[k]))
+    hub = bm.verts.new((cx, cy, h - BOWL_DEPTH - 0.006))
+    for k in range(n):
+        bm.faces.new((drain[k], drain[(k + 1) % n], hub)).material_index = steel
+    # Facing up out of the bowl: the floor's normal points up.
+    floor = next(f for f in hub.link_faces)
+    floor.normal_update()
+    if floor.normal.z < 0:
+        bmesh.ops.reverse_faces(bm, faces=bm.faces[:])
+    # The drainboard beside it, its ribs running along it.
+    board_x0 = cx + hw + FLANGE - 0.001
+    boxes = [(white, (board_x0, sx1, sy0, sy1, h, h + 0.0059))]
+    for k in range(7):
+        yy = sy0 + 0.07 + k * (sy1 - sy0 - 0.14) / 6
+        boxes.append((white, (board_x0 + 0.04, sx1 - 0.04, yy - 0.004, yy + 0.004,
+                              h + 0.006, h + 0.01)))
+    for material, (bx0, bx1, by0, by1, bz0, bz1) in boxes:
+        cube = bmesh.ops.create_cube(bm, size=1.0)
+        bmesh.ops.scale(bm, verts=cube["verts"], vec=(bx1 - bx0, by1 - by0, bz1 - bz0))
+        bmesh.ops.translate(bm, verts=cube["verts"],
+                            vec=((bx0 + bx1) / 2, (by0 + by1) / 2, (bz0 + bz1) / 2))
+        for face in {f for v in cube["verts"] for f in v.link_faces}:
+            face.material_index = material
+    # The tap: a round base, a column, a spout reaching out over the bowl, a lever.
+    tx, ty = cx + hw - 0.02, sy1 + 0.03
+    for a, b, r0, r1 in (((tx, ty, h), (tx, ty, h + 0.06), 0.026, 0.024),
+                         ((tx, ty, h + 0.06), (tx, ty, h + 0.30), 0.0145, 0.0145),
+                         ((tx, ty + 0.006, h + 0.29), (tx, ty - 0.2, h + 0.29), 0.012, 0.011),
+                         ((tx, ty - 0.2, h + 0.296), (tx, ty - 0.2, h + 0.255), 0.013, 0.012),
+                         ((tx, ty, h + 0.11), (tx + 0.08, ty, h + 0.135), 0.006, 0.005)):
+        for face in tube(bm, a, b, r0, r1, segments=20):
+            face.material_index = steel
+    mesh = bpy.data.meshes.new(f"{item['id']}-sink")
+    bm.to_mesh(mesh)
+    bm.free()
+    mesh.materials.append(surface_material("basin", surfaces["basin"]))
+    mesh.materials.append(surface_material("steel", surfaces["steel"]))
+    mesh.shade_smooth()
+    mesh.set_sharp_from_angle(angle=math.radians(50))
+    obj = bpy.data.objects.new(mesh.name, mesh)
+    bpy.context.collection.objects.link(obj)
+    plain_uvs(obj)
+    obj.matrix_world = piece.matrix_world.copy()
+    VERTEX_LIT.add(obj.name)
+    return obj
 
 
 def finish_parts(finish: str, w: float, h: float, d: float, opts: dict) -> list[Part]:
@@ -2060,10 +2184,14 @@ def layout_lightmap(objects: list[bpy.types.Object], size: int, margin: float = 
         # across, and a drawer front's light came out black.
         bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.0,
                                  correct_aspect=False)
+        # A small piece's cell cannot spare the full gap: at 9% of its square
+        # per island, the packer shrank every island of the shelves to a point.
+        # Its smoothing is edge-preserving, so a narrower gap mixes little.
         gap = max(ISLAND_GAP, 3 * SMOOTH.get(obj.name, 1.0) + 2)
-        bpy.ops.uv.pack_islands(margin=min(gap / (side * size), 0.2),
+        bpy.ops.uv.pack_islands(margin=min(gap / (side * size), 0.02),
                                 margin_method="FRACTION", rotate=True, shape_method="CONCAVE")
         bpy.ops.object.mode_set(mode="OBJECT")
+        fit_unit_square(obj.data, hidden)
         # Unseen faces shrink to a point: in the bake, but on no texels. The
         # point is the nearest point of a seen face, not the atlas's empty
         # corner: where one shows after all (the slope's cut beside a roof
@@ -2073,6 +2201,27 @@ def layout_lightmap(objects: list[bpy.types.Object], size: int, margin: float = 
         CELLS[obj.name] = (cx, cy, side)
         for loop in obj.data.uv_layers["lightmap"].data:
             loop.uv = (cx + loop.uv[0] * side, cy + loop.uv[1] * side)
+
+
+def fit_unit_square(mesh: bpy.types.Mesh, hidden: list[bool]) -> None:
+    """
+    Scale an object's light map UVs (its seen faces') to just fill the unit
+    square, as its atlas cell expects: packed with a wide margin, a small
+    piece's islands came out past it, into the next cell or off the atlas,
+    and the shelves under the air conditioner baked black.
+    """
+    import numpy as np
+
+    uv = mesh.uv_layers["lightmap"].data
+    coords = np.empty(len(uv) * 2, np.float32)
+    uv.foreach_get("uv", coords)
+    coords = coords.reshape(-1, 2)
+    seen = [i for p, h in zip(mesh.polygons, hidden, strict=True) if not h for i in p.loop_indices]
+    if not seen:
+        return
+    lo, hi = coords[seen].min(axis=0), coords[seen].max(axis=0)
+    coords = (coords - lo) / max(float((hi - lo).max()), 1e-6)
+    uv.foreach_set("uv", coords.ravel())
 
 
 def shrink_unseen(mesh: bpy.types.Mesh, hidden: list[bool]) -> None:
@@ -2137,29 +2286,126 @@ def denoise(baked: bpy.types.Image, scratch: Path):
     return pixels.reshape(size, size, 4)
 
 
+#: How far apart two texels' light may be (in log luminance) and still be
+#: smoothed together: noise is, a shadow's edge is not. At 0.25 the noise in
+#: dim light (beside the wardrobe) counted as edges and stayed blotchy.
+EDGE = 0.5
+
+
 def smooth_within_islands(rgb, covered, sigma: float = 1.6):
     """
-    Bake noise, blurred away without bleeding between surfaces: a Gaussian
-    over covered texels only, renormalised by how much of the kernel was
-    covered. Light is smooth at texel scale, so this costs nothing visible;
-    islands sit wider apart than the kernel, so neighbours never mix.
+    Bake noise, blurred away without bleeding between surfaces or across
+    shadows: a Gaussian over covered texels only, each neighbour weighted
+    down the further its light is from this texel's (an edge-preserving,
+    bilateral blur, one axis at a time), renormalised. A plain Gaussian
+    spread the dark behind a wardrobe onto the wall beside it as a grey
+    band; islands sit wider apart than the kernel, so neighbours never mix.
     """
     import numpy as np
 
-    radius = int(3 * sigma)
-    x = np.arange(-radius, radius + 1)
-    kernel = np.exp(-(x**2) / (2 * sigma**2))
-    kernel /= kernel.sum()
+    radius = max(int(3 * sigma), 1)
+    offsets = np.arange(-radius, radius + 1)
+    kernel = np.exp(-(offsets**2) / (2 * sigma**2))
+    out = rgb.astype(np.float32)
+    for axis in (0, 1):
+        lum = np.log(np.maximum(out.mean(axis=-1), 1e-6))
+        total = np.zeros_like(out)
+        norm = np.zeros(out.shape[:2], np.float32)
+        for k, w in zip(offsets, kernel, strict=True):
+            near = np.roll(lum, k, axis=axis)
+            weight = (w * np.roll(covered, k, axis=axis)
+                      * np.exp(-((near - lum) ** 2) / (2 * EDGE**2))).astype(np.float32)
+            total += np.roll(out, k, axis=axis) * weight[..., None]
+            norm += weight
+        out = np.where(covered[..., None], total / np.maximum(norm, 1e-6)[..., None], 0.0)
+    return out.astype(np.float32)
 
-    def blur(a):
-        for axis in (0, 1):
-            a = sum(np.roll(a, k, axis=axis) * w for k, w in zip(x, kernel, strict=True))
-        return a
 
-    weight = covered.astype(np.float32)
-    total = blur(rgb * weight[..., None])
-    norm = blur(weight)[..., None]
-    return np.where(covered[..., None], total / np.maximum(norm, 1e-6), 0.0).astype(np.float32)
+#: Light below this share of the atlas's median is a surface no light
+#: reaches: where it touches another (the ceiling over a wall's top, a wall
+#: behind a wardrobe). A dark underside still gets some bounce.
+OCCLUDED = 0.003
+
+
+def fill_occluded(image: bpy.types.Image) -> None:
+    """
+    Surfaces in contact, given the light of the visible surface beside them,
+    before the denoiser and filtering see them. A face runs on past where it
+    meets another (the ceiling's underside over the walls' tops, a wall
+    behind a wardrobe), and the texels along the line mixed light with
+    black: a dashed dark joint, a stepped band beside the wardrobe.
+    """
+    import numpy as np
+
+    size = image.size[0]
+    pixels = np.empty(size * size * 4, np.float32)
+    image.pixels.foreach_get(pixels)
+    rgba = pixels.reshape(size, size, 4)
+    rgb = rgba[..., :3]
+    covered = rgb.max(axis=-1) > 0
+    if not covered.any():
+        return
+    light = rgb.mean(axis=-1)
+    lit = covered & (light > OCCLUDED * float(np.median(light[covered])))
+    dark = covered & ~lit
+    rgb[dark] = fill_gaps(rgb, lit)[dark]
+    image.pixels.foreach_set(pixels)
+
+
+def despeckle(rgb, covered):
+    """
+    Each texel the median of its 3x3: single-texel dots and one-texel dashes
+    (the denoiser's leftovers along a joint) gone, while a real edge, which
+    runs on, stays. Before the edge-preserving smoothing, which keeps a
+    speckle as it would an edge.
+    """
+    import numpy as np
+
+    n = rgb.shape[0]
+    padded = np.pad(fill_gaps(rgb, covered, reach=2), ((1, 1), (1, 1), (0, 0)), mode="edge")
+    window = np.lib.stride_tricks.sliding_window_view(padded, (3, 3), axis=(0, 1))
+    median = np.median(window.reshape(n, n, 3, 9), axis=-1).astype(np.float32)
+    return np.where(covered[..., None], median, 0.0).astype(np.float32)
+
+
+def downsample(rgb, covered, factor: int):
+    """Each texel the mean of the baked sub-texels under it; covered where any is."""
+    import numpy as np
+
+    n = rgb.shape[0] // factor
+    weight = covered.reshape(n, factor, n, factor).astype(np.float32)
+    total = (rgb.reshape(n, factor, n, factor, 3) * weight[..., None]).sum(axis=(1, 3))
+    count = weight.sum(axis=(1, 3))
+    return (np.where(count[..., None] > 0, total / np.maximum(count, 1.0)[..., None], 0.0)
+            .astype(np.float32), count > 0)
+
+
+def fill_gaps(rgb, covered, reach: int = 48):
+    """
+    The atlas's empty texels filled in from the islands round them, ring by
+    ring: left black, the filtering that samples a texel's neighbours (and
+    its smaller mip levels, further away) pulled black into every island's
+    edge, as dark lines along the wall's top and the door frames.
+    """
+    import numpy as np
+
+    out = rgb.copy()
+    filled = covered.copy()
+    for _ in range(reach):
+        if filled.all():
+            break
+        known = filled.astype(np.float32)
+        total = np.zeros_like(out)
+        count = np.zeros(filled.shape, np.float32)
+        for axis, step in ((0, 1), (0, -1), (1, 1), (1, -1)):
+            total += np.roll(out * known[..., None], step, axis=axis)
+            count += np.roll(known, step, axis=axis)
+        reached = ~filled & (count > 0)
+        out[reached] = total[reached] / count[reached][:, None]
+        filled |= reached
+    if filled.any():
+        out[~filled] = out[filled].mean(axis=0)
+    return out
 
 
 #: Exposure, like a camera's: the room's typical surface lands at this
@@ -2182,8 +2428,16 @@ WARMTH = (1.08, 1.0, 0.86)
 LIGHTMAP_GAMMA = 4.0
 
 
-def save_lightmap(baked: bpy.types.Image, path: str,
-                  scratch: Path) -> tuple[float, float, list[float]]:
+#: The atlas is baked this many times finer than it is published, and
+#: averaged down: a quarter of the samples per texel for the same bake
+#: time, but four texels in each, edges sampled four times across, and the
+#: denoiser working on the finer image. Small parts (the sink, the shelves
+#: under the air conditioner) had come out speckled.
+SUPERSAMPLE = 2
+
+
+def save_lightmap(baked: bpy.types.Image, path: str, scratch: Path,
+                  size: int) -> tuple[float, float, list[float]]:
     """
     The float bake as an 8-bit JPEG (light ** 1/LIGHTMAP_GAMMA), plus the
     scale that undoes it, the exposure the room wants, and the colour
@@ -2198,14 +2452,15 @@ def save_lightmap(baked: bpy.types.Image, path: str,
     """
     import numpy as np
 
-    size = baked.size[0]
-    rgba = np.empty(size * size * 4, dtype=np.float32)
+    fine = baked.size[0]
+    rgba = np.empty(fine * fine * 4, dtype=np.float32)
     baked.pixels.foreach_get(rgba)
-    rgba = rgba.reshape(size, size, 4)
+    rgba = rgba.reshape(fine, fine, 4)
     # What the bake wrote, margins included. Not the alpha: a new image is
     # opaque black throughout, so alpha marks every texel as baked.
     covered = rgba[..., :3].max(axis=-1) > 0
-    clean = denoise(baked, scratch)[..., :3]
+    clean, covered = downsample(denoise(baked, scratch)[..., :3], covered, fine // size)
+    clean = despeckle(clean, covered)
     # A light smoothing after, kept inside each island, takes the denoiser's
     # last grain off; outside the islands stays empty.
     rgb = smooth_within_islands(clean, covered, sigma=1.0)
@@ -2236,19 +2491,30 @@ def save_lightmap(baked: bpy.types.Image, path: str,
     scale = float(max(min(np.percentile(rgb.max(axis=1), 99.9), CLIP * typical), 1e-6))
     # Mostly white walls and ceilings: albedo ~0.85 under the typical light.
     exposure = min(max(EXPOSE_TO / (0.85 * max(typical, 1e-6)), 1.0), 64.0)
-    out = bpy.data.images.new("lightmap-8bit", size, size)
-    out.colorspace_settings.name = "Non-Color"
+    rgb = fill_gaps(rgb.reshape(size, size, 3), covered.reshape(size, size)).reshape(-1, 3)
     linear = np.clip(rgb / scale, 0.0, 1.0)
-    encoded = np.ones((size * size, 4), dtype=np.float32)
-    # An 8-bit image's pixels are stored as given: encoded here.
-    encoded[:, :3] = np.power(linear, 1 / LIGHTMAP_GAMMA)
-    out.pixels.foreach_set(encoded.ravel())
-    out.filepath_raw = path
-    out.file_format = "JPEG"
-    # Image.save's own quality: the scene's render setting does not reach it,
-    # and the default (90) left blocks on white fronts once exposed.
-    out.save(quality=95)
+    encoded = np.power(linear, 1 / LIGHTMAP_GAMMA).reshape(size, size, 3)
+    write_jpeg(path, (encoded[::-1] * 255 + 0.5).astype(np.uint8))  # rows top down
     return scale, exposure, [float(c) for c in balance]
+
+
+def write_jpeg(path: str, pixels) -> None:
+    """
+    An 8-bit RGB image as a JPEG at quality 95, its colour kept at full
+    resolution (4:4:4). Blender's own JPEGs halve the colour's resolution,
+    which mixed neighbouring islands' colour into coloured specks along
+    edges; at its default quality (90) white fronts showed blocks.
+    """
+    import OpenImageIO as oiio
+
+    h, w, _ = pixels.shape
+    spec = oiio.ImageSpec(w, h, 3, "uint8")
+    spec.attribute("Compression", "jpeg:95")
+    spec.attribute("jpeg:subsampling", "4:4:4")
+    out = oiio.ImageOutput.create(path)
+    out.open(path, spec)
+    out.write_image(pixels)
+    out.close()
 
 
 #: Samples for the bake of the sun's direct light alone: one small light
@@ -2292,7 +2558,11 @@ def bake(objects: list[bpy.types.Object], size: int, path: str,
         obj.select_set(True)
     bpy.context.view_layer.objects.active = objects[0]
 
-    image = bpy.data.images.new("lightmap", size, size, float_buffer=True)
+    fine = size * SUPERSAMPLE
+    image = bpy.data.images.new("lightmap", fine, fine, float_buffer=True)
+    scene = bpy.context.scene
+    samples = scene.cycles.samples
+    scene.cycles.samples = max(samples // SUPERSAMPLE**2, 64)
     targets = []
     for mat in {m for obj in objects for m in obj.data.materials if m}:
         node = mat.node_tree.nodes.new("ShaderNodeTexImage")
@@ -2300,12 +2570,16 @@ def bake(objects: list[bpy.types.Object], size: int, path: str,
         mat.node_tree.nodes.active = node
         targets.append((mat, node))
     # A wide margin, so the denoiser blends island edges with island, not black.
+    # Margins extend each island's own edge: by default they took the light
+    # of the face beside it in 3D, which for a wall's top edge is its top
+    # face hidden in the ceiling slab, and the joint showed a dashed dark line.
     bpy.ops.object.bake(type="DIFFUSE", pass_filter={"DIRECT", "INDIRECT"}, uv_layer="lightmap",
-                        margin=6, use_clear=True)
+                        margin=6 * SUPERSAMPLE, margin_type="EXTEND", use_clear=True)
     if live_sun:
-        full = np.empty(size * size * 4, dtype=np.float32)
+        full = np.empty(fine * fine * 4, dtype=np.float32)
         image.pixels.foreach_get(full)
-        bake_sun_direct(uv_layer="lightmap", margin=6, use_clear=True)
+        bake_sun_direct(uv_layer="lightmap", margin=6 * SUPERSAMPLE, margin_type="EXTEND",
+                        use_clear=True)
         direct = np.empty_like(full)
         image.pixels.foreach_get(direct)
         full, direct = full.reshape(-1, 4), direct.reshape(-1, 4)
@@ -2313,9 +2587,12 @@ def bake(objects: list[bpy.types.Object], size: int, path: str,
         rest = np.where(full[:, :3] > 0, np.maximum(full[:, :3] - direct[:, :3], 1e-6), 0.0)
         full[:, :3] = rest
         image.pixels.foreach_set(full.ravel())
-    scale, exposure, balance = save_lightmap(image, path, scratch)
+    scene.cycles.samples = samples
+    fill_occluded(image)
+    scale, exposure, balance = save_lightmap(image, path, scratch, size)
     for mat, node in targets:
         mat.node_tree.nodes.remove(node)
+    bpy.data.images.remove(image)
     for obj in objects:
         obj.data.uv_layers.active = obj.data.uv_layers[0]
     return scale, exposure, balance
@@ -2513,7 +2790,8 @@ def main() -> None:
         ATLAS_WEIGHT.setdefault(piece.name, PIECE_WEIGHT)
         SMOOTH.setdefault(piece.name, PIECE_SMOOTH)
     clothes = [c for item, piece in zip(spec["items"], pieces, strict=True)
-               if (c := hang_clothes(item, piece, spec["surfaces"]))]
+               if (c := hang_clothes(item, piece, spec["surfaces"])
+                   or build_sink(item, piece, spec["surfaces"]))]
     vertex_lit = [o for o in pieces + clothes if o.name in VERTEX_LIT]
     for obj in vertex_lit:
         # Exported as a glTF extra: the viewer lights it from its vertices,

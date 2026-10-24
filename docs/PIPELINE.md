@@ -346,7 +346,25 @@ cannot see; placed by hand from the capture photos):
   The other dressing positions are as after it.
 
 **Light:** Cycles bakes diffuse light (direct and bounced) into one 2048
-atlas at 2048 samples, with light portals in the roof windows, denoised
+atlas, baked twice as fine (4096, a quarter of the samples per texel) and
+averaged down: the small parts (the sink, the shelves under the air
+conditioner) had come out speckled. Single-texel speckles go first (a 3x3
+median: the denoiser's leftovers along the joints showed as dots), then it
+is smoothed edge-preserving (a
+neighbour counts less the further its light is from a texel's: a plain
+blur spread the dark behind the wardrobe onto the wall as a grey band),
+and its empty texels are filled from the islands round them (left black,
+filtering pulled black into the islands' edges: dark lines along the wall
+tops and door frames). Before the denoiser, texels no light reaches
+(where a face runs on past another it touches: the ceiling's underside over
+the walls' tops, a wall behind a wardrobe) take the light of the visible
+surface beside them: mixed with black, the joints showed dashed dark lines
+and the wall beside the wardrobe a stepped band. The bake's margins extend each island's own edge
+(by default they took the light of the face beside it in 3D: for a wall's
+top, its face hidden in the ceiling slab, a dashed dark joint), and the
+JPEG keeps colour at full resolution (4:4:4, written with OpenImageIO;
+Blender's halves it, and neighbouring islands' colour showed as specks
+along edges). Baked with light portals in the roof windows, denoised
 with Open Image Denoise, stored with a gamma of 4 (steeper than sRGB: the
 dim hall, lit only by bounce, had too few of the 256 levels and showed grey
 blotches once brightened), white balanced like a camera (the shade's colour
@@ -387,8 +405,10 @@ ceilings get 0.8x and σ 3.5: their light is smooth now the sun's patches
 are drawn live, and the hall, lit only by bounce, showed the denoiser's
 blotches as grey bands.
 
-**Light in vertices:** the generated models, the clothes and the pendant
-are lit per vertex, not from the atlas: the models' folds unwrap into ~800
+**Light in vertices:** the generated models, the clothes, the pendant and
+the sink (`build_sink`: a white composite inset sink as photographed, its
+bowl lofted through rounded sections, a ribbed drainboard, a round steel
+tap) are lit per vertex, not from the atlas: the models' folds unwrap into ~800
 islands whatever the angle, and the bed's triangles got half a texel each
 and showed black; at 4x the share, packed tight, a few still did and the
 stools' rims came out in patches. Each time of day is baked into a colour

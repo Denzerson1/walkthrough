@@ -7,6 +7,45 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-10-24 — The landing page is a doorway
+
+The landing page featured whichever project sorted first (a test room
+called "bedroom") and showed no picture of anything. It now features the
+first flat with a `preview.jpg`, the still a finished flat already has for
+link cards, and opens on that still: clicking it walks in, with the
+viewer's own hint chip on it. The headline is in the display serif the
+viewer already uses for names. `/api/projects` reports `preview`, `/files`
+serves `projects/<id>/preview.jpg` (nothing else beside `scene/`), and the
+static export copies it. Tests for both; lint, vitest and pytest green.
+Screenshots in `docs/screenshots/m10-landing-*`.
+
+Not verified: Playwright's WebKit on Windows draws the variable fonts at the
+wrong weights (the old screenshot shows it too), so the iPhone shot's heavy
+headline is not what Safari shows; untested on a real iPhone. The still is
+1200 px wide and looks soft at full desktop width.
+
+## 2026-10-23 — Light without dark edges or speckle
+
+The owner: dark lines along wall tops and door frames, a grey band on the
+wall by the wardrobe, speckled light on the sink, the shelves under the air
+conditioner and the wardrobe's glass shelf. The atlas's empty texels were
+black and filtering pulled them into edges: now filled from the islands.
+The wall smoothing blurred across the wardrobe's shadow: now edge-
+preserving. The atlas is baked at 4096 and averaged down to 2048. The
+shelves under the air conditioner and the unit itself came out black or
+flat: the gap kept between islands, 9% of a small piece's square per
+island, made the packer shrink all of its islands to a point (every face
+one texel); it is capped at 2%, and each piece's UVs are fitted to its
+cell. The sink is rebuilt as photographed (kitchen2): a white composite
+inset sink, a rounded bowl with its flange, a drain, a ribbed drainboard,
+a round steel tap, lit per vertex; it was a square steel tray. The dashed
+joints at the ceiling were not the gaps: the ceiling's underside runs on
+over the walls' tops, where no light reaches, and the texels along the
+joint mixed in its black (so did a wall behind the wardrobe): such texels
+now take the light of the visible surface beside them before denoising.
+Checked on the light map (black texels 0.5%, the dark interiors), rebuilt
+and deployed.
+
 ## 2026-10-23 — Jackets that read as jackets
 
 The owner: the clothes did not look like jackets (hung sideways, a row of
