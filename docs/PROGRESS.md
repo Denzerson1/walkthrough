@@ -33,6 +33,10 @@ headline is not what Safari shows; untested on a real iPhone. The still is
   bits (rings on the bright hall wall). The sink 24 cm deep, its cabinet cut
   away under the bowl: solid, its top had shown 4 cm down as the floor.
   Matte, as a composite sink is (it had glinted like chrome).
+- The air conditioner rounded all round (bevelled by edge weight: its
+  thin seam and outlet had clamped the bevel to nothing); the open shelf
+  under it as deep as the wall units beside it; the flat exposed a little
+  brighter (EXPOSE_TO 0.25).
 - Jackets subdivided once, their light smoothed twice: hems and folds had
   zig-zagged, their light was patchy.
 

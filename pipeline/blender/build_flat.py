@@ -834,7 +834,7 @@ BLOCK_COLOURS = {"bed": "#e9e4dc", "sofa": "#8d9390", "tv": "#1b1c1e", "applianc
 FRONT_T, GAP, GRIP = 0.019, 0.003, 0.03  # front thickness, gap between fronts, grip channel
 
 #: Rounded edges, for the pieces that have them: (bevel width, segments).
-SOFTNESS = {"sofa": (0.06, 5), "bed": (0.025, 3), "air-con": (0.02, 3), "tv": (0.003, 1)}
+SOFTNESS = {"sofa": (0.06, 5), "bed": (0.025, 3), "air-con": (0.07, 8), "tv": (0.003, 1)}
 
 Part = tuple[str, tuple[float, float, float, float, float, float]]
 
@@ -1111,8 +1111,12 @@ def finish_parts(finish: str, w: float, h: float, d: float, opts: dict) -> list[
     if finish == "panel":
         return [(opts.get("surface", "oak-warm"), (x0, x1, y0, y1, 0, h))]
     if finish == "air-con":
+        # A split unit: a body rounded all round, its front panel's seam,
+        # and the outlet underneath, towards the front, as it is seen from
+        # the room below.
         return [("white", (x0, x1, y0, y1, 0, h)),
-                ("vent", (x0 + 0.05, x1 - 0.05, y0 - 0.002, y0 + 0.03, 0.02, 0.07))]
+                ("vent", (x0 + 0.08, x1 - 0.08, y0 - 0.001, y0 + 0.002, 0.105, 0.108)),
+                ("vent", (x0 + 0.09, x1 - 0.09, y0 + 0.075, y1 - 0.075, -0.002, 0.001))]
     if finish == "island":
         # Drawers face the kitchen (-y); the free end is +x, the bar side +y.
         # The top is one piece: island_top. The drawers and their grip sit
@@ -1682,6 +1686,22 @@ def finished(item: dict, surfaces: dict) -> bpy.types.Object:
     if item["finish"] in SOFTNESS:
         bevel = obj.modifiers.new("soft", "BEVEL")
         bevel.width, bevel.segments = SOFTNESS[item["finish"]]
+        if item["finish"] == "air-con":
+            # Only the body's edges (its vertices span its width; the seam's
+            # and the outlet's are inset): bevelled too, their few
+            # millimetres clamped the whole bevel to nothing. Its curves
+            # smooth, its flat faces flat.
+            import numpy as np
+
+            mesh = obj.data
+            xs = np.array([v.co.x for v in mesh.vertices])
+            body = (np.abs(xs - xs.min()) < 1e-5) | (np.abs(xs - xs.max()) < 1e-5)
+            weight = mesh.attributes.new("bevel_weight_edge", "FLOAT", "EDGE")
+            for edge in mesh.edges:
+                weight.data[edge.index].value = float(all(body[i] for i in edge.vertices))
+            bevel.limit_method = "WEIGHT"
+            mesh.shade_smooth()
+            bevel.harden_normals = True
     if not obj.data.uv_layers:
         plain_uvs(obj)
     return obj
@@ -2481,7 +2501,7 @@ def fill_gaps(rgb, covered, reach: int = 48):
 #: clips — sun on a window lining, which a photograph blows out too. Set
 #: against the owner's photos: white walls in shade read grey, as a phone
 #: exposing for the window shows them; brighter read as a render.
-EXPOSE_TO, CLIP = 0.22, 16.0
+EXPOSE_TO, CLIP = 0.25, 16.0
 #: How far the light's colour cast is taken out, like a camera's white
 #: balance: the shade's colour is made neutral (walls white, as in the
 #: photos), sun patches stay warmer than it. 1 would neutralise it fully.
