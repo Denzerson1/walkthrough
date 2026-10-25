@@ -58,7 +58,7 @@ SURFACES: dict[str, tuple[str, float, str | None]] = {
     "alu": ("#a3a4a2", 0.35, None),          # grip channels
     "steel": ("#b6b7b5", 0.3, None),         # handles, tap, oven trim
     "black": ("#0f1011", 0.15, None),        # hob, oven glass, TV
-    "basin": ("#f3f3f1", 0.25, None),
+    "basin": ("#f3f3f1", 0.55, None),
     "oak": ("#d3c0a5", 0.55, "veneer"),      # the wardrobe: pale oak
     "oak-warm": ("#a98b6b", 0.5, "veneer"),  # kitchen backsplash, island, shelves
     "wenge": ("#2f231e", 0.5, "veneer"),     # the bed base
@@ -71,7 +71,7 @@ SURFACES: dict[str, tuple[str, float, str | None]] = {
     "coat-camel": ("#9c7a58", 0.95, None),   # a camel one,
     "leather": ("#4a1f22", 0.45, None),      # the burgundy leather jacket (garderobe1),
     "denim": ("#44556e", 0.9, None),         # and a denim jacket;
-    "lining": ("#1f1d1e", 0.8, None),        # their insides, seen in the V
+    "lining": ("#3b3633", 0.8, None),        # their insides, seen in the V
     "shade": ("#f3efe5", 0.8, None),
     "glass-shelf": ("#dfe7e6", 0.05, None),
     "frame": ("#6b5038", 0.5, None),
@@ -522,6 +522,7 @@ def scene_spec(
         "floors": floors,
         "skylights": skylights,
         "lights": dressing.get("lights", []),
+        "strips": dressing.get("strips", []),
         "outside": outside_view(paths, wanted),
         "site": surroundings,
         "surfaces": surfaces(paths, dressing.get("surfaces")),

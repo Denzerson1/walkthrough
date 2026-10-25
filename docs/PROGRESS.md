@@ -24,6 +24,18 @@ wrong weights (the old screenshot shows it too), so the iPhone shot's heavy
 headline is not what Safari shows; untested on a real iPhone. The still is
 1200 px wide and looks soft at full desktop width.
 
+## 2026-10-24 — Under-cabinet lights; the last blotches
+
+- LED strips under the wall units and the lowest shelf: a warm, soft pool
+  on the worktop by the sink and the hob, on in the evening (fading in as
+  the sun drops below 30 degrees), off by day.
+- Dim nooks (behind the shelves) smoothed widely; light maps dithered to 8
+  bits (rings on the bright hall wall). The sink 24 cm deep, its cabinet cut
+  away under the bowl: solid, its top had shown 4 cm down as the floor.
+  Matte, as a composite sink is (it had glinted like chrome).
+- Jackets subdivided once, their light smoothed twice: hems and folds had
+  zig-zagged, their light was patchy.
+
 ## 2026-10-23 — Light without dark edges or speckle
 
 The owner: dark lines along wall tops and door frames, a grey band on the

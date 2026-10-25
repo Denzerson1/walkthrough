@@ -886,7 +886,7 @@ def column_span(x0: float, x1: float, columns: list, tag: str) -> tuple[float, f
 #: rounded bowl over the sink cabinet and a ribbed drainboard to its right,
 #: a steel tap behind. Its bowl's opening across and deep, its depth, the
 #: bowl's corner radius, the flange round it, and the drainboard's width.
-BOWL_W, BOWL_D, BOWL_DEPTH, BOWL_R, FLANGE, DRAINBOARD = 0.38, 0.36, 0.17, 0.055, 0.035, 0.42
+BOWL_W, BOWL_D, BOWL_DEPTH, BOWL_R, FLANGE, DRAINBOARD = 0.38, 0.36, 0.24, 0.055, 0.035, 0.42
 
 
 def sink_outline(y0: float, lo: float,
@@ -908,6 +908,23 @@ def sink(x0: float, x1: float, y0: float, y1: float, h: float, lo: float,
             ("stone", (hx1, x1, y0 - 0.02, y1, top, h)),
             ("stone", (hx0, hx1, y0 - 0.02, hy0, top, h)),
             ("stone", (hx0, hx1, hy1, y1, top, h))]
+
+
+def sink_carcass(carcass: Part, y0: float, h: float, lo: float, hi: float) -> list[Part]:
+    """
+    The sink cabinet's carcass with a well cut down round the bowl: whole,
+    its top showed 4 cm under the worktop as the bowl's floor.
+    """
+    material, (x0, x1, cy0, cy1, z0, z1) = carcass
+    cx, cy, *_ = sink_outline(y0, lo, hi)
+    hx0, hx1 = cx - BOWL_W / 2 - 0.01, cx + BOWL_W / 2 + 0.01
+    hy0, hy1 = cy - BOWL_D / 2 - 0.01, cy + BOWL_D / 2 + 0.01
+    low = h - BOWL_DEPTH - 0.02
+    return [(material, (x0, x1, cy0, cy1, z0, low)),
+            (material, (x0, hx0, cy0, cy1, low, z1)),
+            (material, (hx1, x1, cy0, cy1, low, z1)),
+            (material, (hx0, hx1, cy0, hy0, low, z1)),
+            (material, (hx0, hx1, hy1, cy1, low, z1))]
 
 
 def rounded_rect(cx: float, cy: float, half_w: float, half_d: float, r: float,
@@ -972,9 +989,11 @@ def build_sink(item: dict, piece: bpy.types.Object, surfaces: dict) -> bpy.types
              (hw + FLANGE, hd + FLANGE, 0.002, h + 0.006),
              (hw + 0.006, hd + 0.006, BOWL_R + 0.006, h + 0.006),
              (hw, hd, BOWL_R, h - 0.004),
-             (hw - 0.006, hd - 0.006, BOWL_R - 0.006, h - 0.06),
-             (hw - 0.014, hd - 0.014, BOWL_R - 0.014, h - BOWL_DEPTH + 0.025),
-             (hw - 0.03, hd - 0.03, BOWL_R - 0.025, h - BOWL_DEPTH)]
+             # Walls near plumb, so the depth shows from above.
+             (hw - 0.002, hd - 0.002, BOWL_R - 0.002, h - 0.08),
+             (hw - 0.004, hd - 0.004, BOWL_R - 0.004, h - 0.16),
+             (hw - 0.008, hd - 0.008, BOWL_R - 0.008, h - BOWL_DEPTH + 0.025),
+             (hw - 0.022, hd - 0.022, BOWL_R - 0.02, h - BOWL_DEPTH)]
     loops = [[bm.verts.new((px, py, z))
               for px, py in rounded_rect(cx, cy, a, b, r, n)] for a, b, r, z in rings]
     for upper, lower in zip(loops, loops[1:], strict=False):
@@ -1050,9 +1069,9 @@ def finish_parts(finish: str, w: float, h: float, d: float, opts: dict) -> list[
 
     if finish == "kitchen-base":
         columns = opts.get("columns", [[0, 1]])
-        parts = [plinth, carcass, top_grip,
-                 *fronts(x0, x1, 0.1 + GAP, h - 0.04 - GRIP, y0, [c[:2] for c in columns])]
         span = column_span(x0, x1, columns, "sink")
+        parts = [plinth, *(sink_carcass(carcass, y0, h, *span) if span else [carcass]), top_grip,
+                 *fronts(x0, x1, 0.1 + GAP, h - 0.04 - GRIP, y0, [c[:2] for c in columns])]
         return parts + (sink(x0, x1, y0, y1, h, *span) if span else [worktop])
     if finish == "oven":
         zt = h - 0.04 - GRIP - GAP
@@ -1475,11 +1494,11 @@ def garment(bm: bmesh.types.BMesh, x: float, ym: float, rail: float, length: flo
             v_here = max(v, shoulder(s)) if j == 0 else shoulder(s) + t * (length - shoulder(s))
             hw = half_width(v_here)
             u = s * hw
-            edge = min((1 - abs(s)) * hw, (v_here - shoulder(s)) * 0.8, (length - v_here) * 1.5)
-            puff = min(edge / 0.05, 1.0)
+            edge = min((1 - abs(s)) * hw, (v_here - shoulder(s)) * 0.8, length - v_here)
+            puff = min(edge / 0.06, 1.0)
             puff = math.sqrt(max(0.0, puff * (2 - puff)))
             drape = min(max(v_here / length, 0.0), 1.0) ** 1.5
-            fold = 0.009 * drape * (math.sin(14 * s + phase) + 0.6 * math.sin(31 * s - 2 * phase))
+            fold = 0.008 * drape * (math.sin(9 * s + phase) + 0.35 * math.sin(17 * s - 2 * phase))
             front = 0.04 * puff + fold * puff
             back = -0.03 * puff
             if i in (0, cols) or j in (0, rows):
@@ -1561,10 +1580,17 @@ def hang_clothes(item: dict, piece: bpy.types.Object, surfaces: dict) -> bpy.typ
     bm.free()
     for name in surfaces_used:
         mesh.materials.append(surface_material(name, surfaces[name]))
-    mesh.shade_smooth()
-    mesh.set_sharp_from_angle(angle=math.radians(60))
     obj = bpy.data.objects.new(mesh.name, mesh)
     bpy.context.collection.objects.link(obj)
+    # Subdivided once: the grid's hems and edges zig-zagged, its folds creased.
+    smooth = obj.modifiers.new("smooth", "SUBSURF")
+    smooth.levels = smooth.render_levels = 1
+    bpy.ops.object.select_all(action="DESELECT")
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.modifier_apply(modifier=smooth.name)
+    mesh.shade_smooth()
+    mesh.set_sharp_from_angle(angle=math.radians(60))
     plain_uvs(obj)
     obj.matrix_world = piece.matrix_world.copy()
     VERTEX_LIT.add(obj.name)
@@ -1923,6 +1949,43 @@ def ceiling_lights(spec: dict) -> list[bpy.types.Object]:
         panel.visible_shadow = False
         fixtures.append(panel)
     return fixtures
+
+
+#: Under-cabinet strips are on once the sun is this low (degrees), fading
+#: in from STRIPS_FADE above it: lit in the evening, off by day, as people
+#: use them; the slider blends the bakes either side, so they fade.
+STRIPS_ON, STRIPS_FADE = 10.0, 20.0
+
+
+def strip_lights(spec: dict) -> list[bpy.types.Object]:
+    """
+    LED strips under the kitchen's wall units and lowest shelf (the
+    dressing's `strips`: `from` and `to` at the underside, x, y, z; `power`
+    in W per metre; `colour`): a long narrow area light shining down, warm
+    and soft, so the worktop gets a smooth pool of light. The strip itself
+    sits out of sight behind the units' front edge.
+    """
+    lamps = []
+    for i, strip in enumerate(spec.get("strips") or []):
+        a, b = Vector(P(*strip["from"])), Vector(P(*strip["to"]))
+        length = (b - a).length
+        lamp = bpy.data.lights.new(f"strip-{i}", "AREA")
+        lamp.shape, lamp.size, lamp.size_y = "RECTANGLE", length, 0.025
+        lamp.color = strip.get("colour", (1.0, 0.84, 0.66))
+        obj = bpy.data.objects.new(lamp.name, lamp)
+        bpy.context.collection.objects.link(obj)
+        obj.location = (a + b) / 2 - Vector((0, 0, 0.004))  # shines down its -Z
+        obj["power"] = strip.get("power", 4.0) * length
+        lamps.append(obj)
+    return lamps
+
+
+def set_strips(lamps: list[bpy.types.Object], entry: dict | None) -> None:
+    """The strips' power at this time of day: off by day, on in the evening."""
+    elevation = entry["elevation"] if entry else 0.0
+    on = min(max((STRIPS_ON + STRIPS_FADE - elevation) / STRIPS_FADE, 0.0), 1.0)
+    for obj in lamps:
+        obj.data.energy = obj["power"] * on
 
 
 def light(spec: dict, windows: list[dict]) -> tuple[float, float] | None:
@@ -2286,6 +2349,11 @@ def denoise(baked: bpy.types.Image, scratch: Path):
     return pixels.reshape(size, size, 4)
 
 
+#: Below this share of the atlas's median light, a texel's light is also
+#: smoothed widely (DIM_SIGMA texels, edge-preserving), fully so in the
+#: dark: in nooks (behind the shelves, under the wall units) the bake's
+#: last noise came out as blotches.
+DIM_BELOW, DIM_SIGMA = 0.6, 6.0
 #: How far apart two texels' light may be (in log luminance) and still be
 #: smoothed together: noise is, a shadow's edge is not. At 0.25 the noise in
 #: dim light (beside the wardrobe) counted as edges and stayed blotchy.
@@ -2470,6 +2538,11 @@ def save_lightmap(baked: bpy.types.Image, path: str, scratch: Path,
             rows = slice(int(cy * size), min(size, int((cy + side) * size) + 1))
             cols = slice(int(cx * size), min(size, int((cx + side) * size) + 1))
             rgb[rows, cols] = smooth_within_islands(clean[rows, cols], covered[rows, cols], sigma)
+    light = rgb.mean(axis=-1)
+    if covered.any():
+        share = light / max(float(np.median(light[covered])), 1e-6)
+        dim = np.clip((DIM_BELOW - share) / DIM_BELOW, 0.0, 1.0)[..., None]
+        rgb = rgb * (1 - dim) + smooth_within_islands(rgb, covered, DIM_SIGMA) * dim
     rgb = rgb.reshape(-1, 3)
     covered = covered.ravel()
     balance = np.array(WARMTH, dtype=np.float32)
@@ -2494,7 +2567,10 @@ def save_lightmap(baked: bpy.types.Image, path: str, scratch: Path,
     rgb = fill_gaps(rgb.reshape(size, size, 3), covered.reshape(size, size)).reshape(-1, 3)
     linear = np.clip(rgb / scale, 0.0, 1.0)
     encoded = np.power(linear, 1 / LIGHTMAP_GAMMA).reshape(size, size, 3)
-    write_jpeg(path, (encoded[::-1] * 255 + 0.5).astype(np.uint8))  # rows top down
+    # Dithered to 8 bits: rounded, a smooth gradient (the hall lamp's light
+    # on a wall) showed its steps as rings; half a level of noise hides them.
+    noise = np.random.default_rng(0).random(encoded.shape, dtype=np.float32)
+    write_jpeg(path, np.clip(encoded[::-1] * 255 + noise, 0, 255).astype(np.uint8))
     return scale, exposure, [float(c) for c in balance]
 
 
@@ -2709,7 +2785,9 @@ def smooth_vertices(mesh: bpy.types.Mesh, rgb):
     mean = around(rgb)
     dark = rgb.mean(axis=1) < 0.4 * mean.mean(axis=1)
     rgb = np.where(dark[:, None], mean, rgb)
-    return 0.5 * rgb + 0.5 * around(rgb)
+    for _ in range(2):  # once left the clothes' light patchy
+        rgb = 0.5 * rgb + 0.5 * around(rgb)
+    return rgb
 
 
 def sun_path(path: list[dict], lighting: list[dict]) -> list[dict]:
@@ -2801,6 +2879,7 @@ def main() -> None:
     site = neighbourhood(spec)
     patch = light(spec, windows)
     ceiling_lights(spec)
+    strips = strip_lights(spec)
 
     out = spec["out"]
     if preview_only:
@@ -2825,6 +2904,7 @@ def main() -> None:
     for entry in times:
         if entry:
             set_sun(entry)
+        set_strips(strips, entry)
         label = entry["time"].replace(":", "") if entry else "default"
         path = out["lightmap"].replace(".jpg", f"-{label}.jpg")
         scale, auto, balance = bake(lit, spec["lightmap_size"], path, Path(out["meta"]).parent,

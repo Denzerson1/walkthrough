@@ -289,6 +289,11 @@ cannot see; placed by hand from the capture photos):
 - `lights`: the flat's own ceiling lights that are on (`at` x, y, z; `size`,
   `power` in W, `colour`): a soft area light under a flush lit panel. A space
   lit only by bounce bakes noisy; its own lamp makes its light clean.
+- `strips`: LED strips under the kitchen's wall units and lowest shelf
+  (`from`, `to` at the underside; `power` in W per metre; `colour`): a long
+  narrow area light, out of sight behind the front edge, a warm pool on the
+  worktop. On in the evening, off by day: full once the sun is below 10
+  degrees, fading in over the 20 above, so the slider fades them.
 - `viewPhotos`: the owner's photos out of two windows (`photo`, the
   `window` it was taken from, `keep`: the part to use, as fractions, to cut
   the window's own frame away). They are the view: see "The view out" below.
@@ -350,7 +355,9 @@ atlas, baked twice as fine (4096, a quarter of the samples per texel) and
 averaged down: the small parts (the sink, the shelves under the air
 conditioner) had come out speckled. Single-texel speckles go first (a 3x3
 median: the denoiser's leftovers along the joints showed as dots), then it
-is smoothed edge-preserving (a
+is smoothed edge-preserving, widely (σ 6) where the light is dim (nooks
+behind the shelves kept blotches), and dithered to 8 bits (the hall lamp's
+smooth falloff on a wall showed its steps as rings) (a
 neighbour counts less the further its light is from a texel's: a plain
 blur spread the dark behind the wardrobe onto the wall as a grey band),
 and its empty texels are filled from the islands round them (left black,
