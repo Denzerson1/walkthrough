@@ -834,7 +834,8 @@ BLOCK_COLOURS = {"bed": "#e9e4dc", "sofa": "#8d9390", "tv": "#1b1c1e", "applianc
 FRONT_T, GAP, GRIP = 0.019, 0.003, 0.03  # front thickness, gap between fronts, grip channel
 
 #: Rounded edges, for the pieces that have them: (bevel width, segments).
-SOFTNESS = {"sofa": (0.06, 5), "bed": (0.025, 3), "air-con": (0.07, 8), "tv": (0.003, 1)}
+SOFTNESS = {"sofa": (0.06, 5), "bed": (0.025, 3), "air-con": (0.09, 10), "tv": (0.003, 1),
+            "bed-frame": (0.004, 1)}
 
 Part = tuple[str, tuple[float, float, float, float, float, float]]
 
@@ -1111,12 +1112,11 @@ def finish_parts(finish: str, w: float, h: float, d: float, opts: dict) -> list[
     if finish == "panel":
         return [(opts.get("surface", "oak-warm"), (x0, x1, y0, y1, 0, h))]
     if finish == "air-con":
-        # A split unit: a body rounded all round, its front panel's seam,
-        # and the outlet underneath, towards the front, as it is seen from
-        # the room below.
+        # A split unit as photographed: flat front and top, the front
+        # curving round into the underside, and the outlet underneath
+        # behind the curve, as it is seen from the room below.
         return [("white", (x0, x1, y0, y1, 0, h)),
-                ("vent", (x0 + 0.08, x1 - 0.08, y0 - 0.001, y0 + 0.002, 0.105, 0.108)),
-                ("vent", (x0 + 0.09, x1 - 0.09, y0 + 0.075, y1 - 0.075, -0.002, 0.001))]
+                ("vent", (x0 + 0.09, x1 - 0.09, y0 + 0.095, y1 - 0.03, -0.002, 0.001))]
     if finish == "island":
         # Drawers face the kitchen (-y); the free end is +x, the bar side +y.
         # The top is one piece: island_top. The drawers and their grip sit
@@ -1200,6 +1200,11 @@ def finish_parts(finish: str, w: float, h: float, d: float, opts: dict) -> list[
                 ("wenge", (x0 + 0.04, x1 - 0.04, y0 + 0.04, y1 - 0.04, 0, 0.02)),
                 ("linen", (x0 + 0.03, x1 - 0.03, y0 + 0.03, y1 - 0.03, base, h - 0.08)),
                 ("linen", (x0 - 0.02, x1 + 0.01, y0 - 0.02, y1 + 0.02, h - 0.14, h))]
+    if finish == "bed-frame":
+        # Under a generated bed whose own frame is dropped (dropDarker): the
+        # platform as photographed (bed1-3), dark wood, its plinth set back.
+        return [("wenge", (x0, x1, y0, y1, 0.03, h)),
+                ("wenge", (x0 + 0.05, x1 - 0.05, y0 + 0.05, y1 - 0.05, 0, 0.03))]
     if finish == "sofa":
         return [("boucle", (x0, x1, y0, y1, 0, 0.42)),
                 ("boucle", (x0, x1, y1 - 0.26, y1, 0.42, h)),
@@ -1687,18 +1692,23 @@ def finished(item: dict, surfaces: dict) -> bpy.types.Object:
         bevel = obj.modifiers.new("soft", "BEVEL")
         bevel.width, bevel.segments = SOFTNESS[item["finish"]]
         if item["finish"] == "air-con":
-            # Only the body's edges (its vertices span its width; the seam's
-            # and the outlet's are inset): bevelled too, their few
-            # millimetres clamped the whole bevel to nothing. Its curves
-            # smooth, its flat faces flat.
+            # Only the body's edges (its vertices span its width; the
+            # outlet's are inset): bevelled too, its few millimetres clamped
+            # the whole bevel to nothing. The front's lower edge rounded
+            # fully, the rest eased. Its curves smooth, its flat faces flat.
             import numpy as np
 
             mesh = obj.data
-            xs = np.array([v.co.x for v in mesh.vertices])
-            body = (np.abs(xs - xs.min()) < 1e-5) | (np.abs(xs - xs.max()) < 1e-5)
+            co = np.array([v.co[:] for v in mesh.vertices])
+            body = ((np.abs(co[:, 0] - co[:, 0].min()) < 1e-5)
+                    | (np.abs(co[:, 0] - co[:, 0].max()) < 1e-5))
+            low_front = ((np.abs(co[:, 1] - co[body, 1].min()) < 1e-5)
+                         & (np.abs(co[:, 2] - co[body, 2].min()) < 1e-5))
             weight = mesh.attributes.new("bevel_weight_edge", "FLOAT", "EDGE")
             for edge in mesh.edges:
-                weight.data[edge.index].value = float(all(body[i] for i in edge.vertices))
+                ends = list(edge.vertices)
+                weight.data[edge.index].value = (
+                    0.0 if not body[ends].all() else 1.0 if low_front[ends].all() else 0.12)
             bevel.limit_method = "WEIGHT"
             mesh.shade_smooth()
             bevel.harden_normals = True
@@ -1716,8 +1726,83 @@ MODEL_FACES_PER_M, MODEL_MAP = 8_000, 1024
 LIGHTENED: dict[str, bpy.types.Mesh] = {}
 
 
+#: drop_darker keeps every face in the upper part of a model, this share of
+#: its height: a bed's frame stops below half of it.
+DROP_BELOW = 0.55
+
+
+#: ... and drops only dark patches of at least this many faces: a duvet face
+#: at the edge of its UV island reads the dark gutter round it, and on its
+#: own, dropped, left a hole.
+DROP_PATCH = 50
+
+
+def drop_darker(obj: bpy.types.Object, below: float) -> None:
+    """
+    Remove the dark patches (DROP_PATCH) in the lower part of a model
+    (DROP_BELOW), dark where a face's own colour (its material's base colour
+    map at its middle) is darker than `below` in linear luminance: a
+    generated bed's frame, which decimated into a lumpy black mass under the
+    duvet and is drawn instead (bed-frame).
+    """
+    import numpy as np
+
+    mesh = obj.data
+    n = len(mesh.polygons)
+    uv = np.empty(len(mesh.loops) * 2, np.float32)
+    mesh.uv_layers[0].data.foreach_get("uv", uv)
+    uv = uv.reshape(-1, 2)
+    start, count, slot = (np.empty(n, np.int32) for _ in range(3))
+    mesh.polygons.foreach_get("loop_start", start)
+    mesh.polygons.foreach_get("loop_total", count)
+    mesh.polygons.foreach_get("material_index", slot)
+    middle = np.add.reduceat(uv, start) / count[:, None]
+    centre = np.empty(n * 3, np.float32)
+    mesh.polygons.foreach_get("center", centre)
+    height = centre.reshape(-1, 3)[:, 2]
+    low = height < height.min() + DROP_BELOW * (height.max() - height.min())
+    light = np.ones(n, np.float32)
+    weights = np.array([0.2126, 0.7152, 0.0722], np.float32)
+    for i, mat in enumerate(mesh.materials):
+        bsdf = next(nd for nd in mat.node_tree.nodes if nd.type == "BSDF_PRINCIPLED")
+        links = bsdf.inputs["Base Color"].links
+        if not links or links[0].from_node.type != "TEX_IMAGE":
+            continue
+        image = links[0].from_node.image
+        w, h = image.size
+        pixels = np.empty(w * h * 4, np.float32)
+        image.pixels.foreach_get(pixels)
+        mine = slot == i
+        at = np.clip(middle[mine] % 1.0, 0.0, 0.9999)
+        rgb = pixels.reshape(h, w, 4)[(at[:, 1] * h).astype(int), (at[:, 0] * w).astype(int), :3]
+        light[mine] = rgb @ weights
+    dark = (light < below) & low
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+    bm.faces.ensure_lookup_table()
+    drop, seen = [], np.zeros(n, bool)
+    for first in np.flatnonzero(dark):
+        if seen[first]:
+            continue
+        seen[first] = True
+        patch, todo = [], [bm.faces[first]]
+        while todo:
+            face = todo.pop()
+            patch.append(face)
+            for edge in face.edges:
+                for near in edge.link_faces:
+                    if dark[near.index] and not seen[near.index]:
+                        seen[near.index] = True
+                        todo.append(near)
+        if len(patch) >= DROP_PATCH:
+            drop += patch
+    bmesh.ops.delete(bm, geom=drop, context="FACES")
+    bm.to_mesh(mesh)
+    bm.free()
+
+
 def lighten(obj: bpy.types.Object, model: str, size: float, scratch: Path,
-            colour: str | None = None) -> None:
+            colour: str | None = None, darker: float | None = None) -> None:
     """
     An imported model made light enough for a phone: decimated, unwrapped
     afresh and its colour baked onto that from the original, smooth shaded,
@@ -1731,13 +1816,21 @@ def lighten(obj: bpy.types.Object, model: str, size: float, scratch: Path,
     far it is decimated; `colour` (sRGB hex, read off a photo of the piece)
     is what its fabric is brought to (match_colour): a generated sofa came
     grey where the real one is cream, the stools a pale grey where theirs is
-    a mid grey.
+    a mid grey. `darker`: faces darker than this are dropped first
+    (drop_darker), so the triangles go to what is kept.
     """
     if model in LIGHTENED:
         imported = obj.data
         obj.data = LIGHTENED[model].copy()
         bpy.data.meshes.remove(imported)
         return
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
+    bm.to_mesh(obj.data)
+    bm.free()
+    if darker is not None:  # welded first, or its patches stop at every seam
+        drop_darker(obj, darker)
     original = obj.copy()
     original.data = obj.data.copy()
     bpy.context.collection.objects.link(original)
@@ -1746,11 +1839,6 @@ def lighten(obj: bpy.types.Object, model: str, size: float, scratch: Path,
     bpy.ops.object.select_all(action="DESELECT")
     bpy.context.view_layer.objects.active = obj
     obj.select_set(True)
-    bm = bmesh.new()
-    bm.from_mesh(obj.data)
-    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
-    bm.to_mesh(obj.data)
-    bm.free()
     if faces > target:
         decimate = obj.modifiers.new("lighten", "DECIMATE")
         decimate.ratio = target / faces
@@ -1864,7 +1952,10 @@ def match_colour(image: bpy.types.Image, colour: str) -> None:
 
 def furniture(item: dict, surfaces: dict, scratch: Path) -> bpy.types.Object:
     """The piece's model (or a block), fitted to its scanned box and turned to face `front`."""
+    import numpy as np
+
     w, h, d = item["size"]
+    bounds = None
     if item.get("finish") and not item["model"]:
         obj = finished(item, surfaces)
     elif item["model"]:
@@ -1887,8 +1978,14 @@ def furniture(item: dict, surfaces: dict, scratch: Path) -> bpy.types.Object:
             leftover = bpy.data.objects.get(name)
             if leftover is not None and leftover is not obj:
                 bpy.data.objects.remove(leftover, do_unlink=True)
-        lighten(obj, item["model"], max(w, h, d), scratch,
-                (item.get("options") or {}).get("colour"))
+        # Fitted to its box as imported: what lighten drops (a bed's frame)
+        # must not stretch what is left.
+        co = np.empty(len(obj.data.vertices) * 3, np.float32)
+        obj.data.vertices.foreach_get("co", co)
+        bounds = co.reshape(-1, 3).min(axis=0), co.reshape(-1, 3).max(axis=0)
+        opts = item.get("options") or {}
+        lighten(obj, item["model"], max(w, h, d), scratch, opts.get("colour"),
+                opts.get("dropDarker"))
         VERTEX_LIT.add(item["id"])
     else:
         mesh = bpy.data.meshes.new(item["id"])
@@ -1909,11 +2006,13 @@ def furniture(item: dict, surfaces: dict, scratch: Path) -> bpy.types.Object:
     if not item.get("finish") or item["model"]:
         # Normalise: footprint centred on the origin, standing on z = 0,
         # stretched to the scanned box. Finished pieces are built to size.
-        xs = [v.co.x for v in obj.data.vertices]
-        ys = [v.co.y for v in obj.data.vertices]
-        zs = [v.co.z for v in obj.data.vertices]
-        centre = Vector(((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2, min(zs)))
-        extent = Vector((max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs)))
+        if bounds is None:
+            co = np.empty(len(obj.data.vertices) * 3, np.float32)
+            obj.data.vertices.foreach_get("co", co)
+            bounds = co.reshape(-1, 3).min(axis=0), co.reshape(-1, 3).max(axis=0)
+        lo, hi = (Vector(b.tolist()) for b in bounds)
+        centre = Vector(((lo.x + hi.x) / 2, (lo.y + hi.y) / 2, lo.z))
+        extent = hi - lo
         scale = Matrix.Diagonal((w / max(extent.x, 1e-6), d / max(extent.y, 1e-6),
                                  h / max(extent.z, 1e-6), 1.0))
         obj.data.transform(scale @ Matrix.Translation(-centre))
@@ -2209,7 +2308,10 @@ def preview(spec: dict, windows: list[dict], patch: tuple[float, float] | None,
 #: light came out in grey blotches. Walls and ceilings, their light smooth
 #: since the sun's patches are drawn live, give up a little to the
 #: furniture, whose narrow sides baked speckled.
-ATLAS_WEIGHT = {"trim": 6.0, "wall": 0.8, "ceiling": 0.8}
+ATLAS_WEIGHT = {"trim": 6.0, "wall": 0.8, "ceiling": 0.8,
+                # Thin boards with frames on them, seen close: at a piece's
+                # share their light came out pixelated.
+                "kitchen-shelves": 5.0, "backsplash": 2.0, "shelf-back": 2.0}
 #: Texels between two islands in the atlas, at least: wider than the
 #: smoothing kernel (smooth_within_islands, 3 sigma), so neighbours never mix.
 ISLAND_GAP = 8
