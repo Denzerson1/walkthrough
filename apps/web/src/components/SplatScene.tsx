@@ -14,18 +14,19 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import {
   DEFAULT_FOV,
-  TRANSITION_MS,
+  type Glide,
+  Path,
   applyZoom,
   clampPitch,
   dragSensitivity,
-  easeInOutCubic,
-  lerpAngle,
-  lerpVec3,
+  glidePose,
   lookDirection,
+  walkDuration,
 } from '../lib/camera';
 import {
   BODY_RADIUS,
   boxInsidePolygon,
+  angleDelta,
   canStand,
   moveWithCollision,
   roomAt,
@@ -48,7 +49,7 @@ import { SunShadow, sunAt } from '../lib/sun';
 import { DEFAULT_ITEM_SIZE, FurnitureLayer } from '../lib/furnitureLayer';
 import { IS_PHONE } from '../lib/furnitureModels';
 import { Quality } from '../lib/quality';
-import { nearestOnStretch } from '../lib/rooms';
+import { nearestOnStretch, route } from '../lib/rooms';
 import type { CatalogItem } from '../lib/store';
 import type { ViewerState } from '../lib/viewerState';
 
@@ -183,11 +184,6 @@ const TURN_KEYS = new Map<string, number>([
   ['E', -1],
 ]);
 
-interface CameraTarget {
-  position: [number, number, number];
-  yaw: number;
-}
-
 /** How fast a glide covers ground, and the bounds on how long one may take. */
 const GLIDE_SPEED = 2.6;
 const GLIDE_MIN_MS = 320;
@@ -250,14 +246,7 @@ export function SplatScene({
     /** Turn rate in -1..1, from the keyboard. */
     turn: 0,
     keys: new Set<string>(),
-    transition: null as null | {
-      from: CameraTarget;
-      to: CameraTarget;
-      startedAt: number;
-      durationMs: number;
-      /** A tap ends it where it was going (the entry move). */
-      skippable?: boolean;
-    },
+    transition: null as Glide | null,
   });
   /**
    * Rooms for collision, kept in a ref because the render loop is created
@@ -633,12 +622,16 @@ export function SplatScene({
     let activeAt = lastFrame;
     let drawnAt = 0;
     const lastPose = [Number.NaN, 0, 0, 0, 0, 0];
+    // One loop only: everything that wants a frame goes through here, so a
+    // wake from inside a frame cannot start a second loop beside the first.
+    const schedule = () => {
+      if (!raf && !document.hidden && !lost) raf = requestAnimationFrame(tick);
+    };
     const wake = () => {
-      activeAt = performance.now();
-      if (!raf && !document.hidden && !lost) {
-        lastFrame = performance.now();
-        raf = requestAnimationFrame(tick);
-      }
+      const now = performance.now();
+      if (!raf) lastFrame = now;
+      activeAt = now;
+      schedule();
     };
     const wakeOn = ['pointerdown', 'pointermove', 'pointerup', 'keydown', 'wheel', 'input'] as const;
     for (const type of wakeOn) window.addEventListener(type, wake, { passive: true });
@@ -687,9 +680,13 @@ export function SplatScene({
 
       if (st.transition) {
         const elapsed = now - st.transition.startedAt;
-        const t = easeInOutCubic(elapsed / st.transition.durationMs);
-        st.position = lerpVec3(st.transition.from.position, st.transition.to.position, t);
-        st.yaw = lerpAngle(st.transition.from.yaw, st.transition.to.yaw, t);
+        const pose = glidePose(st.transition, elapsed / st.transition.durationMs);
+        st.position = pose.position;
+        if (!st.transition.lookFree) {
+          // Unwrapped onto the yaw it had, so it never spins the long way round.
+          st.yaw += angleDelta(st.yaw, pose.yaw);
+          if (pose.pitch !== undefined) st.pitch = pose.pitch;
+        }
         if (elapsed >= st.transition.durationMs) {
           st.transition = null;
           // A walk can end in a different room than it started in.
@@ -716,13 +713,13 @@ export function SplatScene({
       const pose = [...st.position, st.yaw, st.pitch, st.fov];
       if (pose.some((v, i) => v !== lastPose[i])) {
         lastPose.splice(0, 6, ...pose);
-        wake();
+        activeAt = now;
       }
       if (furniture.tick(now)) activeAt = now;
       const idle = now - activeAt;
       // Asleep: the next wake() starts the loop again.
       if (idle > IDLE_AFTER_MS + SETTLE_MS) return;
-      raf = requestAnimationFrame(tick);
+      schedule();
       if (idle > IDLE_AFTER_MS && now - drawnAt < IDLE_FRAME_MS) return;
       const sinceDrawn = Math.min(IDLE_FRAME_MS / 1000, (now - drawnAt) / 1000);
       // Frame times count only at full rate, once the scene is in.
@@ -738,7 +735,7 @@ export function SplatScene({
       renderer.render(scene, camera);
       placeLabels(labelRefs.current, camera, renderer.domElement);
     };
-    raf = requestAnimationFrame(tick);
+    schedule();
 
     return () => {
       disposed = true;
@@ -1033,8 +1030,8 @@ export function SplatScene({
       st.pitch = clampPitch(st.pitch + (e.clientY - lastY) * k);
       lastX = e.clientX;
       lastY = e.clientY;
-      // A manual look cancels an in-flight transition's rotation.
-      if (st.transition) st.transition.to.yaw = st.yaw;
+      // Looking round during a glide takes the gaze over from it.
+      if (st.transition) st.transition.lookFree = true;
     };
 
     const onPointerUp = (e: PointerEvent) => {
@@ -1196,15 +1193,20 @@ export function SplatScene({
       return;
     }
 
-    sceneRef.current?.wake();
+    // Walked, not cut: through the openings on the way, at a walk's pace,
+    // levelling the gaze as it goes.
+    const from: Vec2 = [st.position[0], st.position[2]];
+    const to: Vec2 = [room.waypoint.position[0], room.waypoint.position[2]];
+    const leaving = roomAt(from, manifest.rooms)?.id ?? room.id;
+    const path = new Path(route(manifest.rooms, leaving, room.id, from, to));
     st.transition = {
-      from: { position: st.position, yaw: st.yaw },
-      to: { position: room.waypoint.position, yaw: room.waypoint.yaw },
+      from: { position: st.position, yaw: st.yaw, pitch: st.pitch },
+      to: { position: room.waypoint.position, yaw: room.waypoint.yaw, pitch: 0 },
       startedAt: performance.now(),
-      // A jump between rooms is a cut across the plan, not a walk, so it takes
-      // the same beat however far it is.
-      durationMs: TRANSITION_MS,
+      durationMs: walkDuration(path.length),
+      path,
     };
+    sceneRef.current?.wake();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the entry only matters on the first placement
   }, [activeRoomId, manifest]);
 
