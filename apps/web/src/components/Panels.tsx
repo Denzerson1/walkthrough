@@ -1,10 +1,10 @@
 /** Bottom-sheet panels: floors, furniture and the assistant. */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { apiUrl } from '../lib/api';
 import { floorColor } from '../lib/floorColors';
 import type { CatalogItem } from '../lib/store';
-import { furnitureThumbnail } from '../lib/thumbnails';
+import type { StyleKit } from '../lib/styles';
 
 interface SheetProps {
   title: string;
@@ -154,7 +154,7 @@ function swatchFor(floor: CatalogItem): string {
 
 interface FurniturePanelProps {
   furniture: CatalogItem[];
-  styles: CatalogItem[];
+  styles: StyleKit[];
   onAdd: (itemId: string) => void;
   onApplyStyle: (styleId: string) => void;
   /** Absent where there is no layout service: the static site. */
@@ -162,40 +162,24 @@ interface FurniturePanelProps {
 }
 
 /**
- * One furniture tile: a render of the real mesh once it arrives, over the
- * item's colour. The colour is the placeholder rather than a grey box, so a
- * tile looks deliberate while its model loads and if the model never comes.
+ * One furniture tile: the piece's thumbnail (rendered with its model by
+ * scripts/scale-sheet.mjs), loaded only as it scrolls into view, over a
+ * neutral ground while it does.
  */
-function FurnitureTile({ item }: { item: CatalogItem }) {
-  const [src, setSrc] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!item.glb) return;
-    let cancelled = false;
-    furnitureThumbnail(item.id, item.glb, item.colors?.[0])
-      .then((url) => !cancelled && setSrc(url))
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [item.id, item.glb, item.colors]);
-
+export function FurnitureTile({ item }: { item: CatalogItem }) {
   return (
-    <span
-      className="rule relative flex aspect-square w-full items-end justify-start overflow-hidden rounded-md border p-1.5"
-      style={{ background: src ? 'var(--paper-warm)' : (item.colors?.[0] ?? '#b3aa9c') }}
-    >
-      {src && (
+    <span className="rule relative flex aspect-square w-full items-end justify-start overflow-hidden rounded-md border bg-[var(--paper-warm)] p-1.5">
+      {item.thumbnail && (
         <img
-          src={src}
+          src={apiUrl(item.thumbnail)}
           alt=""
           aria-hidden="true"
+          loading="lazy"
+          decoding="async"
           className="absolute inset-0 h-full w-full object-contain"
         />
       )}
-      <span
-        className={`measure relative text-[9px] ${src ? 'text-[var(--ink)] opacity-55' : 'text-[var(--paper)] opacity-85'}`}
-      >
+      <span className="measure relative text-[9px] text-[var(--ink)] opacity-55">
         {item.dimensionsM
           ? `${item.dimensionsM[0].toFixed(1)}×${item.dimensionsM[2].toFixed(1)}`
           : ''}
@@ -211,15 +195,12 @@ export function FurniturePanel({
   onApplyStyle,
   onAutoLayout,
 }: FurniturePanelProps) {
-  // Stocked styles first, so the obvious first click is not one that fails.
-  const ordered = [...styles].sort(
-    (a, b) => Number(b.complete ?? false) - Number(a.complete ?? false),
-  );
-  const [styleId, setStyleId] = useState<string>(
-    ordered.find((s) => s.id === 'modern')?.id ?? ordered[0]?.id ?? '',
-  );
+  // Stocked kits first, so the obvious first click is not one that fails.
+  const stocked = (kit: StyleKit) => Object.keys(kit.slots).length > 0;
+  const ordered = [...styles].sort((a, b) => Number(stocked(b)) - Number(stocked(a)));
+  const [styleId, setStyleId] = useState<string>(ordered[0]?.id ?? '');
   const selected = ordered.find((s) => s.id === styleId);
-  const unstocked = selected ? selected.complete === false : false;
+  const unstocked = selected ? !stocked(selected) : false;
 
   // Each piece belongs to exactly one theme, and the grid shows the chosen
   // theme's pieces only. Listing all 47 together put a carved gothic cabinet
@@ -250,11 +231,11 @@ export function FurniturePanel({
                 aria-pressed={styleId === style.id}
                 className={[
                   'btn tap shrink-0 px-3 py-1.5 text-[12px]',
-                  style.complete === false ? 'italic' : '',
+                  stocked(style) ? '' : 'italic',
                 ].join(' ')}
               >
                 {style.name}
-                {style.complete === false && (
+                {!stocked(style) && (
                   <span className="ml-1.5 opacity-55">· no items yet</span>
                 )}
               </button>
@@ -282,8 +263,7 @@ export function FurniturePanel({
           </div>
           {unstocked && (
             <p className="mt-2 text-[12px] opacity-60">
-              {selected?.name} has a floor and a palette but no furniture yet. Its
-              floor still applies.
+              {selected?.name} has no furniture yet.
             </p>
           )}
         </div>

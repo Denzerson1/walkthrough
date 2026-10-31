@@ -20,14 +20,21 @@ import numpy as np
 import typer
 from rich.console import Console
 
-from . import flat_geometry
+from . import flat_geometry, room_split
 from . import frames as frames_mod
 from . import outside as outside_mod
 from . import rebuild as rebuild_mod
 from . import roomplan as roomplan_mod
 from . import stray as stray_mod
 from . import train as train_mod
-from .manifest import Lighting, Manifest, Obstacle, SunSample, Waypoint
+from .manifest import (
+    Lighting,
+    Manifest,
+    Obstacle,
+    Room,
+    SunSample,
+    Waypoint,
+)
 from .paths import ProjectPaths, repo_root
 from .scene import AlignmentFailed, align_scene, export_scene, trained_ply
 
@@ -565,6 +572,8 @@ def rebuild(
         manifest.assets.sunPath = [SunSample(**t) for t in meta.get("sunPath", [])]
         manifest.rooms[0].obstacles = [Obstacle(**o) for o in meta.get("obstacles", [])]
         _outside(paths, manifest, spec, dressing)
+        (paths.work / SCANNED_ROOM).write_text(manifest.rooms[0].model_dump_json(indent=1))
+        room_split.split(manifest, manifest.rooms[0], dressing.get("rooms", []))
         manifest.write(paths.manifest)
     console.print(f"[green]Rebuilt[/green] in {(time.time() - started) / 60:.1f} min")
 
@@ -575,6 +584,29 @@ def _outside(paths: ProjectPaths, manifest: Manifest, spec: dict, dressing: dict
     for info in result["views"]:
         console.print(f"  view from a photo: {info}")
     console.print(f"  {len(result['skies'])} skies")
+
+
+#: The scan's one room, as the rebuild left it, before `rooms` cuts it up.
+SCANNED_ROOM = "scanned_room.json"
+
+
+@app.command()
+def rooms(project: str = typer.Option(..., "--project", "-p")) -> None:
+    """Cut the rebuilt flat into the rooms the dressing names, without baking it again."""
+    paths = _paths(project)
+    manifest = Manifest.load(paths.manifest)
+    scanned = paths.work / SCANNED_ROOM
+    if not scanned.is_file():
+        if len(manifest.rooms) != 1:
+            raise typer.BadParameter(f"No {SCANNED_ROOM}: rebuild the flat first.")
+        scanned.write_text(manifest.rooms[0].model_dump_json(indent=1))
+    dressing = json.loads((paths.input / "dressing.json").read_text(encoding="utf-8"))
+    room_split.split(manifest, Room.model_validate_json(scanned.read_text()),
+                     dressing.get("rooms", []))
+    manifest.write(paths.manifest)
+    for r in manifest.rooms:
+        console.print(f"  {r.name}: {len(r.walls)} walls, {len(r.openings)} openings, "
+                      f"{len(r.slots)} slots")
 
 
 @app.command()

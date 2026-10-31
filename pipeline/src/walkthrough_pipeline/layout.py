@@ -236,7 +236,18 @@ _RULES: dict[str, dict] = {
     "coffee_table": {"wall": "front_of_sofa", "clearance": 0.4, "priority": 6},
     "rug": {"wall": "center", "clearance": 0.0, "priority": 7},
     "chair": {"wall": "any_free", "clearance": 0.4, "priority": 8},
+    "armchair": {"wall": "any_free", "clearance": 0.4, "priority": 8},
+    "dining_chair": {"wall": "any_free", "clearance": 0.4, "priority": 8},
+    "desk_chair": {"wall": "window", "clearance": 0.4, "priority": 8},
+    "nightstand": {"wall": "no_door", "clearance": 0.3, "priority": 8},
+    "side_table": {"wall": "any_free", "clearance": 0.3, "priority": 8},
+    "dresser": {"wall": "no_door", "clearance": 0.6, "priority": 3},
     "lamp": {"wall": "corner", "clearance": 0.3, "priority": 9},
+    "floor_lamp": {"wall": "corner", "clearance": 0.3, "priority": 9},
+    # A table lamp stands on a nightstand or side table (Slot.on), a pendant
+    # hangs from the ceiling: neither takes floor, so no clearance.
+    "table_lamp": {"wall": "corner", "clearance": 0.0, "priority": 11},
+    "pendant_lamp": {"wall": "center", "clearance": 0.0, "priority": 11},
     "plant": {"wall": "corner", "clearance": 0.3, "priority": 10},
 }
 

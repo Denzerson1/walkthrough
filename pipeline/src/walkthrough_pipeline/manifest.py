@@ -71,6 +71,25 @@ class Obstacle(BaseModel):
     footprint: list[Vec2]
 
 
+class Slot(BaseModel):
+    """
+    Where a piece of furniture of `category` goes in a room when a style kit
+    is applied (the viewer's styles.ts): its centre on the floor, which way
+    its front faces, and the most floor it may take.
+    """
+
+    id: str
+    category: str
+    position: Vec3
+    yaw: float = 0.0
+    maxFootprint: Vec2  # [width, depth] in metres
+    #: Stands on the piece in that slot (a lamp on a nightstand), else on the floor.
+    on: str | None = None
+    #: The flat's own pieces (manifest item ids) this slot's piece stands in for:
+    #: hidden while it shows.
+    replaces: list[str] = Field(default_factory=list)
+
+
 class Room(BaseModel):
     id: str
     name: str
@@ -88,6 +107,8 @@ class Room(BaseModel):
     ceilings: list[list[Vec3]] = Field(default_factory=list)
     #: The rebuilt flat's pieces standing on the floor (canStand keeps out).
     obstacles: list[Obstacle] = Field(default_factory=list)
+    #: Where a style kit's pieces go (Slot).
+    slots: list[Slot] = Field(default_factory=list)
 
     @field_validator("floorPolygon")
     @classmethod

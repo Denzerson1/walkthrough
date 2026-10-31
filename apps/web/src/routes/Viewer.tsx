@@ -9,6 +9,7 @@ import { FloorPanel, FurniturePanel, Sheet } from '../components/Panels';
 import { RoomStrip } from '../components/RoomStrip';
 import { SplatScene } from '../components/SplatScene';
 import { StagedBadge } from '../components/StagedBadge';
+import { Toast } from '../components/Toast';
 import { IS_STATIC, apiUrl, fileUrl, getJson, postEvent, sessionId } from '../lib/api';
 import { toMinutes } from '../lib/daylight';
 import type { Manifest } from '../lib/manifest';
@@ -46,10 +47,10 @@ export function Viewer() {
   const session = useMemo(() => sessionId(), []);
 
   const {
-    manifest, error, viewer, activeRoomId, panel, catalog, showingOriginal, selectedUid,
+    manifest, error, viewer, activeRoomId, panel, catalog, showingOriginal, selectedUid, toast,
     setManifest, setError, setCatalog, goToRoom, setPanel, setShowingOriginal,
     setFloor, addItems, recolorItem, reset, loadStateFromUrl, shareUrl,
-    moveItem, rotateItem, removeItem, selectItem, clearItems,
+    moveItem, rotateItem, removeItem, selectItem, clearItems, applyStyle, undo, dismissToast,
   } = useStore();
 
   const [ready, setReady] = useState(false);
@@ -234,12 +235,15 @@ export function Viewer() {
           recolorItem(args.itemId, args.colorHex);
         } else if (action.tool === 'reset') {
           reset(args.roomId ?? 'all');
-        } else if (action.tool === 'apply_style' || action.tool === 'auto_layout') {
+        } else if (action.tool === 'apply_style' && args.styleId) {
+          // The same store action as the menu, so both place the same pieces.
+          applyStyle(args.roomId ? [args.roomId] : 'all', args.styleId);
+        } else if (action.tool === 'auto_layout') {
           if (args.roomId && args.styleId) void runAutoLayout(args.roomId, args.styleId);
         }
       }
     },
-    [setFloor, addItems, recolorItem, reset, runAutoLayout, centreOf, projectId, session],
+    [setFloor, addItems, recolorItem, reset, applyStyle, runAutoLayout, centreOf, projectId, session],
   );
 
   async function share() {
@@ -504,8 +508,7 @@ export function Viewer() {
                   ])
                 }
                 onApplyStyle={(styleId) => {
-                  const style = catalog.styles.find((s) => s.id === styleId);
-                  if (style?.floorIds?.[0]) setFloor([activeRoom.id], style.floorIds[0]);
+                  applyStyle([activeRoom.id], styleId);
                   postEvent(projectId, {
                     session_id: session,
                     event: 'style_tried',
@@ -572,6 +575,8 @@ export function Viewer() {
             </div>
           </div>
         )}
+
+        <Toast toast={toast} onUndo={undo} onDismiss={dismissToast} />
 
         {manifest && manifest.rooms.length > 1 && (
           <RoomStrip

@@ -19,6 +19,8 @@ export interface PlacedItem {
   yaw: number;
   /** Optional recolor applied to this placed item. */
   colorHex?: string;
+  /** The room slot it stands in (Room.slots), when a style kit or a swap put it there. */
+  slotId?: string;
 }
 
 export interface ViewerState {
@@ -28,6 +30,8 @@ export interface ViewerState {
   items: PlacedItem[];
   /** manifest item id -> colour, for recoloring furniture already in the splat (M8). */
   recolors: Record<string, string>;
+  /** roomId -> the style kit (catalog/styles id) last applied to it. */
+  styles: Record<string, string>;
   /** Room the viewer is currently standing in. */
   activeRoomId?: string;
 }
@@ -41,6 +45,7 @@ export const EMPTY_VIEWER_STATE: ViewerState = {
   floors: {},
   items: [],
   recolors: {},
+  styles: {},
 };
 
 /** True when anything has been changed from the original capture. */
@@ -77,8 +82,10 @@ export function isRoomStaged(
  */
 interface WireState {
   f?: Record<string, string>;
-  i?: Array<[string, string, number, number, number, string?]>;
+  /** [roomId|uid, itemId, x, z, yaw, colorHex or null, slotId?] */
+  i?: Array<[string, string, number, number, number, (string | null)?, string?]>;
   r?: Record<string, string>;
+  s?: Record<string, string>;
 }
 
 function toWire(state: ViewerState): WireState {
@@ -86,19 +93,21 @@ function toWire(state: ViewerState): WireState {
   if (Object.keys(state.floors).length) wire.f = state.floors;
   if (state.items.length) {
     wire.i = state.items.map((it) => {
-      const row: [string, string, number, number, number, string?] = [
+      const row: [string, string, number, number, number, (string | null)?, string?] = [
         it.uid,
         it.itemId,
         round(it.position[0]),
         round(it.position[2]),
         round(it.yaw, 1),
       ];
-      if (it.colorHex) row.push(it.colorHex);
+      if (it.colorHex || it.slotId) row.push(it.colorHex ?? null);
+      if (it.slotId) row.push(it.slotId);
       // roomId is stored separately below to keep rows short.
       return row;
     });
   }
   if (Object.keys(state.recolors).length) wire.r = state.recolors;
+  if (Object.keys(state.styles).length) wire.s = state.styles;
   return wire;
 }
 
@@ -140,12 +149,13 @@ export function decodeViewerState(encoded: string): ViewerState {
     return { ...EMPTY_VIEWER_STATE };
   }
   const items: PlacedItem[] = (wire.i ?? []).map((row) => {
-    const [packed, itemId, x, z, yaw, colorHex] = row;
+    const [packed, itemId, x, z, yaw, colorHex, slotId] = row;
     const { roomId, uid } = unpackUid(packed);
     return {
       uid,
       itemId,
       roomId,
+      ...(slotId ? { slotId } : {}),
       position: [x, 0, z] as Vec3,
       yaw,
       ...(colorHex ? { colorHex } : {}),
@@ -155,6 +165,7 @@ export function decodeViewerState(encoded: string): ViewerState {
     floors: wire.f ?? {},
     items,
     recolors: wire.r ?? {},
+    styles: wire.s ?? {},
   };
 }
 

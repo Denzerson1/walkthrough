@@ -76,6 +76,24 @@ export interface Room {
   ceilings?: Vec3[][];
   /** The rebuilt flat's pieces standing on the floor, as outlines; see `canStand`. */
   obstacles?: Obstacle[];
+  /** Where a style kit's pieces go; see styles.ts. */
+  slots?: Slot[];
+}
+
+/** Where a piece of furniture of `category` goes when a style kit is applied. */
+export interface Slot {
+  id: string;
+  category: string;
+  /** Centre on the floor, metres. */
+  position: Vec3;
+  /** Degrees, as PlacedItem.yaw: the way the piece's front faces. */
+  yaw: number;
+  /** The most floor the piece may take: [width, depth] in metres. */
+  maxFootprint: Vec2;
+  /** Stands on the piece in that slot (a lamp on a nightstand), else on the floor. */
+  on?: string | null;
+  /** The flat's own pieces (manifest item ids) this slot's piece stands in for: hidden while it shows. */
+  replaces?: string[];
 }
 
 export interface Obstacle {

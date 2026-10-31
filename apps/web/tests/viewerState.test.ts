@@ -26,8 +26,17 @@ const RICH: ViewerState = {
       yaw: 15,
       colorHex: '#c8c2b8',
     },
+    {
+      uid: 'a3',
+      itemId: 'rug-jute',
+      roomId: 'living',
+      position: [1.0, 0, 1.5],
+      yaw: 180,
+      slotId: 'rug-1',
+    },
   ],
   recolors: { 'sofa-1': '#2f4f4f' },
+  styles: { living: 'scandinavian' },
 };
 
 describe('isStaged', () => {
@@ -67,7 +76,15 @@ describe('share URL round trip', () => {
     const decoded = decodeViewerState(encodeViewerState(RICH));
     expect(decoded.floors).toEqual(RICH.floors);
     expect(decoded.recolors).toEqual(RICH.recolors);
-    expect(decoded.items).toHaveLength(2);
+    expect(decoded.styles).toEqual(RICH.styles);
+    expect(decoded.items).toHaveLength(3);
+  });
+
+  it('keeps the slot a style kit put a piece in', () => {
+    const decoded = decodeViewerState(encodeViewerState(RICH));
+    expect(decoded.items.find((i) => i.uid === 'a3')?.slotId).toBe('rug-1');
+    expect(decoded.items.find((i) => i.uid === 'a3')?.colorHex).toBeUndefined();
+    expect(decoded.items.find((i) => i.uid === 'a1')?.slotId).toBeUndefined();
   });
 
   it('preserves item identity, room and pose', () => {
@@ -103,6 +120,7 @@ describe('share URL round trip', () => {
       floors: {},
       items: [],
       recolors: {},
+      styles: {},
     });
   });
 
@@ -121,6 +139,7 @@ describe('share URL round trip', () => {
       floors: {},
       items: [],
       recolors: {},
+      styles: {},
     });
   });
 
@@ -132,6 +151,7 @@ describe('share URL round trip', () => {
     const odd: ViewerState = {
       floors: {},
       recolors: {},
+      styles: {},
       items: [
         { uid: 'u|1', itemId: 'chair', roomId: 'living', position: [0, 0, 0], yaw: 0 },
       ],

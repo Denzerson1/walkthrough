@@ -19,6 +19,15 @@ verified, it says so.** A milestone is not "done" because its code exists.
   46 picks failed and were replaced. `docs/scale-sheet.png` shows all 36
   beside a 2.0 m door and a 1.75 m person. The old Poly Haven themes and
   the drawn sofa and bed are gone.
+- **Styles and swapping:** rooms have furniture slots (category, place,
+  facing, most floor); a kit puts its piece in each, else its next smaller
+  piece, else leaves the slot empty, moving a piece out from under the roof
+  slope as far as it must (`styles.ts`, tested). flat-01 is cut into living
+  room, bedroom and hall (`pipeline rooms`, walls only along each part's own
+  edges, so walking is unchanged); the kit's sofa and bed hide the flat's
+  own. One store action for the menu, 3D taps and the assistant; pieces
+  fade in and out, a toast offers Undo; lamps glow from dusk; models load
+  per device (phone/desktop), within a memory budget, and are freed.
 
 ## 2026-10-24 — The landing page is a doorway
 

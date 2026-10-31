@@ -45,14 +45,9 @@ import {
 import { AutoExposure } from '../lib/exposure';
 import { fetchGlb } from '../lib/glb';
 import { SunShadow } from '../lib/sun';
+import { DEFAULT_ITEM_SIZE, FurnitureLayer } from '../lib/furnitureLayer';
 import type { CatalogItem } from '../lib/store';
-import type { PlacedItem, ViewerState } from '../lib/viewerState';
-
-/**
- * Footprint used when a catalog item has no dimensions. Shared with the
- * server solver so a validated layout and the drawn boxes agree.
- */
-export const DEFAULT_ITEM_SIZE: [number, number, number] = [0.6, 0.6, 0.6];
+import type { ViewerState } from '../lib/viewerState';
 
 /** A flat rebuilt by `pipeline rebuild`: glTF plus its baked light. */
 export interface BakedModel {
@@ -232,6 +227,7 @@ export function SplatScene({
     renderer: THREE.WebGLRenderer;
     floorGroup: THREE.Group;
     furnitureGroup: THREE.Group;
+    furniture: FurnitureLayer;
     walkCursor: THREE.Mesh;
     splat?: SplatMesh;
     floorSplat?: SplatMesh;
@@ -303,7 +299,8 @@ export function SplatScene({
     scene.add(key);
 
     const floorGroup = new THREE.Group();
-    const furnitureGroup = new THREE.Group();
+    const furniture = new FurnitureLayer(renderer);
+    const furnitureGroup = furniture.group;
     scene.add(floorGroup, furnitureGroup);
 
     // The ring that shows where a tap would take you. Without it, click-to-
@@ -313,7 +310,7 @@ export function SplatScene({
     walkCursor.visible = false;
     scene.add(walkCursor);
 
-    sceneRef.current = { scene, camera, renderer, floorGroup, furnitureGroup, walkCursor };
+    sceneRef.current = { scene, camera, renderer, floorGroup, furnitureGroup, furniture, walkCursor };
     // Development only: lets tests and debugging inspect the live scene.
     // Dev only: the scene and the walk state, so tests can stand anywhere.
     if (import.meta.env.DEV) {
@@ -592,6 +589,7 @@ export function SplatScene({
         lastPose.splice(0, 6, ...pose);
         wake();
       }
+      if (furniture.tick(now)) wake();
       if (now - activeAt > IDLE_AFTER_MS && now - drawnAt < IDLE_FRAME_MS) return;
       const sinceDrawn = Math.min(IDLE_FRAME_MS / 1000, (now - drawnAt) / 1000);
       // Below 45 fps for most of 90 frames at full rate: half a pixel ratio
@@ -620,7 +618,7 @@ export function SplatScene({
       for (const type of wakeOn) window.removeEventListener(type, wake);
 
       disposeChildren(floorGroup);
-      disposeChildren(furnitureGroup);
+      furniture.dispose();
       walkCursor.geometry.dispose();
       (walkCursor.material as THREE.Material).dispose();
       sceneRef.current?.splat?.dispose?.();
@@ -1084,10 +1082,22 @@ export function SplatScene({
     // A rebuilt flat swaps the floor's texture in place, keeping its baked
     // light and shadows; drawing a separate floor over it would lose both.
     if (ctx.model) {
-      for (const room of manifest.rooms) {
-        const floorId = showingOriginal ? undefined : viewer.floors[room.id];
+      // A floor mesh belongs to the room it was baked for. An open plan cut
+      // into rooms afterwards (pipeline `rooms`) still has one floor, baked
+      // for the scan's single room: it takes the floor chosen where you stand.
+      const known = new Set(manifest.rooms.map((r) => r.id));
+      const meshRooms = new Set<string>();
+      ctx.model.traverse((node) => {
+        if (typeof node.userData.roomId === 'string') meshRooms.add(node.userData.roomId);
+      });
+      for (const id of meshRooms) {
+        const floorId = showingOriginal
+          ? undefined
+          : known.has(id)
+            ? viewer.floors[id]
+            : (viewer.floors[activeRoomId ?? ''] ?? Object.values(viewer.floors)[0]);
         const floor = floorId ? floorCatalog.find((f) => f.id === floorId) : undefined;
-        swapModelFloor(ctx.model, room.id, floor);
+        swapModelFloor(ctx.model, id, floor);
       }
       return;
     }
@@ -1111,7 +1121,7 @@ export function SplatScene({
       group.add(buildFloorMesh(room, floor));
     }
     // showingOriginal only matters for a rebuilt flat (above).
-  }, [viewer.floors, manifest, floorCatalog, showingOriginal, contentReady]);
+  }, [viewer.floors, manifest, floorCatalog, showingOriginal, contentReady, activeRoomId]);
 
   // "Hold to compare" must not hitch: toggle visibility rather than
   // disposing and rebuilding every floor and furniture mesh twice per press.
@@ -1129,27 +1139,44 @@ export function SplatScene({
 
   // ---- placed furniture -------------------------------------------------
   //
-  // Rebuilt whenever the set of items changes. A drag updates a single item's
-  // position, which lands here as a new items array, so the mesh follows the
-  // pointer without the drag handler reaching into the scene graph itself.
+  // The layer keeps each piece across changes: a drag moves it, a new piece
+  // fades in, a removed one out, and nothing else is rebuilt.
   useEffect(() => {
-    const ctx = sceneRef.current;
-    if (!ctx) return;
-    const group = ctx.furnitureGroup;
-    disposeChildren(group);
+    sceneRef.current?.furniture.sync(
+      viewer.items,
+      furnitureCatalog,
+      manifest.rooms,
+      selectedUid,
+    );
+  }, [viewer.items, furnitureCatalog, manifest.rooms, selectedUid]);
 
-    for (const item of viewer.items) {
-      const entry = furnitureCatalog.find((f) => f.id === item.itemId);
-      const size = (entry?.dimensionsM ?? DEFAULT_ITEM_SIZE) as [number, number, number];
-      // A placement's own recolour wins; otherwise the catalog's colour is
-      // what the item is described as being made of, and the kit's meshes
-      // ship in arbitrary colours that have nothing to do with it.
-      const color = item.colorHex ?? entry?.colors?.[0];
-      group.add(
-        buildPlacedItem(item, size, entry?.glb, color, item.uid === selectedUid, entry?.shape),
-      );
+  // The flat's own sofa or bed is hidden while a style kit's piece stands in
+  // its place (Slot.replaces), and back for "hold to compare".
+  useEffect(() => {
+    const model = sceneRef.current?.model;
+    if (!model) return;
+    const replaceable = new Set<string>();
+    const replaced = new Set<string>();
+    for (const room of manifest.rooms) {
+      for (const slot of room.slots ?? []) {
+        const filled = viewer.items.some((i) => i.roomId === room.id && i.slotId === slot.id);
+        for (const name of slot.replaces ?? []) {
+          replaceable.add(name);
+          if (filled) replaced.add(name);
+        }
+      }
     }
-  }, [viewer.items, furnitureCatalog, selectedUid]);
+    model.traverse((node) => {
+      if (replaceable.has(node.name)) node.visible = showingOriginal || !replaced.has(node.name);
+    });
+  }, [viewer.items, manifest, showingOriginal, contentReady]);
+
+  // Lamps glow from dusk: none at midday, fully from 19:30.
+  useEffect(() => {
+    const minutes = daylight ?? 12 * 60;
+    const glow = Math.min(1, Math.max(0, (minutes - 16.5 * 60) / (3 * 60)));
+    sceneRef.current?.furniture.setGlow(glow);
+  }, [daylight, contentReady]);
 
   return <div ref={mountRef} className="absolute inset-0" data-testid="splat-canvas" />;
 }
@@ -1515,272 +1542,6 @@ function swapModelFloor(model: THREE.Group, roomId: string, floor: CatalogItem |
   });
 }
 
-/**
- * Loaded GLB scenes, keyed by URL.
- *
- * Shared across every placement and every mount: the same sofa dropped four
- * times fetches one file. Entries are clones on use, so a placement can be
- * recoloured without touching the cached original.
- */
-const glbCache = new Map<string, Promise<THREE.Group>>();
-
-function loadGlb(url: string): Promise<THREE.Group> {
-  let pending = glbCache.get(url);
-  if (!pending) {
-    pending = new Promise<THREE.Group>((resolve, reject) => {
-      new GLTFLoader().load(
-        apiUrl(url),
-        (gltf) => resolve(gltf.scene),
-        undefined,
-        (err) => reject(err),
-      );
-    });
-    // A failed fetch must not poison the cache: the next placement should try
-    // again rather than inheriting a rejected promise forever.
-    pending.catch(() => glbCache.delete(url));
-    glbCache.set(url, pending);
-  }
-  return pending;
-}
-
-/**
- * Fit `model` into a box of `size` metres, standing on the floor.
- *
- * Scaled uniformly by the tightest of the three ratios rather than stretched
- * to fill, because the catalog's dimensionsM is the box the layout solver
- * validated against — the mesh has to fit inside it, and a sofa squashed to
- * hit the number exactly looks worse than one slightly smaller than it.
- */
-function fitToBox(model: THREE.Object3D, size: [number, number, number]): void {
-  const bounds = new THREE.Box3().setFromObject(model);
-  const extent = bounds.getSize(new THREE.Vector3());
-  if (extent.x < 1e-6 || extent.y < 1e-6 || extent.z < 1e-6) return;
-
-  const scale = Math.min(size[0] / extent.x, size[1] / extent.y, size[2] / extent.z);
-  model.scale.setScalar(scale);
-
-  // Re-measure after scaling and drop the model onto y = 0, centred in plan.
-  const scaled = new THREE.Box3().setFromObject(model);
-  const centre = scaled.getCenter(new THREE.Vector3());
-  model.position.x -= centre.x;
-  model.position.z -= centre.z;
-  model.position.y -= scaled.min.y;
-}
-
-/** Tint every material in a cloned model, for a recoloured placement. */
-function tintModel(model: THREE.Object3D, colorHex: string): void {
-  const color = new THREE.Color(colorHex);
-  model.traverse((child) => {
-    if (!(child instanceof THREE.Mesh)) return;
-    const materials = Array.isArray(child.material) ? child.material : [child.material];
-    child.material = materials.map((m) => {
-      const clone = (m as THREE.MeshStandardMaterial).clone();
-      clone.color = color;
-      clone.userData.owned = true;
-      return clone;
-    });
-    if (!Array.isArray(child.material)) return;
-    if (child.material.length === 1) child.material = child.material[0];
-  });
-}
-
-/**
- * One placed item: a group carrying its uid, holding the catalog mesh once it
- * arrives and a correctly sized box until then.
- *
- * The box is not a fallback nobody sees — it is what is on screen for the
- * first frames after a drop, so it has to be the right size and sit in the
- * right place.
- */
-function buildPlacedItem(
-  item: PlacedItem,
-  size: [number, number, number],
-  glb: string | null | undefined,
-  colorHex: string | undefined,
-  selected: boolean,
-  shape?: string,
-): THREE.Group {
-  const group = new THREE.Group();
-  group.position.set(item.position[0], 0, item.position[2]);
-  // Yaw is negated here on purpose. Our 2D geometry (geometry.ts, layout.py)
-  // rotates (x, z) counter-clockwise, while a three.js rotation about +Y turns
-  // the opposite way in that plane. Without the negation the rendered
-  // footprint is mirrored against the one the collision solver validated.
-  group.rotation.y = (-item.yaw * Math.PI) / 180;
-  group.userData.uid = item.uid;
-  group.userData.roomId = item.roomId;
-  group.userData.size = size;
-
-  if (shape) {
-    group.add(buildProceduralItem(shape, size, colorHex ?? '#8d9390'));
-    if (selected) group.add(buildSelectionRing(size));
-    return group;
-  }
-
-  const placeholder = buildPlaceholderItem(size, colorHex);
-  group.add(placeholder);
-
-  if (selected) group.add(buildSelectionRing(size));
-
-  if (glb) {
-    void loadGlb(glb)
-      .then((scene) => {
-        // The placement may have been disposed while the mesh was in flight.
-        if (!group.parent) return;
-        const model = scene.clone(true);
-        fitToBox(model, size);
-        if (colorHex) tintModel(model, colorHex);
-        group.remove(placeholder);
-        placeholder.geometry.dispose();
-        (placeholder.material as THREE.Material).dispose();
-        group.add(model);
-      })
-      .catch(() => {
-        // Keep the box. A missing mesh is visible as a plain shape rather
-        // than as nothing at all.
-      });
-  }
-
-  return group;
-}
-
-/** The correctly sized box shown before a mesh arrives, or instead of one. */
-function buildPlaceholderItem(
-  size: [number, number, number],
-  colorHex?: string,
-): THREE.Mesh {
-  const [w, h, d] = size;
-  const geometry = new THREE.BoxGeometry(w, h, d);
-  const material = new THREE.MeshStandardMaterial({
-    color: new THREE.Color(colorHex ?? '#8d8578'),
-    roughness: 0.8,
-  });
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.position.y = h / 2;
-  mesh.userData.owned = true;
-  material.userData.owned = true;
-  return mesh;
-}
-
-/**
- * A modern sofa and a platform bed, built here rather than downloaded.
- *
- * Poly Haven's furniture is CC0 and photoreal but almost entirely antique:
- * across its furniture library there is no contemporary sofa and no
- * contemporary bed. Those are the two pieces a flat most needs, so they are
- * drawn as the slab forms they actually are. Honest about what they are —
- * matt blocks with soft edges, not a photograph of a sofa.
- */
-function roundedBox(
-  w: number,
-  h: number,
-  d: number,
-  radius: number,
-  material: THREE.Material,
-): THREE.Mesh {
-  // Chamfer via a tight segment count on a box is not available in three, so
-  // the softness comes from a slightly inset top face instead: cheap, and at
-  // furniture distance it reads as an upholstered edge.
-  const geometry = new THREE.BoxGeometry(w, h, d, 1, 1, 1);
-  const position = geometry.attributes.position;
-  const inset = Math.min(radius, Math.min(w, d) / 4);
-  for (let i = 0; i < position.count; i++) {
-    if (position.getY(i) > 0) {
-      position.setX(i, position.getX(i) * (1 - (inset * 2) / w));
-      position.setZ(i, position.getZ(i) * (1 - (inset * 2) / d));
-    }
-  }
-  geometry.computeVertexNormals();
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.userData.owned = true;
-  return mesh;
-}
-
-function fabric(colorHex: string, roughness = 0.92): THREE.MeshStandardMaterial {
-  const material = new THREE.MeshStandardMaterial({
-    color: new THREE.Color(colorHex),
-    roughness,
-    metalness: 0.0,
-  });
-  material.userData.owned = true;
-  return material;
-}
-
-function buildProceduralItem(
-  shape: string,
-  size: [number, number, number],
-  colorHex: string,
-): THREE.Group {
-  const [w, h, d] = size;
-  const group = new THREE.Group();
-  const body = fabric(colorHex);
-  const legs = fabric('#2d2f2c', 0.55);
-
-  if (shape === 'sofa') {
-    const seatH = h * 0.46;
-    const legH = h * 0.14;
-    const armW = w * 0.09;
-
-    const base = roundedBox(w, seatH - legH, d, 0.04, body);
-    base.position.set(0, legH + (seatH - legH) / 2, 0);
-    group.add(base);
-
-    const back = roundedBox(w, h - seatH, d * 0.26, 0.04, body);
-    back.position.set(0, seatH + (h - seatH) / 2, -d / 2 + (d * 0.26) / 2);
-    group.add(back);
-
-    for (const side of [-1, 1]) {
-      const arm = roundedBox(armW, h * 0.74 - legH, d, 0.035, body);
-      arm.position.set(side * (w / 2 - armW / 2), legH + (h * 0.74 - legH) / 2, 0);
-      group.add(arm);
-    }
-
-    // Seat cushions, slightly proud so the seam reads.
-    const cushionW = (w - armW * 2) / 3;
-    for (let i = 0; i < 3; i++) {
-      const cushion = roundedBox(cushionW * 0.94, h * 0.12, d * 0.66, 0.03, body);
-      cushion.position.set(
-        -(w - armW * 2) / 2 + cushionW * (i + 0.5),
-        seatH + h * 0.05,
-        d * 0.08,
-      );
-      group.add(cushion);
-    }
-
-    for (const sx of [-1, 1]) {
-      for (const sz of [-1, 1]) {
-        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.05, legH, 0.05), legs);
-        leg.userData.owned = true;
-        leg.position.set(sx * (w / 2 - 0.1), legH / 2, sz * (d / 2 - 0.1));
-        group.add(leg);
-      }
-    }
-    return group;
-  }
-
-  // Platform bed: a low base, a mattress inset on it, a headboard, two pillows.
-  const baseH = h * 0.30;
-  const base = roundedBox(w, baseH, d, 0.03, legs);
-  base.position.set(0, baseH / 2, 0);
-  group.add(base);
-
-  const mattress = roundedBox(w * 0.94, h * 0.26, d * 0.92, 0.05, body);
-  mattress.position.set(0, baseH + (h * 0.26) / 2, d * 0.02);
-  group.add(mattress);
-
-  const head = roundedBox(w, h, d * 0.07, 0.03, body);
-  head.position.set(0, h / 2, -d / 2 + (d * 0.07) / 2);
-  group.add(head);
-
-  const pillowMaterial = fabric('#efeae1');
-  for (const side of [-1, 1]) {
-    const pillow = roundedBox(w * 0.4, h * 0.11, d * 0.17, 0.04, pillowMaterial);
-    pillow.position.set(side * w * 0.23, baseH + h * 0.26 + h * 0.05, -d / 2 + d * 0.16);
-    group.add(pillow);
-  }
-  return group;
-}
-
 /** The ring that shows where a tap would put you. */
 function buildWalkCursor(): THREE.Mesh {
   const geometry = new THREE.RingGeometry(0.17, 0.26, 40);
@@ -1797,23 +1558,4 @@ function buildWalkCursor(): THREE.Mesh {
   mesh.userData.owned = true;
   material.userData.owned = true;
   return mesh;
-}
-
-/** A ring on the floor marking the item the user has tapped. */
-function buildSelectionRing(size: [number, number, number]): THREE.Mesh {
-  const radius = Math.max(size[0], size[2]) / 2 + 0.06;
-  const geometry = new THREE.RingGeometry(radius, radius + 0.045, 48);
-  geometry.rotateX(-Math.PI / 2);
-  const material = new THREE.MeshBasicMaterial({
-    color: 0x46513f,
-    transparent: true,
-    opacity: 0.95,
-    depthTest: false,
-  });
-  const ring = new THREE.Mesh(geometry, material);
-  ring.position.y = 0.012;
-  ring.renderOrder = 3;
-  ring.userData.owned = true;
-  material.userData.owned = true;
-  return ring;
 }
