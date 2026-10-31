@@ -127,13 +127,14 @@ test('capture viewer screenshots', async ({ page }, testInfo) => {
   await capture(page, `m2-viewer-${label}`);
 
   // Staged state with a replacement floor.
-  await page.getByTestId('tool-floors').click();
+  await page.getByTestId('design-menu-toggle').click();
+  await page.getByTestId('design-tab-floor').click();
   await page.locator('[data-floor-id]').first().click();
   await page.waitForTimeout(1500);
   await capture(page, `m3-floor-staged-${label}`);
 
   // Close the sheet so the badge and plan are unobstructed.
-  await page.getByTestId('tool-floors').click();
+  await page.getByTestId('design-menu-toggle').click();
   await page.waitForTimeout(800);
   await capture(page, `m3-staged-badge-${label}`);
 });
@@ -154,13 +155,13 @@ test('capture the landing page', async ({ page }, testInfo) => {
   await capture(page, `m10-landing-${label}`, true);
 });
 
-test('capture the furniture panel', async ({ page }, testInfo) => {
+test('capture the design menu', async ({ page }, testInfo) => {
   const label = testInfo.project.name;
   await page.goto(`/p/${PROJECT}`);
   await waitForScene(page);
-  await page.getByTestId('tool-furniture').click();
+  await page.getByTestId('design-menu-toggle').click();
   await page.waitForTimeout(900);
-  await capture(page, `m6-furniture-${label}`);
+  await capture(page, `m6-design-menu-${label}`);
 });
 
 /**
@@ -215,9 +216,10 @@ test('swapping the floor visibly changes the room', async ({ page }, testInfo) =
     return changed / (a.width * a.height);
   };
 
-  await page.getByTestId('tool-floors').click();
+  await page.getByTestId('design-menu-toggle').click();
+  await page.getByTestId('design-tab-floor').click();
   await page.locator('[data-floor-id="walnut-dark-plank"]').click();
-  await page.getByTestId('tool-floors').click();
+  await page.getByTestId('design-menu-toggle').click();
 
   // Poll rather than wait a fixed time. The replacement floor's colour,
   // normal and roughness maps are real downloaded textures (~2.4 MB a set)

@@ -5,7 +5,8 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { Assistant, type AssistantAction } from '../components/Assistant';
 import { DaylightControl } from '../components/DaylightControl';
 import { FloorPlan } from '../components/FloorPlan';
-import { FloorPanel, FurniturePanel, Sheet } from '../components/Panels';
+import { DesignMenu } from '../components/DesignMenu';
+import { Sheet } from '../components/Panels';
 import { RoomStrip } from '../components/RoomStrip';
 import { SplatScene } from '../components/SplatScene';
 import { StagedBadge } from '../components/StagedBadge';
@@ -29,16 +30,18 @@ interface AssistantArgs {
 
 /** Phone-sized screens, in either orientation. */
 const COMPACT = '(max-width: 639px), (max-height: 500px)';
+/** Wide enough for the design menu as a panel beside the view. */
+const WIDE = '(min-width: 1024px) and (min-height: 501px)';
 
-function useCompact(): boolean {
-  const [compact, setCompact] = useState(() => window.matchMedia(COMPACT).matches);
+function useMedia(query: string): boolean {
+  const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
   useEffect(() => {
-    const list = window.matchMedia(COMPACT);
-    const update = () => setCompact(list.matches);
+    const list = window.matchMedia(query);
+    const update = () => setMatches(list.matches);
     list.addEventListener('change', update);
     return () => list.removeEventListener('change', update);
-  }, []);
-  return compact;
+  }, [query]);
+  return matches;
 }
 
 export function Viewer() {
@@ -71,7 +74,9 @@ export function Viewer() {
   const daylight = chosen ?? opening;
   const [showHint, setShowHint] = useState(true);
   const touch = useMemo(() => window.matchMedia('(pointer: coarse)').matches, []);
-  const compact = useCompact();
+  const compact = useMedia(COMPACT);
+  const wide = useMedia(WIDE);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [pose, setPose] = useState<{ x: number; z: number; yaw: number } | null>(null);
   const [copied, setCopied] = useState(false);
   const [layoutNote, setLayoutNote] = useState<string | null>(null);
@@ -133,6 +138,26 @@ export function Viewer() {
       window.removeEventListener('pointerdown', dismiss);
     };
   }, [showHint]);
+
+  // Esc closes what is open: the menu, the assistant, a selection.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setMenuOpen(false);
+      if (panel) setPanel(panel);
+      selectItem(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [panel, setPanel, selectItem]);
+
+  const onSelectPiece = useCallback(
+    (uid: string | null) => {
+      selectItem(uid);
+      if (useStore.getState().viewer.items.find((i) => i.uid === uid)?.slotId) setMenuOpen(true);
+    },
+    [selectItem],
+  );
 
   const staged = isStaged(viewer);
   const stagedRooms = useMemo(
@@ -334,7 +359,7 @@ export function Viewer() {
           onRoomChange={goToRoom}
           onPose={(x, z, yaw) => setPose({ x, z, yaw })}
           selectedUid={selectedUid}
-          onSelectItem={selectItem}
+          onSelectItem={onSelectPiece}
           onMoveItem={moveItem}
         />
       )}
@@ -399,6 +424,18 @@ export function Viewer() {
           />
         </div>
       </header>
+
+      {wide && activeRoom && ready && (
+        <div
+          className="absolute right-3 flex flex-col items-end"
+          style={{
+            top: 'calc(9.25rem + var(--safe-top))',
+            bottom: 'calc(4.5rem + var(--safe-bottom))',
+          }}
+        >
+          <DesignMenu room={activeRoom} compact={false} open={menuOpen} onOpenChange={setMenuOpen} />
+        </div>
+      )}
 
       {!compact && daylightControl && (
         <div
@@ -472,79 +509,31 @@ export function Viewer() {
         className="absolute inset-x-0 bottom-0"
         style={{ paddingBottom: 'var(--safe-bottom)' }}
       >
-        {panel && manifest && activeRoom && (
-          <Sheet
-            title={panel === 'floors' ? 'Floors' : panel === 'furniture' ? 'Furniture' : 'Assistant'}
-            onClose={() => setPanel(panel)}
-          >
-            {panel === 'floors' && (
-              <FloorPanel
-                floors={catalog.floors}
-                appliedFloorId={viewer.floors[activeRoom.id]}
-                roomName={activeRoom.name}
-                onApply={(floorId, allRooms) => {
-                  setFloor(allRooms ? ['all'] : [activeRoom.id], floorId);
-                  postEvent(projectId, {
-                    session_id: session,
-                    event: 'floor_tried',
-                    value: floorId,
-                  });
+        {panel === 'assistant' && manifest && activeRoom && (
+          <Sheet title="Assistant" onClose={() => setPanel(panel)}>
+            <div className="h-[46vh]">
+              <Assistant
+                projectId={projectId}
+                sessionId={session}
+                context={{
+                  activeRoomId: activeRoom.id,
+                  rooms: manifest.rooms.map((r) => ({
+                    id: r.id,
+                    name: r.name,
+                    type: r.type,
+                  })),
+                  appliedFloors: viewer.floors,
+                  placedItems: viewer.items,
+                  recolors: viewer.recolors,
+                  manifestItemIds: manifest.items.map((i) => i.id),
                 }}
-                onClear={() => reset(activeRoom.id)}
+                onActions={applyActions}
               />
-            )}
-            {panel === 'furniture' && (
-              <FurniturePanel
-                furniture={catalog.furniture}
-                styles={catalog.styles}
-                onAdd={(itemId) =>
-                  addItems([
-                    {
-                      itemId,
-                      roomId: activeRoom.id,
-                      position: centreOf(activeRoom.id),
-                      yaw: 0,
-                    },
-                  ])
-                }
-                onApplyStyle={(styleId) => {
-                  applyStyle([activeRoom.id], styleId);
-                  postEvent(projectId, {
-                    session_id: session,
-                    event: 'style_tried',
-                    value: styleId,
-                  });
-                }}
-                onAutoLayout={
-                  IS_STATIC ? undefined : (styleId) => void runAutoLayout(activeRoom.id, styleId)
-                }
-              />
-            )}
-            {panel === 'assistant' && (
-              <div className="h-[46vh]">
-                <Assistant
-                  projectId={projectId}
-                  sessionId={session}
-                  context={{
-                    activeRoomId: activeRoom.id,
-                    rooms: manifest.rooms.map((r) => ({
-                      id: r.id,
-                      name: r.name,
-                      type: r.type,
-                    })),
-                    appliedFloors: viewer.floors,
-                    placedItems: viewer.items,
-                    recolors: viewer.recolors,
-                    manifestItemIds: manifest.items.map((i) => i.id),
-                  }}
-                  onActions={applyActions}
-                />
-              </div>
-            )}
+            </div>
           </Sheet>
         )}
 
-        {selectedItem && (
+        {selectedItem && !selectedItem.slotId && (
           <div className="flex justify-center px-3 pb-2" data-testid="item-controls">
             <div className="panel flex items-center gap-1 rounded-[9px] p-1">
               <span className="px-3 text-[12px] font-medium">{selectedItemName}</span>
@@ -578,7 +567,7 @@ export function Viewer() {
 
         <Toast toast={toast} onUndo={undo} onDismiss={dismissToast} />
 
-        {manifest && manifest.rooms.length > 1 && (
+        {manifest && manifest.rooms.length > 1 && !(menuOpen && !wide) && (
           <RoomStrip
             manifest={manifest}
             activeRoomId={activeRoomId}
@@ -587,7 +576,13 @@ export function Viewer() {
           />
         )}
 
-        {compact && !panel && daylightControl && (
+        {!wide && activeRoom && ready && (
+          <div className="px-3 pb-1.5">
+            <DesignMenu room={activeRoom} compact open={menuOpen} onOpenChange={setMenuOpen} />
+          </div>
+        )}
+
+        {compact && !panel && !menuOpen && daylightControl && (
           <div className="flex justify-center px-3 pb-1.5">
             <div className="panel w-full max-w-[360px] rounded-[9px] px-3 py-1.5">
               {daylightControl}
@@ -601,27 +596,23 @@ export function Viewer() {
         >
           <div className="panel flex items-center gap-0.5 rounded-[9px] p-1">
             {/* The assistant runs on the server, which a static site does not have. */}
-            {(IS_STATIC
-              ? (['floors', 'furniture'] as const)
-              : (['floors', 'furniture', 'assistant'] as const)
-            ).map((id) => (
+            {!IS_STATIC && (
               <button
-                key={id}
                 type="button"
-                onClick={() => setPanel(id)}
-                aria-pressed={panel === id}
-                data-testid={`tool-${id}`}
+                onClick={() => setPanel('assistant')}
+                aria-pressed={panel === 'assistant'}
+                data-testid="tool-assistant"
                 className={[
-                  'tap rounded-[var(--radius-sm)] px-4 py-1.5 text-[13px] font-medium capitalize',
+                  'tap rounded-[var(--radius-sm)] px-4 py-1.5 text-[13px] font-medium',
                   'transition-colors',
-                  panel === id
+                  panel === 'assistant'
                     ? 'bg-[var(--accent)] text-[var(--paper)]'
                     : 'text-[var(--ink)] hover:bg-[var(--paper-warm)]',
                 ].join(' ')}
               >
-                {id}
+                Assistant
               </button>
-            ))}
+            )}
             <span className="mx-0.5 h-4 w-px bg-[var(--line)]" aria-hidden="true" />
             <button
               type="button"

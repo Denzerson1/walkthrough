@@ -1,10 +1,9 @@
-/** Bottom-sheet panels: floors, furniture and the assistant. */
+/** The bottom sheet, the floor picker and furniture tiles. */
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { apiUrl } from '../lib/api';
 import { floorColor } from '../lib/floorColors';
 import type { CatalogItem } from '../lib/store';
-import type { StyleKit } from '../lib/styles';
 
 interface SheetProps {
   title: string;
@@ -152,15 +151,6 @@ function swatchFor(floor: CatalogItem): string {
 
 // ---------------------------------------------------------------------------
 
-interface FurniturePanelProps {
-  furniture: CatalogItem[];
-  styles: StyleKit[];
-  onAdd: (itemId: string) => void;
-  onApplyStyle: (styleId: string) => void;
-  /** Absent where there is no layout service: the static site. */
-  onAutoLayout?: (styleId: string) => void;
-}
-
 /**
  * One furniture tile: the piece's thumbnail (rendered with its model by
  * scripts/scale-sheet.mjs), loaded only as it scrolls into view, over a
@@ -185,104 +175,5 @@ export function FurnitureTile({ item }: { item: CatalogItem }) {
           : ''}
       </span>
     </span>
-  );
-}
-
-export function FurniturePanel({
-  furniture,
-  styles,
-  onAdd,
-  onApplyStyle,
-  onAutoLayout,
-}: FurniturePanelProps) {
-  // Stocked kits first, so the obvious first click is not one that fails.
-  const stocked = (kit: StyleKit) => Object.keys(kit.slots).length > 0;
-  const ordered = [...styles].sort((a, b) => Number(stocked(b)) - Number(stocked(a)));
-  const [styleId, setStyleId] = useState<string>(ordered[0]?.id ?? '');
-  const selected = ordered.find((s) => s.id === styleId);
-  const unstocked = selected ? !stocked(selected) : false;
-
-  // Each piece belongs to exactly one theme, and the grid shows the chosen
-  // theme's pieces only. Listing all 47 together put a carved gothic cabinet
-  // next to a steel shelf and made the themes meaningless.
-  const shown = useMemo(
-    () => furniture.filter((item) => !styleId || item.styles?.includes(styleId)),
-    [furniture, styleId],
-  );
-
-  if (!furniture.length && !styles.length) {
-    return (
-      <p className="px-4 py-6 text-[13px] opacity-70">
-        No furniture is seeded yet. Run <code className="measure">pnpm seed:assets</code>.
-      </p>
-    );
-  }
-
-  return (
-    <div>
-      {styles.length > 0 && (
-        <div className="rule border-b px-3 py-3">
-          <div className="scroll-x flex gap-1.5">
-            {ordered.map((style) => (
-              <button
-                key={style.id}
-                type="button"
-                onClick={() => setStyleId(style.id)}
-                aria-pressed={styleId === style.id}
-                className={[
-                  'btn tap shrink-0 px-3 py-1.5 text-[12px]',
-                  stocked(style) ? '' : 'italic',
-                ].join(' ')}
-              >
-                {style.name}
-                {!stocked(style) && (
-                  <span className="ml-1.5 opacity-55">· no items yet</span>
-                )}
-              </button>
-            ))}
-          </div>
-          <div className="mt-2.5 flex gap-2">
-            <button
-              type="button"
-              onClick={() => onApplyStyle(styleId)}
-              disabled={!styleId}
-              className="btn-primary flex-1 px-3 py-2 text-[12px]"
-            >
-              Apply style
-            </button>
-            {onAutoLayout && (
-              <button
-                type="button"
-                onClick={() => onAutoLayout(styleId)}
-                disabled={!styleId || unstocked}
-                className="btn flex-1 px-3 py-2 text-[12px]"
-              >
-                Furnish automatically
-              </button>
-            )}
-          </div>
-          {unstocked && (
-            <p className="mt-2 text-[12px] opacity-60">
-              {selected?.name} has no furniture yet.
-            </p>
-          )}
-        </div>
-      )}
-
-      <div className="grid grid-cols-3 gap-2 p-3 sm:grid-cols-5 lg:grid-cols-8 [@media(max-height:500px)]:grid-cols-7">
-        {shown.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => onAdd(item.id)}
-            data-furniture-id={item.id}
-            className="text-left"
-          >
-            <FurnitureTile item={item} />
-            <span className="mt-1 block text-[11px] leading-tight opacity-85">{item.name}</span>
-          </button>
-        ))}
-      </div>
-    </div>
   );
 }

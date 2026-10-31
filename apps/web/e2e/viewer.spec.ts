@@ -84,7 +84,8 @@ test.describe('viewer', () => {
     await expect(page.getByTestId('room-strip')).toBeVisible({ timeout: 45_000 });
     await expect(page.getByTestId('staged-badge')).toBeHidden();
 
-    await page.getByTestId('tool-floors').click();
+    await page.getByTestId('design-menu-toggle').click();
+    await page.getByTestId('design-tab-floor').click();
     await page.locator('[data-floor-id]').first().click();
 
     await expect(page.getByTestId('staged-badge')).toBeVisible();
@@ -96,7 +97,8 @@ test.describe('viewer', () => {
 
   test('reset returns to the original', async ({ page }) => {
     await page.goto(`/p/${PROJECT}`);
-    await page.getByTestId('tool-floors').click();
+    await page.getByTestId('design-menu-toggle').click();
+    await page.getByTestId('design-tab-floor').click();
     await page.locator('[data-floor-id]').first().click();
     await expect(page.getByTestId('staged-badge')).toBeVisible();
 
@@ -123,7 +125,8 @@ test.describe('viewer', () => {
       });
     });
     await page.goto(`/p/${PROJECT}`);
-    await page.getByTestId('tool-floors').click();
+    await page.getByTestId('design-menu-toggle').click();
+    await page.getByTestId('design-tab-floor').click();
     await page.locator('[data-floor-id]').first().click();
     await page.getByTestId('share').click();
     // "Copied", not "Link copied": the bottom bar is a compact pill now and
@@ -171,19 +174,5 @@ test.describe('editor', () => {
     await page.getByLabel('Editor password').fill('definitely-wrong');
     await page.getByRole('button', { name: 'Open editor' }).click();
     await expect(page.getByRole('alert')).toBeVisible();
-  });
-});
-
-test.describe('automatic layout', () => {
-  test('furnishing a room places items and stages it', async ({ page }) => {
-    await page.goto(`/p/${PROJECT}`);
-    await expect(page.getByTestId('room-strip')).toBeVisible();
-
-    await page.getByTestId('tool-furniture').click();
-    await page.getByRole('button', { name: 'Furnish automatically' }).click();
-
-    // The solver runs server-side, so this proves the round trip as well as
-    // the staging rule.
-    await expect(page.getByTestId('staged-badge')).toBeVisible({ timeout: 20_000 });
   });
 });

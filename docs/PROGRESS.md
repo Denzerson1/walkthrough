@@ -38,6 +38,14 @@ verified, it says so.** A milestone is not "done" because its code exists.
   photo on one plane with its sky cleaned and stronger dust removal, dim
   light smoothed wider. Checked in the new bake; the anteroom's dark line
   could not be reproduced.
+- **Design menu:** a bottom sheet on a phone (collapsed: room and style),
+  a panel at the right from 1024 px; tabs Style (cards with swatches,
+  "Apply to all rooms"), Floor, Furniture & lamps, This room (floor, each
+  piece with its size in cm, the flat's own pieces as "Original", other
+  rooms with their style and floor). A row or a tap on a piece in 3D lists
+  what fits there first. Esc closes it. The models' CC BY credit is in it.
+  Playwright desktop: 13 of 14 viewer tests pass; the one failing is the
+  landing page link, whose uncommitted rework is not part of this.
 
 ## 2026-10-24 — The landing page is a doorway
 
