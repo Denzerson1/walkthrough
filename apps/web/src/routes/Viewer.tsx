@@ -15,6 +15,7 @@ import { TitleScreen } from '../components/TitleScreen';
 import { Toast } from '../components/Toast';
 import { IS_STATIC, apiUrl, fileUrl, getJson, postEvent, sessionId } from '../lib/api';
 import { toMinutes } from '../lib/daylight';
+import { type Finish, fittingsIn } from '../lib/finishes';
 import type { Manifest } from '../lib/manifest';
 import { type CatalogItem, stagedRoomIds, useStore } from '../lib/store';
 import { isStaged } from '../lib/viewerState';
@@ -93,6 +94,17 @@ export function Viewer() {
   const [pose, setPose] = useState<{ x: number; z: number; yaw: number } | null>(null);
   const [copied, setCopied] = useState(false);
   const [layoutNote, setLayoutNote] = useState<string | null>(null);
+  /** The rebuilt flat's material names, once it is in: what the fittings' finishes apply to. */
+  const [materials, setMaterials] = useState<ReadonlySet<string>>(() => new Set());
+  const fittings = useMemo(() => fittingsIn(catalog.finishes, materials), [catalog.finishes, materials]);
+  const finishes = useMemo(
+    () =>
+      Object.values(viewer.finishes).flatMap((id): Finish[] => {
+        const finish = catalog.finishes.find((f) => f.id === id);
+        return finish ? [finish] : [];
+      }),
+    [viewer.finishes, catalog.finishes],
+  );
 
   // Load the manifest, catalog and any shared state.
   useEffect(() => {
@@ -113,7 +125,7 @@ export function Viewer() {
         }
       });
 
-    for (const kind of ['floors', 'furniture', 'styles'] as const) {
+    for (const kind of ['floors', 'furniture', 'styles', 'finishes'] as const) {
       getJson<CatalogItem[]>(`/api/catalog/${kind}`)
         .then((items) => !cancelled && setCatalog({ [kind]: items }))
         .catch(() => undefined);
@@ -126,8 +138,9 @@ export function Viewer() {
   // An editor signed in (on the server, not the static site) can set the entry view.
   useEffect(() => {
     if (IS_STATIC) return;
-    fetch(apiUrl('/api/editor/session'), { credentials: 'include' })
-      .then((r) => setEditing(r.ok))
+    fetch(apiUrl('/api/editor/me'), { credentials: 'include' })
+      .then((r) => r.json() as Promise<{ editor: boolean }>)
+      .then((me) => setEditing(me.editor))
       .catch(() => setEditing(false));
   }, []);
 
@@ -412,6 +425,8 @@ export function Viewer() {
           floorCatalog={catalog.floors}
           furnitureCatalog={catalog.furniture}
           showingOriginal={showingOriginal}
+          finishes={finishes}
+          onMaterials={setMaterials}
           onProgress={setProgress}
           onReady={() => setReady(true)}
           onError={setError}
@@ -524,7 +539,7 @@ export function Viewer() {
             bottom: 'calc(4.5rem + var(--safe-bottom))',
           }}
         >
-          <DesignMenu room={activeRoom} compact={false} open={menuOpen} onOpenChange={setMenuOpen} />
+          <DesignMenu room={activeRoom} fittings={fittings} compact={false} open={menuOpen} onOpenChange={setMenuOpen} />
         </div>
       )}
 
@@ -685,7 +700,7 @@ export function Viewer() {
 
         {!wide && activeRoom && ready && (
           <div className="px-3 pb-1.5">
-            <DesignMenu room={activeRoom} compact open={menuOpen} onOpenChange={setMenuOpen} />
+            <DesignMenu room={activeRoom} fittings={fittings} compact open={menuOpen} onOpenChange={setMenuOpen} />
           </div>
         )}
 

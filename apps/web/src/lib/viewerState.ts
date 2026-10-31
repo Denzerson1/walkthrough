@@ -32,6 +32,8 @@ export interface ViewerState {
   recolors: Record<string, string>;
   /** roomId -> the style kit (catalog/styles id) last applied to it. */
   styles: Record<string, string>;
+  /** Fitting (the kitchen, the wardrobe) -> its finish (catalog/finishes id). */
+  finishes: Record<string, string>;
   /** Room the viewer is currently standing in. */
   activeRoomId?: string;
 }
@@ -46,6 +48,7 @@ export const EMPTY_VIEWER_STATE: ViewerState = {
   items: [],
   recolors: {},
   styles: {},
+  finishes: {},
 };
 
 /** True when anything has been changed from the original capture. */
@@ -53,7 +56,8 @@ export function isStaged(state: ViewerState): boolean {
   return (
     Object.keys(state.floors).length > 0 ||
     state.items.length > 0 ||
-    Object.keys(state.recolors).length > 0
+    Object.keys(state.recolors).length > 0 ||
+    Object.keys(state.finishes).length > 0
   );
 }
 
@@ -86,6 +90,7 @@ interface WireState {
   i?: Array<[string, string, number, number, number, (string | null)?, string?]>;
   r?: Record<string, string>;
   s?: Record<string, string>;
+  k?: Record<string, string>;
 }
 
 function toWire(state: ViewerState): WireState {
@@ -108,6 +113,7 @@ function toWire(state: ViewerState): WireState {
   }
   if (Object.keys(state.recolors).length) wire.r = state.recolors;
   if (Object.keys(state.styles).length) wire.s = state.styles;
+  if (Object.keys(state.finishes).length) wire.k = state.finishes;
   return wire;
 }
 
@@ -166,6 +172,7 @@ export function decodeViewerState(encoded: string): ViewerState {
     items,
     recolors: wire.r ?? {},
     styles: wire.s ?? {},
+    finishes: wire.k ?? {},
   };
 }
 

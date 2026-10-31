@@ -18,6 +18,14 @@ def body(image: bytes = WEBP) -> dict:
 
 
 class TestEntryView:
+    def test_tells_a_visitor_they_are_not_an_editor_without_an_error(self, client):
+        resp = client.get("/api/editor/me")
+        assert resp.status_code == 200
+        assert resp.json() == {"editor": False}
+
+    def test_tells_an_editor_they_are_one(self, editor_client):
+        assert editor_client.get("/api/editor/me").json() == {"editor": True}
+
     def test_needs_the_editor_session(self, client, seeded_project):
         assert client.put(f"/api/projects/{seeded_project}/entry", json=body()).status_code == 401
 

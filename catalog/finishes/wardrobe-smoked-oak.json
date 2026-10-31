@@ -1,0 +1,13 @@
+{
+  "id": "wardrobe-smoked-oak",
+  "fitting": "wardrobe",
+  "name": "Smoked oak",
+  "swatches": [
+    "#806645"
+  ],
+  "surfaces": {
+    "surface-oak": {
+      "tint": "#9c8670"
+    }
+  }
+}

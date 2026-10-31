@@ -37,6 +37,7 @@ const RICH: ViewerState = {
   ],
   recolors: { 'sofa-1': '#2f4f4f' },
   styles: { living: 'scandinavian' },
+  finishes: { kitchen: 'kitchen-sage', wardrobe: 'wardrobe-walnut' },
 };
 
 describe('isStaged', () => {
@@ -54,6 +55,10 @@ describe('isStaged', () => {
 
   it('is true once something is recolored', () => {
     expect(isStaged({ ...EMPTY_VIEWER_STATE, recolors: { 'sofa-1': '#000' } })).toBe(true);
+  });
+
+  it('is true when a fitting has a new finish', () => {
+    expect(isStaged({ ...EMPTY_VIEWER_STATE, finishes: { kitchen: 'kitchen-sage' } })).toBe(true);
   });
 });
 
@@ -77,6 +82,7 @@ describe('share URL round trip', () => {
     expect(decoded.floors).toEqual(RICH.floors);
     expect(decoded.recolors).toEqual(RICH.recolors);
     expect(decoded.styles).toEqual(RICH.styles);
+    expect(decoded.finishes).toEqual(RICH.finishes);
     expect(decoded.items).toHaveLength(3);
   });
 
@@ -121,6 +127,7 @@ describe('share URL round trip', () => {
       items: [],
       recolors: {},
       styles: {},
+      finishes: {},
     });
   });
 
@@ -140,6 +147,7 @@ describe('share URL round trip', () => {
       items: [],
       recolors: {},
       styles: {},
+      finishes: {},
     });
   });
 
@@ -152,6 +160,7 @@ describe('share URL round trip', () => {
       floors: {},
       recolors: {},
       styles: {},
+      finishes: {},
       items: [
         { uid: 'u|1', itemId: 'chair', roomId: 'living', position: [0, 0, 0], yaw: 0 },
       ],

@@ -7,6 +7,62 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-10-31 — No lag; the kitchen and the wardrobe; a simpler menu
+
+- **The lag:** every frame the view moved woke the render loop from inside
+  itself, starting a second loop beside the first; they doubled until one
+  key held down drew 16,483 frames in 2 s and the page froze for seconds
+  at a time on any browser. One loop now (`schedule()` in `SplatScene`),
+  measured in Chrome at 1280×720, ratio 1.5: frames every 17.8 ms at the
+  median and 18.6 ms at the 95th percentile while turning, walking and
+  gliding, no long tasks (was 1–5 s each), 4 ms of GPU per frame on an
+  RTX 2080 SUPER. A laptop's integrated GPU is several times slower and
+  was not measured on one.
+- **Quality that reacts:** the frame time is averaged, as a 60 Hz display
+  makes single frames jump between 16.7 and 33.3 ms (40 fps never stepped
+  down before); over 20 ms for a second takes the pixel ratio straight to
+  the one that should fit, and it never steps back up to one found too
+  slow (`quality.ts`, tested).
+- **Room glides:** a tap on a room walks there through the openings
+  between (fewest rooms first, at the place in each that makes the
+  shortest way, square through a narrow door) on a centripetal
+  Catmull-Rom curve at an even speed, eased in and out (sine: top speed
+  1.6× the average, the cubic's was 3×), 1.1–2.6 s by length; the gaze
+  levels and turns from view to view, looking ahead on a long walk unless
+  that means turning right round (`camera.ts`, `rooms.ts`, tested).
+  Sampled in Chrome: at most 0.9° of turn and 5.7 cm per frame, every
+  point standable. Openings under 0.6 m (two corners touching) are no
+  longer ways in, for glides or labels.
+- **Kitchen and wardrobe:** a new catalog kind, `catalog/finishes` (five
+  for the kitchen: fronts and worktop; five for the wardrobe: stains and
+  lacquers), served and exported like the others. A finish names the
+  flat's own materials and gives each a colour in place of its texture or
+  a tint over it, under the same baked light; "hold to compare" shows the
+  original. Offered only for fittings whose materials the flat has. In the
+  share link (`k`), with Undo.
+- **Menu:** 440 px on a big screen; tabs Style, Floor, Furniture, Kitchen,
+  Wardrobe (a room without furniture places shows no Style or Furniture);
+  every tab is a grid of pictures with one word under each, an "As it is"
+  or "Original" tile first, "All rooms" a checkbox. The descriptions, the
+  sizes and the "This room" list are gone. Restoring a room's floor no
+  longer clears the rest of the room.
+- **Two more fixes the browser tests found:** a splat scene stayed awake
+  only 2 s after a change, so a floor swap could stay unseen until Spark's
+  sort, finishing later on a slow machine, was drawn; the view now stays
+  awake while Spark sorts. And every visitor's console showed a 401 from
+  the viewer asking whether they are an editor: `GET /api/editor/me`
+  answers 200 either way (tested).
+- **Evidence:** vitest 139, pytest 149, eslint, tsc and ruff green.
+  Playwright desktop: 19 of 20; the one failing is the landing page link,
+  whose uncommitted rework is not part of this. Memory check (phone
+  settings, CPU 4× slower): the same kit after 20 switches has the same
+  GPU geometries and textures (104/45), Reset brings them back (92/26),
+  and once the downloads in flight have landed (9 s) nothing is drawn
+  while idle. Firefox was not measured: Playwright's Firefox for this
+  version is not installed; the cause was not browser-specific.
+  Screenshots: `docs/screenshots/m11-*` (menu, styles, `finish-kitchen`,
+  `finish-wardrobe`).
+
 ## 2026-10-31 — Style kits on real furniture
 
 - **Models and scale:** 36 real products from Amazon Berkeley Objects

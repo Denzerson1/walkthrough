@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import type { Manifest, Room, Vec3 } from './manifest';
+import type { Finish, Fitting } from './finishes';
 import { baseFor, furnishRoom, placeInSlot, type StyleKit } from './styles';
 import {
   EMPTY_VIEWER_STATE,
@@ -59,6 +60,7 @@ interface AppState {
     floors: CatalogItem[];
     furniture: CatalogItem[];
     styles: StyleKit[];
+    finishes: Finish[];
   };
 
   toast: Toast | null;
@@ -74,7 +76,8 @@ interface AppState {
   setPanel: (p: PanelId) => void;
   setShowingOriginal: (v: boolean) => void;
 
-  setFloor: (roomIds: string[], floorId: string) => void;
+  /** Lay a catalog floor in rooms ('all' for every one), or their own back with null. */
+  setFloor: (roomIds: string[], floorId: string | null) => void;
   /** `uid` is assigned here, so callers describe the item and nothing else. */
   addItems: (items: Array<Omit<PlacedItem, 'uid'>>) => void;
   recolorItem: (itemId: string, colorHex: string) => void;
@@ -95,6 +98,8 @@ interface AppState {
   applyStyle: (roomIds: string[] | 'all', styleId: string) => void;
   /** Stand another catalog piece in a room's slot, re-standing what stands on it. */
   swapPiece: (roomId: string, slotId: string, itemId: string) => void;
+  /** Give a fitting a finish, or its own back with null. */
+  setFinish: (fitting: Fitting, finishId: string | null) => void;
   /** Take back the change the toast announced. */
   undo: () => void;
   dismissToast: () => void;
@@ -115,7 +120,7 @@ export const useStore = create<AppState>((set, get) => ({
   activeRoomId: null,
   panel: null,
 
-  catalog: { floors: [], furniture: [], styles: [] },
+  catalog: { floors: [], furniture: [], styles: [], finishes: [] },
   showingOriginal: false,
   selectedUid: null,
   toast: null,
@@ -137,7 +142,10 @@ export const useStore = create<AppState>((set, get) => ({
       const all = roomIds.includes('all');
       const targets = all ? (s.manifest?.rooms ?? []).map((r) => r.id) : roomIds;
       const floors = { ...s.viewer.floors };
-      for (const id of targets) floors[id] = floorId;
+      for (const id of targets) {
+        if (floorId) floors[id] = floorId;
+        else delete floors[id];
+      }
       return { viewer: { ...s.viewer, floors } };
     }),
 
@@ -295,6 +303,19 @@ export const useStore = create<AppState>((set, get) => ({
         viewer: { ...s.viewer, items },
         selectedUid: uid,
         toast: { id: Date.now(), message: item.name, before: s.viewer },
+      };
+    }),
+
+  setFinish: (fitting, finishId) =>
+    set((s) => {
+      const finishes = { ...s.viewer.finishes };
+      if (finishId) finishes[fitting] = finishId;
+      else delete finishes[fitting];
+      const finish = s.catalog.finishes.find((f) => f.id === finishId);
+      const name = fitting[0].toUpperCase() + fitting.slice(1);
+      return {
+        viewer: { ...s.viewer, finishes },
+        toast: { id: Date.now(), message: `${name} · ${finish?.name ?? 'original'}`, before: s.viewer },
       };
     }),
 

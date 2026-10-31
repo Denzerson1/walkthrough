@@ -1,8 +1,8 @@
 /* global process, console, window */
 // Evidence for the design features, into docs/screenshots/ as JPEG (each
 // under 1 MB): on an iPhone viewport and a 1440 px desktop, the title screen,
-// the entry view, the menu collapsed and open, the "This room" tab, each
-// ready style in the living room, and the room labels.
+// the entry view, the menu collapsed and open, each ready style in the living
+// room, a finish for the kitchen and for the wardrobe, and the room labels.
 //
 // Real Chrome with the GPU (flat-01 is too heavy for software rendering);
 // a dev build of the viewer serving flat-01 (it reads window.__viewer):
@@ -52,9 +52,17 @@ for (const [label, options] of [
     await shot(`style-${style}`);
     await page.getByTestId('design-menu-toggle').click();
   }
-  await page.getByTestId('design-tab-room').click();
-  await page.waitForTimeout(600);
-  await shot('this-room');
+  await page.getByTestId('style-none').click();
+  for (const [fitting, finish, at] of [
+    ['kitchen', 'kitchen-sage', [1.4, 1.3, 5, -12]],
+    ['wardrobe', 'wardrobe-walnut', [-1.2, 2.0, 34, -10]],
+  ]) {
+    await page.getByTestId(`design-tab-${fitting}`).click();
+    await page.click(`[data-finish-id="${finish}"]`);
+    await pose(...at);
+    await page.waitForTimeout(1500);
+    await shot(`finish-${fitting}`);
+  }
   await page.getByTestId('design-menu-toggle').click();
 
   await pose(1.0, 1.8, 0, 0);

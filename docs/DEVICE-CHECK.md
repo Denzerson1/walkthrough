@@ -20,9 +20,13 @@ Write down the phone, its OS version and the date. A ✗ anywhere is a bug.
 
 - [ ] Drag to look round slowly, then quickly: no stutter, no white flashes.
 - [ ] Tap the floor to walk to the bedroom, then back: smooth glides.
+- [ ] Tap Bedroom, Hall, Living room in the room strip: each a smooth walk
+      through the doorway, no jump in where you look.
 - [ ] Open the design menu, apply Scandinavian, then Industrial: the
       pieces fade in within 2–3 s on mobile data, and the view keeps
       moving while they load.
+- [ ] Kitchen tab: Sage, then Navy: the fronts and worktop change at once,
+      lit as before. Wardrobe tab: Walnut, then White: the same.
 - [ ] Drag the daylight slider from morning to evening: the furniture
       darkens with the room, lamps glow in the evening.
 
@@ -47,8 +51,8 @@ Write down the phone, its OS version and the date. A ✗ anywhere is a bug.
 
 ## Where to look if something fails
 
-- Stutter: `apps/web/src/lib/quality.ts` lowers the pixel ratio after 2 s
-  under 30 fps; on a phone it starts at 1.5x at most.
+- Stutter: `apps/web/src/lib/quality.ts` lowers the pixel ratio after 1 s
+  under 50 fps on average; on a phone it starts at 1.5x at most.
 - Heat while still: the render loop stops after 2 s without input
   (`SplatScene.tsx`, `IDLE_AFTER_MS` + `SETTLE_MS`).
 - Crash or reload: the furniture models are kept within 120 MB on a phone

@@ -1,0 +1,14 @@
+{
+  "id": "kitchen-cashmere",
+  "fitting": "kitchen",
+  "name": "Cashmere",
+  "swatches": [
+    "#d9cfc1",
+    "#8b8a87"
+  ],
+  "surfaces": {
+    "surface-gloss": {
+      "colour": "#d9cfc1"
+    }
+  }
+}

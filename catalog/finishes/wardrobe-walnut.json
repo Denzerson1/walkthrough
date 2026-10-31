@@ -1,0 +1,13 @@
+{
+  "id": "wardrobe-walnut",
+  "fitting": "wardrobe",
+  "name": "Walnut",
+  "swatches": [
+    "#643f29"
+  ],
+  "surfaces": {
+    "surface-oak": {
+      "tint": "#7a5a44"
+    }
+  }
+}

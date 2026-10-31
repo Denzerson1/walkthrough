@@ -1,0 +1,13 @@
+{
+  "id": "wardrobe-white",
+  "fitting": "wardrobe",
+  "name": "White",
+  "swatches": [
+    "#eeece7"
+  ],
+  "surfaces": {
+    "surface-oak": {
+      "colour": "#eeece7"
+    }
+  }
+}

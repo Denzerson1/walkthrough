@@ -1,0 +1,17 @@
+{
+  "id": "kitchen-anthracite",
+  "fitting": "kitchen",
+  "name": "Anthracite",
+  "swatches": [
+    "#34363a",
+    "#5d5c5a"
+  ],
+  "surfaces": {
+    "surface-gloss": {
+      "colour": "#34363a"
+    },
+    "surface-stone": {
+      "tint": "#8a8784"
+    }
+  }
+}

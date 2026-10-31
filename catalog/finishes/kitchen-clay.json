@@ -1,0 +1,17 @@
+{
+  "id": "kitchen-clay",
+  "fitting": "kitchen",
+  "name": "Clay",
+  "swatches": [
+    "#b4735a",
+    "#e6e2da"
+  ],
+  "surfaces": {
+    "surface-gloss": {
+      "colour": "#b4735a"
+    },
+    "surface-stone": {
+      "colour": "#e6e2da"
+    }
+  }
+}

@@ -7,7 +7,7 @@
  * (brief M3) without any extra work — they share one depth buffer.
  */
 
-import type { SplatMesh } from '@sparkjsdev/spark';
+import type { SparkRenderer, SplatMesh } from '@sparkjsdev/spark';
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -44,6 +44,7 @@ import {
   vertexLight,
 } from '../lib/daylight';
 import { AutoExposure } from '../lib/exposure';
+import { type Finish, surfaceFinish } from '../lib/finishes';
 import { fetchGlb } from '../lib/glb';
 import { SunShadow, sunAt } from '../lib/sun';
 import { DEFAULT_ITEM_SIZE, FurnitureLayer } from '../lib/furnitureLayer';
@@ -81,6 +82,10 @@ interface Props {
   floorCatalog: CatalogItem[];
   furnitureCatalog: CatalogItem[];
   showingOriginal: boolean;
+  /** The finishes chosen for the flat's fittings (its kitchen, its wardrobe). */
+  finishes?: Finish[];
+  /** The names of a rebuilt flat's materials, once it is in: what finishes can apply to. */
+  onMaterials?: (names: Set<string>) => void;
   onProgress?: (fraction: number) => void;
   onReady: () => void;
   onError: (message: string) => void;
@@ -215,6 +220,8 @@ export function SplatScene({
   floorCatalog,
   furnitureCatalog,
   showingOriginal,
+  finishes = NO_FINISHES,
+  onMaterials,
   onProgress,
   onReady,
   onError,
@@ -292,6 +299,8 @@ export function SplatScene({
     reflect?: () => void;
     splat?: SplatMesh;
     floorSplat?: SplatMesh;
+    /** Sorts the splats on a worker; a sort finishing needs a frame to show it. */
+    spark?: SparkRenderer;
     model?: THREE.Group;
     daylight?: Daylight;
     sun?: SunShadow;
@@ -505,7 +514,9 @@ export function SplatScene({
       import('@sparkjsdev/spark')
         .then(({ SparkRenderer, SplatMesh }) => {
           if (disposed || !sceneRef.current) return;
-          scene.add(new SparkRenderer({ renderer }));
+          const spark = new SparkRenderer({ renderer });
+          scene.add(spark);
+          sceneRef.current.spark = spark;
           const splat = new SplatMesh({ url: sceneUrl, onLoad: settle });
           splat.quaternion.identity();
           scene.add(splat);
@@ -716,6 +727,9 @@ export function SplatScene({
         activeAt = now;
       }
       if (furniture.tick(now)) activeAt = now;
+      // Awake until the splats' order for this view is in: it is drawn a frame after it lands.
+      const spark = sceneRef.current?.spark;
+      if (spark && (spark.sorting || spark.sortDirty)) activeAt = now;
       const idle = now - activeAt;
       // Asleep: the next wake() starts the loop again.
       if (idle > IDLE_AFTER_MS + SETTLE_MS) return;
@@ -1349,6 +1363,25 @@ export function SplatScene({
     sceneRef.current?.wake();
   }, [viewer.items, manifest, showingOriginal, contentReady]);
 
+  // ---- the fittings' finishes -------------------------------------------
+  useEffect(() => {
+    const model = sceneRef.current?.model;
+    if (!contentReady || !model) return;
+    const names = new Set<string>();
+    model.traverse((node) => {
+      if (node instanceof THREE.Mesh) names.add((node.material as THREE.Material).name);
+    });
+    onMaterials?.(names);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once the flat is in
+  }, [contentReady]);
+
+  useEffect(() => {
+    const ctx = sceneRef.current;
+    if (!contentReady || !ctx?.model) return;
+    finishModel(ctx.model, showingOriginal ? NO_FINISHES : finishes);
+    ctx.wake();
+  }, [finishes, showingOriginal, contentReady]);
+
   // Lamps glow from dusk: none at midday, fully from 19:30. Placed furniture
   // takes the light of the hour, as the baked flat round it does: dimmer as
   // the light maps are, its key light from where the sun is.
@@ -1778,6 +1811,33 @@ function swapModelFloor(model: THREE.Group, roomId: string, floor: CatalogItem |
       material.userData.swapped = texture;
       material.needsUpdate = true;
     });
+  });
+}
+
+const NO_FINISHES: Finish[] = [];
+
+/**
+ * Give the flat's materials the finishes chosen, and their own back where
+ * none is: a colour in place of the texture, or the texture stained with
+ * one. The baked light stays, so a new front is lit as the old one was.
+ */
+function finishModel(model: THREE.Object3D, finishes: Finish[]): void {
+  model.traverse((node) => {
+    if (!(node instanceof THREE.Mesh)) return;
+    const material = node.material as THREE.MeshBasicMaterial;
+    const own = material.userData.originalColor as THREE.Color | undefined;
+    if (!own) return;
+    const finish = surfaceFinish(finishes, material.name);
+    if (!finish && !material.userData.finished) return;
+    material.userData.finished = Boolean(finish);
+    const colour = finish?.colour ?? finish?.tint;
+    if (colour) material.color.set(colour);
+    else material.color.copy(own);
+    const map = finish?.colour ? null : ((material.userData.originalMap as THREE.Texture | null) ?? null);
+    if (material.map !== map) {
+      material.map = map;
+      material.needsUpdate = true;
+    }
   });
 }
 

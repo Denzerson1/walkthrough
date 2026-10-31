@@ -1,0 +1,17 @@
+{
+  "id": "kitchen-navy",
+  "fitting": "kitchen",
+  "name": "Navy",
+  "swatches": [
+    "#27334a",
+    "#e6e2da"
+  ],
+  "surfaces": {
+    "surface-gloss": {
+      "colour": "#27334a"
+    },
+    "surface-stone": {
+      "colour": "#e6e2da"
+    }
+  }
+}

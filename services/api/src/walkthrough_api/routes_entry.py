@@ -11,7 +11,7 @@ from __future__ import annotations
 import base64
 import binascii
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Cookie, Depends, HTTPException
 from pydantic import BaseModel
 from walkthrough_pipeline.manifest import HeroView, Vec3
 
@@ -56,3 +56,20 @@ def set_entry(
     )
     projects.save_manifest(settings, project_id, manifest)
     return {"saved": True, "image": HERO_IMAGE, "bytes": len(image)}
+
+
+@router.get("/editor/me")
+def editor_me(
+    wt_editor: str | None = Cookie(default=None, alias=auth.COOKIE_NAME),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, bool]:
+    """
+    Whether this visitor is a signed-in editor, for the viewer's editor
+    controls. Every visitor asks, so it answers 200 either way: a 401 on
+    every tour is an error in every visitor's console.
+    """
+    try:
+        auth.require_editor(wt_editor, settings)
+    except HTTPException:
+        return {"editor": False}
+    return {"editor": True}

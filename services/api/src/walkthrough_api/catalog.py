@@ -13,8 +13,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-CatalogKind = Literal["floors", "furniture", "styles"]
-KINDS: tuple[CatalogKind, ...] = ("floors", "furniture", "styles")
+CatalogKind = Literal["floors", "furniture", "styles", "finishes"]
+KINDS: tuple[CatalogKind, ...] = ("floors", "furniture", "styles", "finishes")
 
 
 @dataclass
@@ -22,6 +22,8 @@ class Catalog:
     floors: list[dict[str, Any]] = field(default_factory=list)
     furniture: list[dict[str, Any]] = field(default_factory=list)
     styles: list[dict[str, Any]] = field(default_factory=list)
+    #: Finishes for a flat's built-in fittings (its kitchen, its wardrobe).
+    finishes: list[dict[str, Any]] = field(default_factory=list)
 
     def items(self, kind: CatalogKind) -> list[dict[str, Any]]:
         return getattr(self, kind)
@@ -202,6 +204,8 @@ def summarise(item: dict[str, Any], kind: CatalogKind) -> dict[str, Any]:
             "colors": item.get("colors", []),
             "dimensionsM": item.get("dimensionsM"),
         }
+    elif kind == "finishes":
+        base |= {"fitting": item.get("fitting"), "swatches": item.get("swatches", [])}
     else:
         base |= {
             "description": item.get("description"),

@@ -55,7 +55,7 @@ uv run python scripts/run_assistant_evals.py --dry-run
 apps/web/          Vite + React + TS + three.js + Spark, Zustand, Tailwind
 services/api/      FastAPI + SQLModel + SQLite, storage adapter
 pipeline/          Typer CLI: video -> scene
-catalog/           floors/ furniture/ styles/ (JSON + small thumbnails)
+catalog/           floors/ furniture/ styles/ finishes/ (JSON + small thumbnails)
 scripts/           seeding and the synthetic test scene
 docs/              BRIEF, SPEC, CAPTURE, PIPELINE, PROGRESS, ROADMAP, DEMO, LICENSES
 data/              git-ignored: projects, uploads, cache

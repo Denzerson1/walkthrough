@@ -5,8 +5,8 @@
 //      GPU's geometries and textures (renderer.info.memory) when the last
 //      kit is shown must be within 10% of when that kit was first shown,
 //      and Reset must bring them back within 10% of the flat before any kit.
-//   2. Nothing is drawn after 2 s without input (renderer.info.render.frame
-//      stays put).
+//   2. Once the downloads in flight have landed, nothing is drawn after 2 s
+//      without input (renderer.info.render.frame stays put).
 //
 // Needs a dev build of the viewer (it reads window.__viewer):
 //   VIEWER_URL=http://localhost:5174/walkthrough/p/flat-01 node scripts/memory-check.mjs
@@ -66,7 +66,18 @@ await page.getByTestId('reset-all').click();
 await page.waitForTimeout(1500);
 const reset = await memory();
 
-// Idle: no input for 2 s, then 3 s more watching the frame counter.
+// Downloads still in flight when Reset was pressed land and are drawn (each
+// wakes the view for 2 s): first wait for the view to go quiet, at most 30 s.
+const quietFrom = Date.now();
+for (let last = await frames(); Date.now() - quietFrom < 30_000; ) {
+  await page.waitForTimeout(3000);
+  const now = await frames();
+  if (now === last) break;
+  last = now;
+}
+const settledMs = Date.now() - quietFrom;
+
+// Idle: then input, no input for 2 s, then 3 s more watching the frame counter.
 await page.mouse.move(5, 5);
 await page.waitForTimeout(2000);
 const idleFrom = await frames();
@@ -78,6 +89,7 @@ const result = {
   before, first, after, reset,
   sameKit: within(first.geometries, after.geometries) && within(first.textures, after.textures),
   backAfterReset: within(before.geometries, reset.geometries) && within(before.textures, reset.textures),
+  settledMs,
   framesWhileIdle: idleTo - idleFrom,
   errors,
 };

@@ -1,0 +1,13 @@
+{
+  "id": "wardrobe-black",
+  "fitting": "wardrobe",
+  "name": "Black",
+  "swatches": [
+    "#2b2b2c"
+  ],
+  "surfaces": {
+    "surface-oak": {
+      "colour": "#2b2b2c"
+    }
+  }
+}

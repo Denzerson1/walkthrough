@@ -1,0 +1,13 @@
+{
+  "id": "wardrobe-sage",
+  "fitting": "wardrobe",
+  "name": "Sage",
+  "swatches": [
+    "#8f9d88"
+  ],
+  "surfaces": {
+    "surface-oak": {
+      "colour": "#8f9d88"
+    }
+  }
+}

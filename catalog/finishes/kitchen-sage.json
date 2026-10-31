@@ -1,0 +1,17 @@
+{
+  "id": "kitchen-sage",
+  "fitting": "kitchen",
+  "name": "Sage",
+  "swatches": [
+    "#8f9d88",
+    "#e6e2da"
+  ],
+  "surfaces": {
+    "surface-gloss": {
+      "colour": "#8f9d88"
+    },
+    "surface-stone": {
+      "colour": "#e6e2da"
+    }
+  }
+}

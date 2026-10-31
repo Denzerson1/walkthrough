@@ -79,7 +79,7 @@ apps/web/          Vite + React + TS + three.js + Spark, Zustand, Tailwind. Mobi
 services/api/      Python 3.11, FastAPI, SQLModel + SQLite, storage adapter (local disk | S3-compatible).
                    Project manifests, catalog, uploads, chat, analytics events.
 pipeline/          Python CLI (Typer): video -> scene. WSL2 Ubuntu + CUDA. Dockerfile on a CUDA base image.
-catalog/           floors/ furniture/ styles/   (JSON + small thumbnails)
+catalog/           floors/ furniture/ styles/ finishes/   (JSON + small thumbnails)
 scripts/           Asset seeding and the synthetic test-scene generator.
 docs/              BRIEF.md SPEC.md CAPTURE.md PIPELINE.md PROGRESS.md ROADMAP.md DEMO.md LICENSES.md screenshots/
 data/              git-ignored: projects, uploads, cache
