@@ -8,8 +8,10 @@ Blender, so the view can be worked on without baking the flat again.
 
 from __future__ import annotations
 
+import cv2
 import numpy as np
 from PIL import Image
+from scipy.ndimage import median_filter
 
 from . import glb, rebuild, sky, view_photo
 from .manifest import Manifest, ViewPhoto
@@ -17,6 +19,8 @@ from .paths import ProjectPaths, repo_root
 from .photo_texture import srgb_to_linear
 
 VIEW_FILE = "view_photo.glb"
+#: Panorama pixels (of 2048 round) the photo's sky is cleaned over.
+SKY_CLEAN = 15
 
 
 def build(paths: ProjectPaths, spec: dict, dressing: dict, times: list[str]) -> dict:
@@ -37,8 +41,11 @@ def build(paths: ProjectPaths, spec: dict, dressing: dict, times: list[str]) -> 
                 repo_root() / entry["photo"], repo_root() / partner["photo"],
                 centres[entry["window"]], centres[partner["window"]], outward,
                 entry.get("keep")))
-        shown = [views[0], *(view_photo.outside_of(v, views[0]) for v in views[1:])]
-        glb.write_textured_meshes(paths.scene / VIEW_FILE, [v.mesh for v in shown], "view-photo")
+        # Only the first photo is stood outside; the second is its stereo
+        # partner and lends its sky. Stood outside too, even on the same
+        # plane, it went on past the first's edge with the house across
+        # again, a few metres along.
+        glb.write_textured_meshes(paths.scene / VIEW_FILE, [views[0].mesh], "view-photo")
     when = view_photo.taken(repo_root() / entries[0]["photo"]) if views else None
 
     photo, photo_sun = None, None
@@ -51,7 +58,12 @@ def build(paths: ProjectPaths, spec: dict, dressing: dict, times: list[str]) -> 
                                      v.camera.right, v.camera.up, v.camera.forward, v.camera.f)
             better = w > weight
             colour[better], weight[better] = c[better], w[better]
-        photo = (colour, weight)
+        # The photo's sky without what the glass put on it (a smear read as
+        # a pole in the sky), drawn back from the roofs by as much, which
+        # the filter dragged into it as a dark rim, and softly edged.
+        colour = median_filter(colour, size=(SKY_CLEAN, SKY_CLEAN, 1))
+        weight = cv2.erode(weight, np.ones((2 * SKY_CLEAN + 1,) * 2, np.uint8))
+        photo = (colour, cv2.GaussianBlur(weight, (0, 0), SKY_CLEAN / 2))
         on_the_day = {**dressing, "sun": {**dressing["sun"], "date": when[0]}}
         photo_sun = np.array(rebuild.sun(on_the_day, tuple(facing["dir"]), facing["bearing"],
                                          when[1])["direction"])

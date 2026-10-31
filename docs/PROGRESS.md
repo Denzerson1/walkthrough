@@ -28,6 +28,16 @@ verified, it says so.** A milestone is not "done" because its code exists.
   own. One store action for the menu, 3D taps and the assistant; pieces
   fade in and out, a toast offers Undo; lamps glow from dusk; models load
   per device (phone/desktop), within a memory budget, and are freed.
+- **Shadows:** placed pieces cast the sun's shadow on the baked floor and
+  walls (the sun's shadow map is drawn again when a piece arrives, moves or
+  goes), the flat's own sofa and bed stop casting theirs once hidden, and
+  placed pieces are lit as the hour is (by the light maps' brightness, the
+  key from the sun's direction): dim at dusk, not lit like noon.
+- **Last fixes:** the duvet's hem kept (no holes; the drawn frame as wide
+  as the bed), the TV right of the island, the drawn sofa back, the window
+  photo on one plane with its sky cleaned and stronger dust removal, dim
+  light smoothed wider. Checked in the new bake; the anteroom's dark line
+  could not be reproduced.
 
 ## 2026-10-24 — The landing page is a doorway
 

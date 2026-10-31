@@ -1736,6 +1736,15 @@ DROP_BELOW = 0.55
 #: own, dropped, left a hole.
 DROP_PATCH = 50
 
+#: Of a dark patch, only what lies below this share of the model's height
+#: goes, well inside the drawn frame (as wide as the bed, its top higher than
+#: the old frame's): above it the hem met the old frame, and cut there it
+#: showed the dark under the duvet through notches. What stays is given
+#: the fabric's colour, as is every other dark face of the
+#: lower part and any face that reads near black (DROP_SPECK), a speck where
+#: a face's UVs ran into the gutter.
+DROP_HIDDEN, DROP_SPECK = 0.40, 0.08
+
 
 def drop_darker(obj: bpy.types.Object, below: float) -> None:
     """
@@ -1760,7 +1769,8 @@ def drop_darker(obj: bpy.types.Object, below: float) -> None:
     centre = np.empty(n * 3, np.float32)
     mesh.polygons.foreach_get("center", centre)
     height = centre.reshape(-1, 3)[:, 2]
-    low = height < height.min() + DROP_BELOW * (height.max() - height.min())
+    share = (height - height.min()) / (height.max() - height.min())
+    low = share < DROP_BELOW
     light = np.ones(n, np.float32)
     weights = np.array([0.2126, 0.7152, 0.0722], np.float32)
     for i, mat in enumerate(mesh.materials):
@@ -1796,7 +1806,22 @@ def drop_darker(obj: bpy.types.Object, below: float) -> None:
                         todo.append(near)
         if len(patch) >= DROP_PATCH:
             drop += patch
-    bmesh.ops.delete(bm, geom=drop, context="FACES")
+    hidden = [face for face in drop if share[face.index] < DROP_HIDDEN]
+    gone = np.zeros(n, bool)
+    gone[[face.index for face in hidden]] = True
+    fabric = (dark | (light < DROP_SPECK)) & ~gone
+    # The fabric's colour: per material, the UV middle of a face of median
+    # brightness among the light ones; every loop of a recoloured face reads it.
+    layer = bm.loops.layers.uv[0]
+    for i in range(len(mesh.materials)):
+        bright = np.flatnonzero((slot == i) & (light > 2 * below))
+        if not len(bright):
+            continue
+        pick = bright[np.argsort(light[bright])[len(bright) // 2]]
+        for f in np.flatnonzero(fabric & (slot == i)):
+            for loop in bm.faces[f].loops:
+                loop[layer].uv = middle[pick]
+    bmesh.ops.delete(bm, geom=hidden, context="FACES")
     bm.to_mesh(mesh)
     bm.free()
 
@@ -2474,8 +2499,9 @@ def denoise(baked: bpy.types.Image, scratch: Path):
 #: Below this share of the atlas's median light, a texel's light is also
 #: smoothed widely (DIM_SIGMA texels, edge-preserving), fully so in the
 #: dark: in nooks (behind the shelves, under the wall units) the bake's
-#: last noise came out as blotches.
-DIM_BELOW, DIM_SIGMA = 0.6, 6.0
+#: last noise came out as blotches. At 0.6 and 6, an evening ceiling along
+#: the hall's walls still did.
+DIM_BELOW, DIM_SIGMA = 0.9, 8.0
 #: How far apart two texels' light may be (in log luminance) and still be
 #: smoothed together: noise is, a shadow's edge is not. At 0.25 the noise in
 #: dim light (beside the wardrobe) counted as edges and stayed blotchy.

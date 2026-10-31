@@ -28,10 +28,6 @@ def test_walls_are_where_the_features_cluster():
     walls = view_photo.wall_depths(d)
     assert walls[0] == pytest.approx(12, abs=0.5)
     assert any(abs(w - 50) < 1.5 for w in walls)
-    label = view_photo.nearest_wall(np.array([12.3, 49.0, 30.0]), walls)
-    assert walls[label[0]] == pytest.approx(12, abs=0.5)
-    assert walls[label[1]] == pytest.approx(50, abs=1.5)
-    assert label[2] == -1
 
 
 def test_drawn_in_keeps_order_and_stays_in_front():
@@ -107,30 +103,3 @@ def test_photo_sky_weight_is_zero_on_the_buildings():
     ahead_down = np.argmin(np.linalg.norm(d - np.array([0, -0.2, -0.98]), axis=-1))
     assert weight.ravel()[ahead_up] > 0.3
     assert weight.ravel()[ahead_down] == pytest.approx(0, abs=1e-3)
-
-
-def test_a_second_photo_keeps_only_what_the_first_does_not_show():
-    # The first camera looks down +z from the origin, 200 x 100 px, f = 100:
-    # it sees out to x = +-10 at z = 10.
-    cam = view_photo.Camera(np.zeros(3), np.array([1.0, 0, 0]), np.array([0, 1.0, 0]),
-                            np.array([0, 0, 1.0]), 100.0, (200, 100))
-    shown = np.ones((100, 200), bool)
-    first = view_photo.View((np.zeros((0, 3)), None, None, b""), cam, None, shown, ~shown, {})
-    # Two triangles of the second photo's mesh at z = 10: one inside the
-    # first's frame, one beyond its right edge.
-    positions = np.array([[0, 0, 10], [1, 0, 10], [0, 1, 10],
-                          [15, 0, 10], [16, 0, 10], [15, 1, 10]], float)
-    tri = np.array([[0, 1, 2], [3, 4, 5]])
-    second = view_photo.View((positions, np.zeros((6, 2)), tri, b"jpeg"), cam, None, shown,
-                             ~shown, {})
-    kept = view_photo.outside_of(second, first).mesh[2]
-    assert kept.tolist() == [[3, 4, 5]]
-    # Where the first photo's frame was cut away (keep), the second still shows.
-    first.solid[:] = False
-    assert len(view_photo.outside_of(second, first).mesh[2]) == 2
-
-
-def test_what_stands_just_behind_the_street_front_lies_on_it():
-    assert view_photo.street_front([12.0, 18.6, 33.5, 52.0]) == [12.0, 33.5, 52.0]
-    assert view_photo.street_front([10.6, 15.4, 23.5]) == [10.6, 23.5]
-    assert view_photo.street_front([12.0]) == [12.0]

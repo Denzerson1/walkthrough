@@ -92,7 +92,7 @@ const PENUMBRA = 0.025;
 /** How far behind the flat (towards the sun) the shadow map reaches: the houses across the street. */
 const REACH = 150;
 /** The layer of what casts the sun's shadow. */
-const CASTS = 2;
+export const CASTS = 2;
 /** Not in the sun's way: what Cycles let the light through or did not have in the bake. */
 const SEE_THROUGH = new Set(['glass', 'sky', 'view-photo', 'lamp']);
 
@@ -137,8 +137,19 @@ export class SunShadow {
     };
   }
 
+  private last: { direction: THREE.Vector3; light: [number, number, number] } | null = null;
+
+  /**
+   * Draw the shadow map again where the sun is: after what casts a shadow
+   * has changed (a piece of furniture placed, moved, removed or hidden).
+   */
+  redraw(): void {
+    if (this.last) this.set(this.last.direction, this.last.light);
+  }
+
   /** Put the sun at `direction` (towards it) with `light`, and draw its shadow map. */
   set(direction: THREE.Vector3, light: [number, number, number]): void {
+    this.last = { direction: direction.clone(), light };
     const { uniforms, camera, bounds } = this;
     // Below the horizon it gives no direct light, and the map is not needed.
     const up = Math.min(Math.max(direction.y / 0.02, 0), 1);

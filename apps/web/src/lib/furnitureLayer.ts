@@ -15,6 +15,7 @@ import { furnitureLoader, IS_PHONE, modelUrl } from './furnitureModels';
 import type { Room, Slot } from './manifest';
 import type { CatalogItem } from './store';
 import { baseFor } from './styles';
+import { CASTS } from './sun';
 import type { PlacedItem } from './viewerState';
 
 /**
@@ -237,7 +238,14 @@ export class FurnitureLayer {
   private glow = 0;
   private reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  constructor(private renderer: THREE.WebGLRenderer) {}
+  /**
+   * `onChange`: what casts a shadow changed (a model arrived, a piece moved
+   * or went), so the sun's shadow map is drawn again.
+   */
+  constructor(
+    private renderer: THREE.WebGLRenderer,
+    private onChange: () => void = () => undefined,
+  ) {}
 
   /** Bring the scene in line with the placed items. */
   sync(
@@ -250,6 +258,7 @@ export class FurnitureLayer {
     for (const [uid, shown] of this.shown) {
       if (!wanted.has(uid)) this.remove(uid, shown);
     }
+    let moved = false;
     for (const item of items) {
       const entry = catalog.find((f) => f.id === item.itemId);
       const size = (entry?.dimensionsM ?? DEFAULT_ITEM_SIZE) as [number, number, number];
@@ -260,10 +269,13 @@ export class FurnitureLayer {
       }
       if (!shown) shown = this.add(item, entry, size);
       const { group } = shown;
+      const before = group.position.clone();
+      const turned = group.rotation.y;
       group.position.set(item.position[0], standingHeight(item, items, catalog, rooms), item.position[2]);
       // Negated: geometry.ts and layout.py turn (x, z) counter-clockwise, a
       // three.js rotation about +Y the other way.
       group.rotation.y = (-item.yaw * Math.PI) / 180;
+      if (!before.equals(group.position) || turned !== group.rotation.y) moved = true;
       const ring = group.children.find((c) => c.userData.selection);
       if (item.uid === selectedUid && !ring) group.add(selectionRing(size));
       if (item.uid !== selectedUid && ring) {
@@ -271,6 +283,7 @@ export class FurnitureLayer {
         disposeOwned(ring);
       }
     }
+    if (moved) this.onChange();
   }
 
   /** How much a lamp's shade glows, 0 by day to 1 at night. */
@@ -302,10 +315,12 @@ export class FurnitureLayer {
   }
 
   private drop(shown: Shown): void {
+    const casting = shown.materials.length > 0;
     this.group.remove(shown.group);
     disposeOwned(shown.group);
     for (const m of shown.materials) m.dispose();
     if (shown.url && shown.materials.length) release(shown.url);
+    if (casting) this.onChange();
   }
 
   private add(item: PlacedItem, entry: CatalogItem | undefined, size: [number, number, number]): Shown {
@@ -343,12 +358,15 @@ export class FurnitureLayer {
             return copy;
           });
           if (node.material.length === 1) node.material = node.material[0];
+          // It shades the floor and walls in the sun, as the flat's own pieces do.
+          node.layers.enable(CASTS);
         });
         for (const shade of shown.shades) applyGlow(shade, this.glow);
         group.remove(box);
         disposeOwned(box);
         group.add(model);
         this.fade(shown, 0, 1);
+        this.onChange();
       })
       .catch(() => {
         // Keep the faint box: a missing model shows as the space it takes.

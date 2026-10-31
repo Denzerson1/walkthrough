@@ -44,7 +44,7 @@ import {
 } from '../lib/daylight';
 import { AutoExposure } from '../lib/exposure';
 import { fetchGlb } from '../lib/glb';
-import { SunShadow } from '../lib/sun';
+import { SunShadow, sunAt } from '../lib/sun';
 import { DEFAULT_ITEM_SIZE, FurnitureLayer } from '../lib/furnitureLayer';
 import type { CatalogItem } from '../lib/store';
 import type { ViewerState } from '../lib/viewerState';
@@ -229,6 +229,9 @@ export function SplatScene({
     furnitureGroup: THREE.Group;
     furniture: FurnitureLayer;
     walkCursor: THREE.Mesh;
+    /** The lights placed furniture is lit by (the flat's own light is baked). */
+    ambient: THREE.AmbientLight;
+    key: THREE.DirectionalLight;
     splat?: SplatMesh;
     floorSplat?: SplatMesh;
     model?: THREE.Group;
@@ -293,13 +296,13 @@ export function SplatScene({
 
     // Ambient plus a soft key so placed furniture is not flat. The real
     // environment map from the splat arrives in M6.
-    scene.add(new THREE.AmbientLight(0xffffff, 1.6));
-    const key = new THREE.DirectionalLight(0xffffff, 1.1);
+    const ambient = new THREE.AmbientLight(0xffffff, FURNITURE_AMBIENT);
+    const key = new THREE.DirectionalLight(0xffffff, FURNITURE_KEY);
     key.position.set(2, 4, 3);
-    scene.add(key);
+    scene.add(ambient, key);
 
     const floorGroup = new THREE.Group();
-    const furniture = new FurnitureLayer(renderer);
+    const furniture = new FurnitureLayer(renderer, () => sceneRef.current?.sun?.redraw());
     const furnitureGroup = furniture.group;
     scene.add(floorGroup, furnitureGroup);
 
@@ -310,7 +313,9 @@ export function SplatScene({
     walkCursor.visible = false;
     scene.add(walkCursor);
 
-    sceneRef.current = { scene, camera, renderer, floorGroup, furnitureGroup, furniture, walkCursor };
+    sceneRef.current = {
+      scene, camera, renderer, floorGroup, furnitureGroup, furniture, walkCursor, ambient, key,
+    };
     // Development only: lets tests and debugging inspect the live scene.
     // Dev only: the scene and the walk state, so tests can stand anywhere.
     if (import.meta.env.DEV) {
@@ -1169,14 +1174,26 @@ export function SplatScene({
     model.traverse((node) => {
       if (replaceable.has(node.name)) node.visible = showingOriginal || !replaced.has(node.name);
     });
+    // A hidden sofa must not leave its shadow in the sun.
+    sceneRef.current?.sun?.redraw();
   }, [viewer.items, manifest, showingOriginal, contentReady]);
 
-  // Lamps glow from dusk: none at midday, fully from 19:30.
+  // Lamps glow from dusk: none at midday, fully from 19:30. Placed furniture
+  // takes the light of the hour, as the baked flat round it does: dimmer as
+  // the light maps are, its key light from where the sun is.
   useEffect(() => {
+    const ctx = sceneRef.current;
+    if (!ctx) return;
     const minutes = daylight ?? 12 * 60;
-    const glow = Math.min(1, Math.max(0, (minutes - 16.5 * 60) / (3 * 60)));
-    sceneRef.current?.furniture.setGlow(glow);
-  }, [daylight, contentReady]);
+    ctx.furniture.setGlow(Math.min(1, Math.max(0, (minutes - 16.5 * 60) / (3 * 60))));
+    const level = lightLevel(model?.lighting ?? [], minutes);
+    ctx.ambient.intensity = FURNITURE_AMBIENT * level;
+    ctx.key.intensity = FURNITURE_KEY * level;
+    if (model?.sunPath?.length) {
+      const { direction } = sunAt(model.sunPath, minutes);
+      if (direction[1] > 0.02) ctx.key.position.set(...direction);
+    }
+  }, [daylight, contentReady, model]);
 
   return <div ref={mountRef} className="absolute inset-0" data-testid="splat-canvas" />;
 }
@@ -1558,4 +1575,31 @@ function buildWalkCursor(): THREE.Mesh {
   mesh.userData.owned = true;
   material.userData.owned = true;
   return mesh;
+}
+
+/** How brightly placed furniture is lit at midday: a fill and a key. */
+const FURNITURE_AMBIENT = 1.6;
+const FURNITURE_KEY = 1.1;
+
+/**
+ * The flat's light at `minutes` against midday's, from the light maps'
+ * scales (each the brightest light in its map), between the keys either
+ * side: 1 at noon, about 0.4 at dusk.
+ */
+export function lightLevel(
+  keys: Array<{ minutes: number; lightmapScale: number }>,
+  minutes: number,
+): number {
+  if (!keys.length) return 1;
+  const sorted = [...keys].sort((a, b) => a.minutes - b.minutes);
+  const at = (m: number) => {
+    const j = sorted.findIndex((k) => k.minutes >= m);
+    if (j === 0) return sorted[0].lightmapScale;
+    if (j === -1) return sorted[sorted.length - 1].lightmapScale;
+    const a = sorted[j - 1];
+    const b = sorted[j];
+    return a.lightmapScale + ((b.lightmapScale - a.lightmapScale) * (m - a.minutes)) / (b.minutes - a.minutes);
+  };
+  const noon = at(12 * 60);
+  return noon > 0 ? at(minutes) / noon : 1;
 }
