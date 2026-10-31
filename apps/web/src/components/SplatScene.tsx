@@ -97,7 +97,34 @@ interface Props {
   /** Labels standing in the flat (a neighbouring room's name at the way into it). */
   labels?: SceneLabel[];
   onLabel?: (id: string) => void;
+  /** Where the tour opens (manifest heroView): the camera starts there. */
+  entry?: EntryView | null;
+  /** Set once the visitor starts the tour: the camera moves gently into the entry view. */
+  entering?: boolean;
+  /** Filled with a function taking a still of the current view, for the editor. */
+  stillRef?: React.MutableRefObject<(() => Still) | null>;
 }
+
+/** A camera pose to open at. */
+export interface EntryView {
+  position: [number, number, number];
+  yaw: number;
+  pitch: number;
+  fov: number;
+}
+
+/** A still of the view and where it was taken: WebP as base64. */
+export interface Still extends EntryView {
+  image: string;
+}
+
+/** The entry move: from this far back and this many degrees round, over this long. */
+const ENTRY_BACK_M = 0.55;
+const ENTRY_TURN_DEG = 7;
+const ENTRY_MS = 2600;
+/** The still's widest side, px, and the most it may weigh. */
+const STILL_SIDE = 1280;
+const STILL_BYTES = 200_000;
 
 /**
  * A label standing over a way into another room (`along`, its two ends on
@@ -194,6 +221,9 @@ export function SplatScene({
   onMoveItem,
   labels = [],
   onLabel,
+  entry = null,
+  entering = false,
+  stillRef,
 }: Props) {
   const mountRef = useRef<HTMLDivElement>(null);
   /** The label elements, placed over the view each frame it is drawn. */
@@ -215,6 +245,8 @@ export function SplatScene({
       to: CameraTarget;
       startedAt: number;
       durationMs: number;
+      /** A tap ends it where it was going (the entry move). */
+      skippable?: boolean;
     },
   });
   /**
@@ -339,6 +371,19 @@ export function SplatScene({
     sceneRef.current = {
       scene, camera, renderer, floorGroup, furnitureGroup, furniture, walkCursor, ambient, key,
     };
+    if (stillRef) {
+      stillRef.current = () => {
+        const st = stateRef.current;
+        renderer.render(scene, camera);
+        return {
+          image: still(renderer.domElement),
+          position: [...st.position],
+          yaw: st.yaw,
+          pitch: st.pitch,
+          fov: st.fov,
+        };
+      };
+    }
     // Development only: lets tests and debugging inspect the live scene.
     // Dev only: the scene and the walk state, so tests can stand anywhere.
     if (import.meta.env.DEV) {
@@ -347,6 +392,7 @@ export function SplatScene({
           return sceneRef.current;
         },
         state: stateRef.current,
+        still: () => stillRef?.current?.(),
       };
     }
 
@@ -827,6 +873,13 @@ export function SplatScene({
     };
 
     const onPointerDown = (e: PointerEvent) => {
+      const moving = stateRef.current.transition;
+      if (moving?.skippable) {
+        stateRef.current.position = [...moving.to.position];
+        stateRef.current.yaw = moving.to.yaw;
+        stateRef.current.transition = null;
+        return;
+      }
       if (e.pointerType === 'touch') touches.add(e.pointerId);
       if (touches.size > 1) {
         dragging = false;
@@ -1075,8 +1128,13 @@ export function SplatScene({
     // would mean opening the viewer at the world origin — a corner of the
     // first room, facing out of it — and sliding in from there.
     if (first) {
-      st.position = [...room.waypoint.position];
-      st.yaw = room.waypoint.yaw;
+      // At the entry view the editor chose, when there is one.
+      st.position = entry ? [...entry.position] : [...room.waypoint.position];
+      st.yaw = entry ? entry.yaw : room.waypoint.yaw;
+      if (entry) {
+        st.pitch = entry.pitch;
+        st.fov = entry.fov;
+      }
       st.transition = null;
       return;
     }
@@ -1089,7 +1147,31 @@ export function SplatScene({
       // the same beat however far it is.
       durationMs: TRANSITION_MS,
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the entry only matters on the first placement
   }, [activeRoomId, manifest]);
+
+  // The visitor starts the tour: a gentle move into the entry view, from a
+  // little further back and turned a little, unless motion is to be reduced.
+  useEffect(() => {
+    if (!entering || !entry) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const st = stateRef.current;
+    const yaw = (entry.yaw * Math.PI) / 180;
+    // Yaw 0 looks down -z: back is +z turned by the yaw.
+    const back: [number, number, number] = [
+      entry.position[0] + Math.sin(yaw) * ENTRY_BACK_M,
+      entry.position[1],
+      entry.position[2] + Math.cos(yaw) * ENTRY_BACK_M,
+    ];
+    st.transition = {
+      from: { position: back, yaw: entry.yaw + ENTRY_TURN_DEG },
+      to: { position: [...entry.position], yaw: entry.yaw },
+      startedAt: performance.now(),
+      durationMs: ENTRY_MS,
+      skippable: true,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when the tour starts
+  }, [entering]);
 
   // ---- replacement floors ----------------------------------------------
   //
@@ -1674,4 +1756,22 @@ export function lightLevel(
   };
   const noon = at(12 * 60);
   return noon > 0 ? at(minutes) / noon : 1;
+}
+
+/**
+ * The canvas as a WebP of at most STILL_SIDE px and STILL_BYTES, in base64:
+ * read straight after a render, while the drawing buffer still holds it.
+ */
+function still(source: HTMLCanvasElement): string {
+  const scale = Math.min(1, STILL_SIDE / Math.max(source.width, source.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(source.width * scale);
+  canvas.height = Math.round(source.height * scale);
+  canvas.getContext('2d')?.drawImage(source, 0, 0, canvas.width, canvas.height);
+  let data = '';
+  for (const quality of [0.92, 0.82, 0.72, 0.62, 0.52, 0.42]) {
+    data = canvas.toDataURL('image/webp', quality).split(',')[1] ?? '';
+    if ((data.length * 3) / 4 <= STILL_BYTES) break;
+  }
+  return data;
 }

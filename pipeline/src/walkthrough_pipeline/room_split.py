@@ -86,6 +86,7 @@ def part(room: Room, zone: dict) -> Room:
         waypoint=Waypoint(position=(ex, EYE_HEIGHT, ez),
                           yaw=round(math.degrees(math.atan2(-(lx - ex), -(lz - ez))) % 360, 1)),
         floorPolygon=polygon, walls=walls, openings=openings,
+        areaM2=round(abs(_area(polygon)), 1),
         originalFloorColor=room.originalFloorColor, ceilings=room.ceilings,
         obstacles=[o for o in room.obstacles
                    if point_in_polygon(polygon_centroid(o.footprint), polygon)],
@@ -110,3 +111,8 @@ def split(manifest: Manifest, room: Room, zones: list[dict]) -> None:
                     manifest.rooms[0])
         item.roomId = home.id
 
+
+def _area(polygon: list[Point]) -> float:
+    """Signed area (shoelace)."""
+    pairs = zip(polygon, polygon[1:] + polygon[:1], strict=True)
+    return sum(a[0] * b[1] - b[0] * a[1] for a, b in pairs) / 2

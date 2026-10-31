@@ -109,6 +109,8 @@ class Room(BaseModel):
     obstacles: list[Obstacle] = Field(default_factory=list)
     #: Where a style kit's pieces go (Slot).
     slots: list[Slot] = Field(default_factory=list)
+    #: Floor area as the listing gives it; absent, the viewer measures the outline.
+    areaM2: float | None = None
 
     @field_validator("floorPolygon")
     @classmethod
@@ -196,9 +198,30 @@ class SceneAssets(BaseModel):
     viewPhoto: ViewPhoto | None = None
 
 
+class Listing(BaseModel):
+    """What a listing says about the flat, for the viewer's title (formatListingTitle)."""
+
+    level: int | None = None  # storey, 0 = ground floor
+    bedrooms: int | None = None
+    bathrooms: int | None = None
+    areaM2: float | None = None
+
+
+class HeroView(BaseModel):
+    """Where the tour opens, set in the editor; `image` is its still (scene/)."""
+
+    position: Vec3
+    yaw: float
+    pitch: float = 0.0
+    fov: float = 60.0
+    image: str | None = None
+
+
 class Manifest(BaseModel):
     id: str
     name: str
+    listing: Listing | None = None
+    heroView: HeroView | None = None
     units: Literal["m"] = "m"
     upAxis: Literal["y"] = "y"
     transform: Mat4 = Field(default_factory=lambda: [row[:] for row in IDENTITY_TRANSFORM])

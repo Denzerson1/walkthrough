@@ -28,7 +28,9 @@ from . import roomplan as roomplan_mod
 from . import stray as stray_mod
 from . import train as train_mod
 from .manifest import (
+    HeroView,
     Lighting,
+    Listing,
     Manifest,
     Obstacle,
     Room,
@@ -574,6 +576,7 @@ def rebuild(
         _outside(paths, manifest, spec, dressing)
         (paths.work / SCANNED_ROOM).write_text(manifest.rooms[0].model_dump_json(indent=1))
         room_split.split(manifest, manifest.rooms[0], dressing.get("rooms", []))
+        _listing(paths, manifest, dressing)
         manifest.write(paths.manifest)
     console.print(f"[green]Rebuilt[/green] in {(time.time() - started) / 60:.1f} min")
 
@@ -590,9 +593,31 @@ def _outside(paths: ProjectPaths, manifest: Manifest, spec: dict, dressing: dict
 SCANNED_ROOM = "scanned_room.json"
 
 
+def _listing(paths: ProjectPaths, manifest: Manifest, dressing: dict) -> None:
+    """
+    The dressing's `listing` (level, bedrooms, bathrooms; the area is the
+    rooms' unless it gives one) and its `hero` as the entry view, unless the
+    editor has set one; the still is the editor's (scene/hero.webp), if any.
+    """
+    listing = dressing.get("listing") or {}
+    area = sum(r.areaM2 or 0.0 for r in manifest.rooms)
+    manifest.listing = Listing(**{"areaM2": round(area) if area else None, **listing})
+    if dressing.get("hero") and not (manifest.heroView and manifest.heroView.image):
+        (ex, ey, ez), (tx, ty, tz) = dressing["hero"]["eye"], dressing["hero"]["target"]
+        manifest.heroView = HeroView(
+            position=(ex, roomplan_mod.EYE_HEIGHT, ez),
+            yaw=round(math.degrees(math.atan2(-(tx - ex), -(tz - ez))) % 360, 1),
+            pitch=round(math.degrees(math.atan2(ty - ey, math.hypot(tx - ex, tz - ez))), 1),
+            image="hero.webp" if (paths.scene / "hero.webp").is_file() else None,
+        )
+
+
 @app.command()
 def rooms(project: str = typer.Option(..., "--project", "-p")) -> None:
-    """Cut the rebuilt flat into the rooms the dressing names, without baking it again."""
+    """
+    Cut the rebuilt flat into the rooms the dressing names, and take its
+    listing and entry view, without baking it again.
+    """
     paths = _paths(project)
     manifest = Manifest.load(paths.manifest)
     scanned = paths.work / SCANNED_ROOM
@@ -603,6 +628,7 @@ def rooms(project: str = typer.Option(..., "--project", "-p")) -> None:
     dressing = json.loads((paths.input / "dressing.json").read_text(encoding="utf-8"))
     room_split.split(manifest, Room.model_validate_json(scanned.read_text()),
                      dressing.get("rooms", []))
+    _listing(paths, manifest, dressing)
     manifest.write(paths.manifest)
     for r in manifest.rooms:
         console.print(f"  {r.name}: {len(r.walls)} walls, {len(r.openings)} openings, "

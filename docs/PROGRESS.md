@@ -51,6 +51,15 @@ verified, it says so.** A milestone is not "done" because its code exists.
   has none, and a tap takes you there. Arriving shows "Bedroom · 13 m²"
   briefly. Rooms carry `areaM2` (`pipeline rooms`). The room strip and the
   plan already marked the current room. ←/→ still walk, as the owner asked.
+- **Entry view and title:** the manifest has `listing` (level, bedrooms,
+  bathrooms, area) and `heroView` (pose and its still). A signed-in editor
+  gets "Set current view as entry view" in the viewer, which saves the
+  pose and a WebP still (≤200 KB; flat-01's is 73 KB) through
+  `PUT /api/projects/<id>/entry`. A visitor sees the still at once, with
+  `formatListingTitle` in English or German (tested, singular and plural)
+  and "Start tour"; the view then fades in at the entry view with a 2.6 s
+  move, none with reduced motion, a tap ends it. flat-01's listing gives
+  only its area (36 m²) until its level and room counts are known.
 
 ## 2026-10-24 — The landing page is a doorway
 

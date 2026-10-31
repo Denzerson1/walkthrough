@@ -1,6 +1,6 @@
 /** Public viewer at /p/:projectId */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { Assistant, type AssistantAction } from '../components/Assistant';
 import { DaylightControl } from '../components/DaylightControl';
@@ -9,8 +9,9 @@ import { DesignMenu } from '../components/DesignMenu';
 import { RoomIcon } from '../components/RoomIcon';
 import { Sheet } from '../components/Panels';
 import { RoomStrip } from '../components/RoomStrip';
-import { SplatScene } from '../components/SplatScene';
+import { type Still, SplatScene } from '../components/SplatScene';
 import { StagedBadge } from '../components/StagedBadge';
+import { TitleScreen } from '../components/TitleScreen';
 import { Toast } from '../components/Toast';
 import { IS_STATIC, apiUrl, fileUrl, getJson, postEvent, sessionId } from '../lib/api';
 import { toMinutes } from '../lib/daylight';
@@ -18,6 +19,7 @@ import type { Manifest } from '../lib/manifest';
 import { type CatalogItem, stagedRoomIds, useStore } from '../lib/store';
 import { isStaged } from '../lib/viewerState';
 import { polygonCentroid } from '../lib/geometry';
+import { preferredLanguage } from '../lib/listing';
 import { doorways, roomArea } from '../lib/rooms';
 
 /** The arguments the assistant's tools carry, as the server defines them. */
@@ -79,6 +81,14 @@ export function Viewer() {
   const compact = useMedia(COMPACT);
   const wide = useMedia(WIDE);
   const [menuOpen, setMenuOpen] = useState(false);
+  /** The visitor has pressed "Start tour" (or there is no title screen). */
+  const [started, setStarted] = useState(false);
+  /** The title screen has faded out after the start. */
+  const [titleGone, setTitleGone] = useState(false);
+  const language = useMemo(() => preferredLanguage(), []);
+  const stillRef = useRef<(() => Still) | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [entryNote, setEntryNote] = useState<string | null>(null);
   const reducedMotion = useMedia('(prefers-reduced-motion: reduce)');
   const [pose, setPose] = useState<{ x: number; z: number; yaw: number } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -112,6 +122,28 @@ export function Viewer() {
       cancelled = true;
     };
   }, [projectId, searchParams, setManifest, setError, setCatalog, loadStateFromUrl]);
+
+  // An editor signed in (on the server, not the static site) can set the entry view.
+  useEffect(() => {
+    if (IS_STATIC) return;
+    fetch(apiUrl('/api/editor/session'), { credentials: 'include' })
+      .then((r) => setEditing(r.ok))
+      .catch(() => setEditing(false));
+  }, []);
+
+  async function saveEntryView() {
+    const still = stillRef.current?.();
+    if (!still) return;
+    setEntryNote('Saving the entry view…');
+    const response = await fetch(apiUrl(`/api/projects/${projectId}/entry`), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(still),
+    }).catch(() => null);
+    setEntryNote(response?.ok ? 'Entry view saved' : 'Could not save the entry view');
+    setTimeout(() => setEntryNote(null), 2500);
+  }
 
   // Room dwell analytics.
   useEffect(() => {
@@ -387,8 +419,11 @@ export function Viewer() {
           onPose={(x, z, yaw) => setPose({ x, z, yaw })}
           selectedUid={selectedUid}
           onSelectItem={onSelectPiece}
-          labels={ready ? labels : []}
+          labels={ready && (started || !manifest.heroView) ? labels : []}
           onLabel={goToRoom}
+          entry={manifest.heroView ?? null}
+          entering={started}
+          stillRef={stillRef}
           onMoveItem={moveItem}
         />
       )}
@@ -403,7 +438,34 @@ export function Viewer() {
         />
       )}
 
-      {!ready && !error && (
+      {manifest?.heroView && !titleGone && (
+        <TitleScreen
+          name={manifest.name}
+          listing={manifest.listing}
+          stillUrl={manifest.heroView.image ? fileUrl(projectId, manifest.heroView.image) : null}
+          language={language}
+          ready={ready}
+          progress={progress}
+          leaving={started}
+          onStart={() => setStarted(true)}
+          onGone={() => setTitleGone(true)}
+        />
+      )}
+
+      {editing && ready && (
+        <div className="absolute left-1/2 z-10 -translate-x-1/2" style={{ top: 'calc(0.75rem + var(--safe-top))' }}>
+          <button
+            type="button"
+            onClick={saveEntryView}
+            className="btn tap min-h-11 px-4 text-[13px]"
+            data-testid="set-entry-view"
+          >
+            {entryNote ?? 'Set current view as entry view'}
+          </button>
+        </div>
+      )}
+
+      {!ready && !error && !manifest?.heroView && (
         <div className="absolute inset-0 flex items-center justify-center bg-[var(--paper-warm)]">
           {/*
             A rebuilt flat reports how much of its model has arrived. Spark

@@ -268,10 +268,12 @@ def project_summary(
 # --------------------------------------------------------------------------
 
 from .routes_chat import router as chat_router  # noqa: E402
+from .routes_entry import router as entry_router  # noqa: E402
 from .routes_layout import router as layout_router  # noqa: E402
 from .routes_upload import router as upload_router  # noqa: E402
 
 app.include_router(chat_router)
+app.include_router(entry_router)
 app.include_router(layout_router)
 app.include_router(upload_router)
 

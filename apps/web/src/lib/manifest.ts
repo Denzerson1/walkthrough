@@ -152,9 +152,32 @@ export interface PrivacyMask {
   box: ItemBox;
 }
 
+/** What a listing says about the flat, for its title (formatListingTitle). */
+export interface Listing {
+  /** Storey: 0 is the ground floor. */
+  level?: number | null;
+  bedrooms?: number | null;
+  bathrooms?: number | null;
+  areaM2?: number | null;
+}
+
+/** Where the tour opens: the view the title screen shows, set in the editor. */
+export interface HeroView {
+  position: Vec3;
+  /** Degrees, as Waypoint.yaw. */
+  yaw: number;
+  pitch: number;
+  /** Vertical field of view, degrees. */
+  fov: number;
+  /** The still of this view (scene/), shown while the flat loads. */
+  image?: string | null;
+}
+
 export interface Manifest {
   id: string;
   name: string;
+  listing?: Listing | null;
+  heroView?: HeroView | null;
   units: 'm';
   upAxis: 'y';
   transform: Mat4;

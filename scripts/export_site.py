@@ -62,6 +62,7 @@ def scene_files(manifest: dict[str, Any]) -> set[str]:
         names |= {light.get("lightmap"), light.get("sky")}
     if assets.get("viewPhoto"):
         names.add(assets["viewPhoto"]["model"])
+    names.add((manifest.get("heroView") or {}).get("image"))
     return {n for n in names if n}
 
 

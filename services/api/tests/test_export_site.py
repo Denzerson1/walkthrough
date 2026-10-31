@@ -28,11 +28,13 @@ def test_scene_files_are_what_the_manifest_names():
                 {"time": "08:00", "lightmap": "flat_light-0800.jpg", "sky": None},
             ],
             "viewPhoto": {"model": "view_photo.glb", "time": "15:38"},
-        }
+        },
+        "heroView": {"position": [0, 1.6, 0], "yaw": 0, "pitch": 0, "fov": 60,
+                     "image": "hero.webp"},
     }
     assert scene_files(manifest) == {
         "shade-1.png", "flat.glb", "flat_light-1730.jpg", "sky-1730.jpg",
-        "flat_light-0800.jpg", "view_photo.glb",
+        "flat_light-0800.jpg", "view_photo.glb", "hero.webp",
     }
 
 

@@ -64,7 +64,7 @@ def test_doors_follow_their_wall_into_the_part_they_are_in():
 
 def test_parts_have_their_names_waypoints_area_and_slots():
     living = room_split.part(SCANNED, ZONES[0])
-    assert (living.name, living.type) == ("Living room", "living")
+    assert (living.name, living.type, living.areaM2) == ("Living room", "living", 16.0)
     assert living.waypoint.position == (2, 1.6, 2)
     assert living.waypoint.yaw == pytest.approx(180.0)  # looking +z
     sofa = living.slots[0]
