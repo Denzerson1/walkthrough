@@ -1,3 +1,4 @@
+/* global process, console, window */
 // Evidence for the design features, into docs/screenshots/ as JPEG (each
 // under 1 MB): on an iPhone viewport and a 1440 px desktop, the title screen,
 // the entry view, the menu collapsed and open, the "This room" tab, each
