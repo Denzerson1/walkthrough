@@ -1,0 +1,37 @@
+{
+  "id": "modern-mesh-table-lamp-6jz4",
+  "name": "Modern Mesh Table Lamp",
+  "category": "table_lamp",
+  "styles": [
+    "industrial"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.254,
+    0.483,
+    0.254
+  ],
+  "glb": "/files/assets/furniture/modern-mesh-table-lamp-6jz4/desktop.glb",
+  "glbPhone": "/files/assets/furniture/modern-mesh-table-lamp-6jz4/phone.glb",
+  "thumbnail": "/files/assets/furniture/modern-mesh-table-lamp-6jz4/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/4/B07B4Z6JZ4.glb",
+  "productId": "B07B4Z6JZ4",
+  "measuredM": [
+    0.252,
+    0.483,
+    0.252
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 2350960,
+      "triangles": 105826
+    },
+    "phone": {
+      "bytes": 910556,
+      "triangles": 49999
+    }
+  }
+}

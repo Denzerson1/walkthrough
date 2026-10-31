@@ -1,0 +1,37 @@
+{
+  "id": "alonzo-contemporary-upholstered-livingroom-accent-chair-dzkg",
+  "name": "Alonzo Contemporary Upholstered Livingroom Accent Chair",
+  "category": "armchair",
+  "styles": [
+    "modern-minimal"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.96,
+    0.9,
+    0.99
+  ],
+  "glb": "/files/assets/furniture/alonzo-contemporary-upholstered-livingroom-accent-chair-dzkg/desktop.glb",
+  "glbPhone": "/files/assets/furniture/alonzo-contemporary-upholstered-livingroom-accent-chair-dzkg/phone.glb",
+  "thumbnail": "/files/assets/furniture/alonzo-contemporary-upholstered-livingroom-accent-chair-dzkg/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/G/B082VMDZKG.glb",
+  "productId": "B082VMDZKG",
+  "measuredM": [
+    0.986,
+    0.902,
+    0.961
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 5830876,
+      "triangles": 37896
+    },
+    "phone": {
+      "bytes": 839964,
+      "triangles": 37896
+    }
+  }
+}

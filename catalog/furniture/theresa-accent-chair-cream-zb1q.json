@@ -1,0 +1,37 @@
+{
+  "id": "theresa-accent-chair-cream-zb1q",
+  "name": "Theresa accent chair, cream",
+  "category": "armchair",
+  "styles": [
+    "scandinavian"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.762,
+    0.838,
+    0.787
+  ],
+  "glb": "/files/assets/furniture/theresa-accent-chair-cream-zb1q/desktop.glb",
+  "glbPhone": "/files/assets/furniture/theresa-accent-chair-cream-zb1q/phone.glb",
+  "thumbnail": "/files/assets/furniture/theresa-accent-chair-cream-zb1q/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/Q/B082QBZB1Q.glb",
+  "productId": "B082QBZB1Q",
+  "measuredM": [
+    0.762,
+    0.838,
+    0.787
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 5868440,
+      "triangles": 19428
+    },
+    "phone": {
+      "bytes": 774120,
+      "triangles": 19428
+    }
+  }
+}

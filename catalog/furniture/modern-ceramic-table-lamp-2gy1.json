@@ -1,0 +1,37 @@
+{
+  "id": "modern-ceramic-table-lamp-2gy1",
+  "name": "Modern Ceramic Table Lamp",
+  "category": "table_lamp",
+  "styles": [
+    "mid-century"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.356,
+    0.584,
+    0.356
+  ],
+  "glb": "/files/assets/furniture/modern-ceramic-table-lamp-2gy1/desktop.glb",
+  "glbPhone": "/files/assets/furniture/modern-ceramic-table-lamp-2gy1/phone.glb",
+  "thumbnail": "/files/assets/furniture/modern-ceramic-table-lamp-2gy1/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/1/B07B4W2GY1.glb",
+  "productId": "B07B4W2GY1",
+  "measuredM": [
+    0.355,
+    0.582,
+    0.355
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 2366364,
+      "triangles": 8120
+    },
+    "phone": {
+      "bytes": 392044,
+      "triangles": 8120
+    }
+  }
+}

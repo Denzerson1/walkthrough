@@ -14,9 +14,10 @@
     "build": "pnpm --filter @walkthrough/web build",
     "build:pages": "pnpm --filter @walkthrough/web build:pages && uv run python scripts/export_site.py flat-01",
     "publish:pages": "uv run python scripts/publish_pages.py",
-    "test": "pnpm test:web && pnpm test:py",
+    "test": "pnpm test:web && pnpm test:py && pnpm test:scripts",
     "test:web": "pnpm --filter @walkthrough/web test",
     "test:py": "uv run pytest -q",
+    "test:scripts": "node --test scripts/*.test.mjs",
     "test:e2e": "pnpm --filter @walkthrough/web test:e2e",
     "lint": "pnpm lint:web && pnpm lint:py",
     "lint:web": "pnpm --filter @walkthrough/web lint && pnpm --filter @walkthrough/web typecheck",
@@ -24,12 +25,20 @@
     "seed:testscene": "uv run python scripts/make_test_scene.py --project demo-01",
     "seed:floors": "uv run python scripts/seed_floors.py",
     "seed:assets": "uv run python scripts/fetch_assets.py",
+    "prepare:models": "node scripts/prepare-models.mjs",
+    "scale:sheet": "node scripts/scale-sheet.mjs",
     "evals:assistant": "uv run python scripts/run_assistant_evals.py",
     "pipeline": "wsl -d Ubuntu -u root -- /root/.venvs/walkthrough/bin/pipeline",
     "setup:pipeline": "wsl -d Ubuntu -u root -- bash scripts/setup_pipeline_wsl.sh"
   },
   "devDependencies": {
-    "concurrently": "9.1.2"
+    "@gltf-transform/core": "4.5.1",
+    "@gltf-transform/extensions": "4.5.1",
+    "@gltf-transform/functions": "4.5.1",
+    "concurrently": "9.1.2",
+    "ktx2-encoder": "0.6.0",
+    "meshoptimizer": "1.3.0",
+    "sharp": "0.35.5"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

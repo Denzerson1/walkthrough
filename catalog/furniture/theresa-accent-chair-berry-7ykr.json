@@ -1,0 +1,37 @@
+{
+  "id": "theresa-accent-chair-berry-7ykr",
+  "name": "Theresa accent chair, berry velvet",
+  "category": "armchair",
+  "styles": [
+    "mid-century"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.762,
+    0.838,
+    0.787
+  ],
+  "glb": "/files/assets/furniture/theresa-accent-chair-berry-7ykr/desktop.glb",
+  "glbPhone": "/files/assets/furniture/theresa-accent-chair-berry-7ykr/phone.glb",
+  "thumbnail": "/files/assets/furniture/theresa-accent-chair-berry-7ykr/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/R/B082QC7YKR.glb",
+  "productId": "B082QC7YKR",
+  "measuredM": [
+    0.762,
+    0.838,
+    0.787
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 5759808,
+      "triangles": 19768
+    },
+    "phone": {
+      "bytes": 651312,
+      "triangles": 19768
+    }
+  }
+}

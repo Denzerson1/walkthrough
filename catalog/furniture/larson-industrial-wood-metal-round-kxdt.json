@@ -1,0 +1,37 @@
+{
+  "id": "larson-industrial-wood-metal-round-kxdt",
+  "name": "Larson Industrial Wood & Metal Round",
+  "category": "coffee_table",
+  "styles": [
+    "industrial"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.838,
+    0.457,
+    0.838
+  ],
+  "glb": "/files/assets/furniture/larson-industrial-wood-metal-round-kxdt/desktop.glb",
+  "glbPhone": "/files/assets/furniture/larson-industrial-wood-metal-round-kxdt/phone.glb",
+  "thumbnail": "/files/assets/furniture/larson-industrial-wood-metal-round-kxdt/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/T/B075Z8KXDT.glb",
+  "productId": "B075Z8KXDT",
+  "measuredM": [
+    0.837,
+    0.462,
+    0.837
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 3003108,
+      "triangles": 16608
+    },
+    "phone": {
+      "bytes": 570572,
+      "triangles": 16608
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "id": "distressed-medallion-area-rug-v63q",
+  "name": "Distressed Medallion Area Rug",
+  "category": "rug",
+  "styles": [
+    "industrial"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    2.431,
+    0.012,
+    1.536
+  ],
+  "glb": "/files/assets/furniture/distressed-medallion-area-rug-v63q/desktop.glb",
+  "glbPhone": "/files/assets/furniture/distressed-medallion-area-rug-v63q/phone.glb",
+  "thumbnail": "/files/assets/furniture/distressed-medallion-area-rug-v63q/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/Q/B0732HV63Q.glb",
+  "productId": "B0732HV63Q",
+  "measuredM": [
+    2.431,
+    0.012,
+    1.536
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 4064188,
+      "triangles": 1148
+    },
+    "phone": {
+      "bytes": 426004,
+      "triangles": 1148
+    }
+  }
+}

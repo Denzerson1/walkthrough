@@ -1,51 +1,27 @@
 {
   "id": "mid-century",
-  "name": "Mid-Century",
-  "description": "Tan leather, turned wood and tapered legs. Warmer than the contemporary set, with rounder shapes.",
-  "palette": [
-    "#e5dcc9",
-    "#b8743f",
-    "#7d8c7a",
-    "#4a3a2a"
+  "name": "Mid-Century Modern",
+  "description": "Walnut, tapered legs and a jewel-toned velvet: the 1960s, lived in.",
+  "swatches": [
+    "#7a4a2a",
+    "#2f5d50",
+    "#e8dcc7"
   ],
-  "floorIds": [
-    "oak-herringbone-light",
-    "vintage-parquet-chevron",
-    "oak-plank-natural"
-  ],
-  "picks": {
-    "living": [
-      "mid-century-sofa",
-      "mid-century-lounge-chair",
-      "mid-century-coffee-table",
-      "mid-century-ottoman",
-      "mid-century-plant"
-    ],
-    "bedroom": [
-      "mid-century-bed",
-      "mid-century-lattice-table",
-      "mid-century-sideboard"
-    ],
-    "dining": [
-      "mid-century-dining-table",
-      "mid-century-dining-chair",
-      "mid-century-dining-chair"
-    ],
-    "office": [
-      "mid-century-dining-table",
-      "mid-century-dining-chair",
-      "mid-century-shelves"
-    ],
-    "hallway": [
-      "mid-century-sideboard",
-      "mid-century-plant"
-    ],
-    "kitchen": [
-      "mid-century-dining-table",
-      "mid-century-dining-chair"
-    ]
-  },
-  "complete": true,
-  "license": "CC0-1.0",
-  "source": "https://polyhaven.com"
+  "floorId": "walnut-dark-plank",
+  "slots": {
+    "living": {
+      "sofa": "aiden-velvet-loveseat-336b",
+      "armchair": "theresa-accent-chair-berry-7ykr",
+      "coffee_table": "round-coffee-table-with-solid-wood-f3mr",
+      "side_table": "walnut-drawer-side-table-c6lx",
+      "rug": "modern-geometric-wool-area-rug-hvqh",
+      "floor_lamp": "adjustable-arm-mid-century-modern-living-room-sbfl"
+    },
+    "bedroom": {
+      "bed": "catelyn-brushed-brass-queen-bed-with-cph1",
+      "nightstand": "mid-century-wood-nightstand-5tqz",
+      "table_lamp": "modern-ceramic-table-lamp-2gy1",
+      "rug": "modern-geometric-wool-area-rug-hvqh"
+    }
+  }
 }

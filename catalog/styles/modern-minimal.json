@@ -1,0 +1,27 @@
+{
+  "id": "modern-minimal",
+  "name": "Modern Minimal",
+  "description": "Clean lines, pale grey and black, nothing on show but what you use.",
+  "swatches": [
+    "#e9e7e3",
+    "#8f9295",
+    "#23262a"
+  ],
+  "floorId": "concrete-polished",
+  "slots": {
+    "living": {
+      "sofa": "kutina-leather-sofa-k9y",
+      "armchair": "alonzo-contemporary-upholstered-livingroom-accent-chair-dzkg",
+      "coffee_table": "adour-oval-coffee-table-yboi",
+      "side_table": "mid-century-modern-white-marble-and-metal-v4p3",
+      "rug": "contemporary-wool-blend-area-rug-g84w",
+      "floor_lamp": "drum-shade-floor-lamp-xtzh"
+    },
+    "bedroom": {
+      "bed": "imogene-oiled-bronze-queen-bed-h792",
+      "nightstand": "havel-2-drawer-bedside-table-knnh",
+      "table_lamp": "globe-stick-table-lamp-ffcg",
+      "rug": "contemporary-wool-blend-area-rug-g84w"
+    }
+  }
+}

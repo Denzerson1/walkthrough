@@ -7,6 +7,19 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-10-31 — Style kits on real furniture
+
+- **Models and scale:** 36 real products from Amazon Berkeley Objects
+  (CC BY 4.0) for four kits, chosen from the metadata by product photo
+  (`scripts/shortlist_abo.py`) and converted by `pnpm prepare:models`:
+  bottom-centre pivot, front +Z, KTX2 textures, meshopt, a phone file
+  (≤1024 px textures, ≤50k triangles; all 36 under 0.92 MB) and a desktop
+  one. Each is scale-checked against the product's listed size (3%, uniform
+  fixes only) and its category's sane range (`catalog/sizes.json`); 10 of
+  46 picks failed and were replaced. `docs/scale-sheet.png` shows all 36
+  beside a 2.0 m door and a 1.75 m person. The old Poly Haven themes and
+  the drawn sofa and bed are gone.
+
 ## 2026-10-24 — The landing page is a doorway
 
 The landing page featured whichever project sorted first (a test room

@@ -19,7 +19,7 @@ from .config import Settings, get_settings
 from .deps import catalog_dep, load_manifest_or_404
 
 #: Footprint for a catalog item with no dimensions. Must match
-#: DEFAULT_ITEM_SIZE in apps/web/src/components/SplatScene.tsx, or the
+#: DEFAULT_ITEM_SIZE in apps/web/src/lib/furnitureLayer.ts, or the
 #: solver would validate one footprint and the viewer draw another.
 DEFAULT_ITEM_SIZE = [0.6, 0.6, 0.6]
 
@@ -30,7 +30,7 @@ class LayoutBody(BaseModel):
     project_id: str
     room_id: str
     style_id: str
-    #: Optional explicit item list. Defaults to the style's picks for the room type.
+    #: Optional explicit item list. Defaults to the style kit's pieces for the room type.
     item_ids: list[str] | None = None
 
 
@@ -68,12 +68,12 @@ def auto_layout(
 
     picks = body.item_ids
     if picks is None:
-        picks = list((style.get("picks") or {}).get(room.type, []))
+        picks = list((style.get("slots") or {}).get(room.type, {}).values())
     if not picks:
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Style {body.style_id!r} has no picks for a {room.type} room. "
+                f"Style {body.style_id!r} has no pieces for a {room.type} room. "
                 "Choose another style or add items by hand."
             ),
         )
@@ -128,11 +128,10 @@ def auto_layout(
     )
     result = solve_layout(solver_room, items)
 
-    floor_ids = style.get("floorIds") or []
     return LayoutReply(
         placements=result.as_dicts(),
         skipped=result.skipped,
         complete=result.complete,
         style_id=body.style_id,
-        floor_id=floor_ids[0] if floor_ids else None,
+        floor_id=style.get("floorId"),
     )

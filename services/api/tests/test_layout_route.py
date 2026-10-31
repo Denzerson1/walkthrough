@@ -51,7 +51,7 @@ def post(client, **kw):
 
 
 class TestAutoLayout:
-    def test_places_the_style_picks(self, client, furnished_project):
+    def test_places_the_style_kits_pieces(self, client, furnished_project):
         resp = post(client)
         assert resp.status_code == 200, resp.text
         body = resp.json()
@@ -102,10 +102,10 @@ class TestAutoLayout:
         assert resp.status_code == 409
         assert "floor polygon" in resp.json()["detail"]
 
-    def test_style_without_picks_for_this_room_explains_itself(
+    def test_style_without_pieces_for_this_room_explains_itself(
         self, client, furnished_project
     ):
-        # 'traditional' in the fixture catalog has picks only for 'living'.
+        # 'traditional' in the fixture catalog has pieces only for 'living'.
         resp = post(client, room_id="empty", style_id="traditional")
         assert resp.status_code == 409
 

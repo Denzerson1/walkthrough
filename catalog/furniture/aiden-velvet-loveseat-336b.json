@@ -1,0 +1,37 @@
+{
+  "id": "aiden-velvet-loveseat-336b",
+  "name": "Aiden velvet loveseat",
+  "category": "sofa",
+  "styles": [
+    "mid-century"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    1.88,
+    0.77,
+    0.919
+  ],
+  "glb": "/files/assets/furniture/aiden-velvet-loveseat-336b/desktop.glb",
+  "glbPhone": "/files/assets/furniture/aiden-velvet-loveseat-336b/phone.glb",
+  "thumbnail": "/files/assets/furniture/aiden-velvet-loveseat-336b/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/B/B07BKK336B.glb",
+  "productId": "B07BKK336B",
+  "measuredM": [
+    1.88,
+    0.772,
+    0.916
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 4713200,
+      "triangles": 201199
+    },
+    "phone": {
+      "bytes": 743504,
+      "triangles": 49998
+    }
+  }
+}

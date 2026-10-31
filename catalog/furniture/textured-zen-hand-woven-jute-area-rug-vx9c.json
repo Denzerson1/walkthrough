@@ -1,0 +1,37 @@
+{
+  "id": "textured-zen-hand-woven-jute-area-rug-vx9c",
+  "name": "Textured Zen Hand-Woven Jute Area Rug",
+  "category": "rug",
+  "styles": [
+    "scandinavian"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    2.897,
+    0.035,
+    2.277
+  ],
+  "glb": "/files/assets/furniture/textured-zen-hand-woven-jute-area-rug-vx9c/desktop.glb",
+  "glbPhone": "/files/assets/furniture/textured-zen-hand-woven-jute-area-rug-vx9c/phone.glb",
+  "thumbnail": "/files/assets/furniture/textured-zen-hand-woven-jute-area-rug-vx9c/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/C/B071J4VX9C.glb",
+  "productId": "B071J4VX9C",
+  "measuredM": [
+    2.897,
+    0.035,
+    2.277
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 673572,
+      "triangles": 5000
+    },
+    "phone": {
+      "bytes": 206092,
+      "triangles": 5000
+    }
+  }
+}

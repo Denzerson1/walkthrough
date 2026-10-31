@@ -1,0 +1,37 @@
+{
+  "id": "industrial-hexagonal-side-table-with-solid-v6mp",
+  "name": "Industrial Hexagonal Side Table with Solid",
+  "category": "side_table",
+  "styles": [
+    "industrial"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.58,
+    0.564,
+    0.58
+  ],
+  "glb": "/files/assets/furniture/industrial-hexagonal-side-table-with-solid-v6mp/desktop.glb",
+  "glbPhone": "/files/assets/furniture/industrial-hexagonal-side-table-with-solid-v6mp/phone.glb",
+  "thumbnail": "/files/assets/furniture/industrial-hexagonal-side-table-with-solid-v6mp/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/P/B07QD6V6MP.glb",
+  "productId": "B07QD6V6MP",
+  "measuredM": [
+    0.579,
+    0.564,
+    0.578
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 2637584,
+      "triangles": 6408
+    },
+    "phone": {
+      "bytes": 402320,
+      "triangles": 6408
+    }
+  }
+}

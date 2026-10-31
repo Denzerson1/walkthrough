@@ -1,0 +1,37 @@
+{
+  "id": "modern-geometric-wool-area-rug-hvqh",
+  "name": "Modern Geometric Wool Area Rug",
+  "category": "rug",
+  "styles": [
+    "mid-century"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    2.441,
+    0.008,
+    1.526
+  ],
+  "glb": "/files/assets/furniture/modern-geometric-wool-area-rug-hvqh/desktop.glb",
+  "glbPhone": "/files/assets/furniture/modern-geometric-wool-area-rug-hvqh/phone.glb",
+  "thumbnail": "/files/assets/furniture/modern-geometric-wool-area-rug-hvqh/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/H/B0735THVQH.glb",
+  "productId": "B0735THVQH",
+  "measuredM": [
+    2.441,
+    0.008,
+    1.526
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 5357472,
+      "triangles": 288
+    },
+    "phone": {
+      "bytes": 552440,
+      "triangles": 288
+    }
+  }
+}

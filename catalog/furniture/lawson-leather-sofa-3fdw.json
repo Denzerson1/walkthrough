@@ -1,0 +1,37 @@
+{
+  "id": "lawson-leather-sofa-3fdw",
+  "name": "Lawson leather sofa",
+  "category": "sofa",
+  "styles": [
+    "industrial"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    1.981,
+    0.864,
+    0.864
+  ],
+  "glb": "/files/assets/furniture/lawson-leather-sofa-3fdw/desktop.glb",
+  "glbPhone": "/files/assets/furniture/lawson-leather-sofa-3fdw/phone.glb",
+  "thumbnail": "/files/assets/furniture/lawson-leather-sofa-3fdw/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/W/B075X43FDW.glb",
+  "productId": "B075X43FDW",
+  "measuredM": [
+    1.976,
+    0.846,
+    0.875
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 5582248,
+      "triangles": 16324
+    },
+    "phone": {
+      "bytes": 772600,
+      "triangles": 16324
+    }
+  }
+}

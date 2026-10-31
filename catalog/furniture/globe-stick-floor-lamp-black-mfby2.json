@@ -1,0 +1,37 @@
+{
+  "id": "globe-stick-floor-lamp-black-mfby2",
+  "name": "Globe stick floor lamp, black",
+  "category": "floor_lamp",
+  "styles": [
+    "industrial"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.229,
+    1.753,
+    0.229
+  ],
+  "glb": "/files/assets/furniture/globe-stick-floor-lamp-black-mfby2/desktop.glb",
+  "glbPhone": "/files/assets/furniture/globe-stick-floor-lamp-black-mfby2/phone.glb",
+  "thumbnail": "/files/assets/furniture/globe-stick-floor-lamp-black-mfby2/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/2/B082XMFBY2.glb",
+  "productId": "B082XMFBY2",
+  "measuredM": [
+    0.229,
+    1.748,
+    0.229
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 332860,
+      "triangles": 15784
+    },
+    "phone": {
+      "bytes": 196392,
+      "triangles": 15784
+    }
+  }
+}

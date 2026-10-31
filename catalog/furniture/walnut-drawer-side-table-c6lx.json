@@ -1,0 +1,37 @@
+{
+  "id": "walnut-drawer-side-table-c6lx",
+  "name": "Walnut drawer side table",
+  "category": "side_table",
+  "styles": [
+    "mid-century"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.4,
+    0.54,
+    0.4
+  ],
+  "glb": "/files/assets/furniture/walnut-drawer-side-table-c6lx/desktop.glb",
+  "glbPhone": "/files/assets/furniture/walnut-drawer-side-table-c6lx/phone.glb",
+  "thumbnail": "/files/assets/furniture/walnut-drawer-side-table-c6lx/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/X/B07GDMC6LX.glb",
+  "productId": "B07GDMC6LX",
+  "measuredM": [
+    0.397,
+    0.54,
+    0.398
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 2395484,
+      "triangles": 1624
+    },
+    "phone": {
+      "bytes": 171760,
+      "triangles": 1624
+    }
+  }
+}

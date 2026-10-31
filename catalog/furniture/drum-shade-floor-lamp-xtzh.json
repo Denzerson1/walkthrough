@@ -1,0 +1,37 @@
+{
+  "id": "drum-shade-floor-lamp-xtzh",
+  "name": "Drum shade floor lamp",
+  "category": "floor_lamp",
+  "styles": [
+    "modern-minimal"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.348,
+    1.443,
+    0.348
+  ],
+  "glb": "/files/assets/furniture/drum-shade-floor-lamp-xtzh/desktop.glb",
+  "glbPhone": "/files/assets/furniture/drum-shade-floor-lamp-xtzh/phone.glb",
+  "thumbnail": "/files/assets/furniture/drum-shade-floor-lamp-xtzh/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/H/B07K4YXTZH.glb",
+  "productId": "B07K4YXTZH",
+  "measuredM": [
+    0.347,
+    1.443,
+    0.347
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 752156,
+      "triangles": 19582
+    },
+    "phone": {
+      "bytes": 232972,
+      "triangles": 19582
+    }
+  }
+}

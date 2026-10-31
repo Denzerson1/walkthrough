@@ -1,0 +1,12 @@
+{
+  "id": "japandi",
+  "name": "Japandi",
+  "description": "Low, quiet pieces in dark wood and paper tones, Japanese calm with Nordic comfort.",
+  "swatches": [
+    "#e6dfd3",
+    "#6b5a4a",
+    "#2e2b28"
+  ],
+  "floorId": "oak-plank-natural",
+  "slots": {}
+}

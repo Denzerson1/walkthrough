@@ -1,0 +1,37 @@
+{
+  "id": "mid-century-modern-white-marble-and-metal-v4p3",
+  "name": "Mid-Century Modern White Marble and Metal",
+  "category": "side_table",
+  "styles": [
+    "modern-minimal"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.454,
+    0.559,
+    0.454
+  ],
+  "glb": "/files/assets/furniture/mid-century-modern-white-marble-and-metal-v4p3/desktop.glb",
+  "glbPhone": "/files/assets/furniture/mid-century-modern-white-marble-and-metal-v4p3/phone.glb",
+  "thumbnail": "/files/assets/furniture/mid-century-modern-white-marble-and-metal-v4p3/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/3/B07B7GV4P3.glb",
+  "productId": "B07B7GV4P3",
+  "measuredM": [
+    0.455,
+    0.559,
+    0.455
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 1150856,
+      "triangles": 13568
+    },
+    "phone": {
+      "bytes": 295356,
+      "triangles": 13568
+    }
+  }
+}

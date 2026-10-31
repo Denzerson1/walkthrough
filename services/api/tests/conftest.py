@@ -84,17 +84,17 @@ def catalog_root(tmp_path: Path) -> Path:
             "id": "minimalist",
             "name": "Minimalist",
             "description": "Few pieces, pale woods, calm palette.",
-            "palette": ["#f4f1ec", "#c8c2b8"],
-            "floorIds": ["oak-herringbone-light"],
-            "picks": {"living": ["sofa-oslo-3"]},
+            "swatches": ["#f4f1ec", "#c8c2b8", "#2f332e"],
+            "floorId": "oak-herringbone-light",
+            "slots": {"living": {"sofa": "sofa-oslo-3"}},
         },
         {
             "id": "traditional",
             "name": "Traditional",
             "description": "Warm woods and classic shapes.",
-            "palette": ["#6b4a2f", "#b89b74"],
-            "floorIds": ["terracotta-rustic"],
-            "picks": {"living": ["table-ercol-oval"]},
+            "swatches": ["#6b4a2f", "#b89b74", "#efe6d8"],
+            "floorId": "terracotta-rustic",
+            "slots": {"living": {"dining_table": "table-ercol-oval"}},
         },
     ]
     for s in styles:

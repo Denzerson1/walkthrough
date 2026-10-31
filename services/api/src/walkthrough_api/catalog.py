@@ -205,7 +205,7 @@ def summarise(item: dict[str, Any], kind: CatalogKind) -> dict[str, Any]:
     else:
         base |= {
             "description": item.get("description"),
-            "palette": item.get("palette", []),
-            "floorIds": item.get("floorIds", []),
+            "swatches": item.get("swatches", []),
+            "floorId": item.get("floorId"),
         }
     return base

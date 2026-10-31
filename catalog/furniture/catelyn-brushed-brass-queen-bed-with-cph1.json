@@ -1,0 +1,37 @@
+{
+  "id": "catelyn-brushed-brass-queen-bed-with-cph1",
+  "name": "Catelyn Brushed Brass Queen Bed with",
+  "category": "bed",
+  "styles": [
+    "mid-century"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    1.702,
+    1.219,
+    2.235
+  ],
+  "glb": "/files/assets/furniture/catelyn-brushed-brass-queen-bed-with-cph1/desktop.glb",
+  "glbPhone": "/files/assets/furniture/catelyn-brushed-brass-queen-bed-with-cph1/phone.glb",
+  "thumbnail": "/files/assets/furniture/catelyn-brushed-brass-queen-bed-with-cph1/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/1/B07B4SCPH1.glb",
+  "productId": "B07B4SCPH1",
+  "measuredM": [
+    1.723,
+    1.231,
+    2.172
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 5753320,
+      "triangles": 38414
+    },
+    "phone": {
+      "bytes": 824640,
+      "triangles": 38414
+    }
+  }
+}

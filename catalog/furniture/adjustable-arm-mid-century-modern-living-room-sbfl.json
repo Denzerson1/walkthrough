@@ -1,0 +1,37 @@
+{
+  "id": "adjustable-arm-mid-century-modern-living-room-sbfl",
+  "name": "Adjustable Arm Mid-Century Modern Living Room",
+  "category": "floor_lamp",
+  "styles": [
+    "mid-century"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.254,
+    1.499,
+    0.432
+  ],
+  "glb": "/files/assets/furniture/adjustable-arm-mid-century-modern-living-room-sbfl/desktop.glb",
+  "glbPhone": "/files/assets/furniture/adjustable-arm-mid-century-modern-living-room-sbfl/phone.glb",
+  "thumbnail": "/files/assets/furniture/adjustable-arm-mid-century-modern-living-room-sbfl/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/L/B07374SBFL.glb",
+  "productId": "B07374SBFL",
+  "measuredM": [
+    0.25,
+    1.526,
+    0.431
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 459648,
+      "triangles": 40130
+    },
+    "phone": {
+      "bytes": 354484,
+      "triangles": 40130
+    }
+  }
+}

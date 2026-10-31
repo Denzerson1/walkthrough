@@ -1,0 +1,37 @@
+{
+  "id": "bedside-table-5ps1",
+  "name": "Bedside table",
+  "category": "nightstand",
+  "styles": [
+    "scandinavian"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.48,
+    0.5,
+    0.38
+  ],
+  "glb": "/files/assets/furniture/bedside-table-5ps1/desktop.glb",
+  "glbPhone": "/files/assets/furniture/bedside-table-5ps1/phone.glb",
+  "thumbnail": "/files/assets/furniture/bedside-table-5ps1/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/1/B07RPZ5PS1.glb",
+  "productId": "B07RPZ5PS1",
+  "measuredM": [
+    0.48,
+    0.5,
+    0.38
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 4040188,
+      "triangles": 10104
+    },
+    "phone": {
+      "bytes": 442516,
+      "triangles": 10104
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "id": "fisher-rustic-wood-queen-bed-frame-h7b1",
+  "name": "Fisher Rustic Wood Queen Bed Frame",
+  "category": "bed",
+  "styles": [
+    "industrial"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    1.607,
+    1.295,
+    2.184
+  ],
+  "glb": "/files/assets/furniture/fisher-rustic-wood-queen-bed-frame-h7b1/desktop.glb",
+  "glbPhone": "/files/assets/furniture/fisher-rustic-wood-queen-bed-frame-h7b1/phone.glb",
+  "thumbnail": "/files/assets/furniture/fisher-rustic-wood-queen-bed-frame-h7b1/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/1/B07B51H7B1.glb",
+  "productId": "B07B51H7B1",
+  "measuredM": [
+    1.606,
+    1.295,
+    2.184
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 3966344,
+      "triangles": 17286
+    },
+    "phone": {
+      "bytes": 549136,
+      "triangles": 17286
+    }
+  }
+}

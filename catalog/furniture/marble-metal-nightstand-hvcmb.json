@@ -1,0 +1,37 @@
+{
+  "id": "marble-metal-nightstand-hvcmb",
+  "name": "Marble and metal nightstand",
+  "category": "nightstand",
+  "styles": [
+    "industrial"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.454,
+    0.559,
+    0.454
+  ],
+  "glb": "/files/assets/furniture/marble-metal-nightstand-hvcmb/desktop.glb",
+  "glbPhone": "/files/assets/furniture/marble-metal-nightstand-hvcmb/phone.glb",
+  "thumbnail": "/files/assets/furniture/marble-metal-nightstand-hvcmb/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/B/B07B7HVCMB.glb",
+  "productId": "B07B7HVCMB",
+  "measuredM": [
+    0.455,
+    0.554,
+    0.455
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 1169500,
+      "triangles": 8752
+    },
+    "phone": {
+      "bytes": 297188,
+      "triangles": 8752
+    }
+  }
+}

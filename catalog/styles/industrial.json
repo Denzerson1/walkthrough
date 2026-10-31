@@ -1,51 +1,27 @@
 {
   "id": "industrial",
   "name": "Industrial",
-  "description": "Blackened steel, reclaimed timber and bare metal. Fewer, heavier pieces with space around them.",
-  "palette": [
-    "#e8e4dd",
-    "#6f6a62",
-    "#26282a",
-    "#9d7a52"
+  "description": "Black steel, worn leather and reclaimed wood, like a converted workshop.",
+  "swatches": [
+    "#2b2b2b",
+    "#8a5a3b",
+    "#b9b4ac"
   ],
-  "floorIds": [
-    "concrete-polished",
-    "slate-charcoal",
-    "walnut-dark-plank"
-  ],
-  "picks": {
-    "living": [
-      "industrial-sofa",
-      "industrial-armchair",
-      "industrial-coffee-table",
-      "industrial-shelves",
-      "industrial-plant"
-    ],
-    "bedroom": [
-      "industrial-bed",
-      "industrial-stool",
-      "industrial-shelves"
-    ],
-    "dining": [
-      "industrial-dining-table",
-      "industrial-stool",
-      "industrial-stool"
-    ],
-    "office": [
-      "industrial-desk",
-      "industrial-stool",
-      "industrial-shelves"
-    ],
-    "hallway": [
-      "industrial-shelves",
-      "industrial-plant"
-    ],
-    "kitchen": [
-      "industrial-dining-table",
-      "industrial-stool"
-    ]
-  },
-  "complete": true,
-  "license": "CC0-1.0",
-  "source": "https://polyhaven.com"
+  "floorId": "concrete-polished",
+  "slots": {
+    "living": {
+      "sofa": "lawson-leather-sofa-3fdw",
+      "armchair": "zane-leather-swivel-chair-ptqv",
+      "coffee_table": "larson-industrial-wood-metal-round-kxdt",
+      "side_table": "industrial-hexagonal-side-table-with-solid-v6mp",
+      "rug": "distressed-medallion-area-rug-v63q",
+      "floor_lamp": "globe-stick-floor-lamp-black-mfby2"
+    },
+    "bedroom": {
+      "bed": "fisher-rustic-wood-queen-bed-frame-h7b1",
+      "nightstand": "marble-metal-nightstand-hvcmb",
+      "table_lamp": "modern-mesh-table-lamp-6jz4",
+      "rug": "distressed-medallion-area-rug-v63q"
+    }
+  }
 }

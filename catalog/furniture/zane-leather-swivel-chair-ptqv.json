@@ -1,0 +1,37 @@
+{
+  "id": "zane-leather-swivel-chair-ptqv",
+  "name": "Zane leather swivel chair",
+  "category": "armchair",
+  "styles": [
+    "industrial"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.73,
+    0.864,
+    0.87
+  ],
+  "glb": "/files/assets/furniture/zane-leather-swivel-chair-ptqv/desktop.glb",
+  "glbPhone": "/files/assets/furniture/zane-leather-swivel-chair-ptqv/phone.glb",
+  "thumbnail": "/files/assets/furniture/zane-leather-swivel-chair-ptqv/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/V/B075X4PTQV.glb",
+  "productId": "B075X4PTQV",
+  "measuredM": [
+    0.738,
+    0.87,
+    0.874
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 4124664,
+      "triangles": 15522
+    },
+    "phone": {
+      "bytes": 643792,
+      "triangles": 15522
+    }
+  }
+}

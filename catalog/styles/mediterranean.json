@@ -1,0 +1,12 @@
+{
+  "id": "mediterranean",
+  "name": "Mediterranean",
+  "description": "Whitewashed wood, rattan and terracotta, warm as a summer house.",
+  "swatches": [
+    "#f4efe6",
+    "#c46a3c",
+    "#3d6f8e"
+  ],
+  "floorId": "terracotta-rustic",
+  "slots": {}
+}

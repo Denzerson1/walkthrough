@@ -1,0 +1,37 @@
+{
+  "id": "contemporary-wool-blend-area-rug-g84w",
+  "name": "Contemporary Wool Blend Area Rug",
+  "category": "rug",
+  "styles": [
+    "modern-minimal"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    2.406,
+    0.023,
+    1.539
+  ],
+  "glb": "/files/assets/furniture/contemporary-wool-blend-area-rug-g84w/desktop.glb",
+  "glbPhone": "/files/assets/furniture/contemporary-wool-blend-area-rug-g84w/phone.glb",
+  "thumbnail": "/files/assets/furniture/contemporary-wool-blend-area-rug-g84w/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/W/B07HSHG84W.glb",
+  "productId": "B07HSHG84W",
+  "measuredM": [
+    2.406,
+    0.023,
+    1.539
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 4147904,
+      "triangles": 1504
+    },
+    "phone": {
+      "bytes": 452972,
+      "triangles": 1504
+    }
+  }
+}

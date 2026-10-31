@@ -1,0 +1,37 @@
+{
+  "id": "mid-century-wood-nightstand-5tqz",
+  "name": "Mid-century wood nightstand",
+  "category": "nightstand",
+  "styles": [
+    "mid-century"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.61,
+    0.61,
+    0.432
+  ],
+  "glb": "/files/assets/furniture/mid-century-wood-nightstand-5tqz/desktop.glb",
+  "glbPhone": "/files/assets/furniture/mid-century-wood-nightstand-5tqz/phone.glb",
+  "thumbnail": "/files/assets/furniture/mid-century-wood-nightstand-5tqz/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/Z/B07B4W5TQZ.glb",
+  "productId": "B07B4W5TQZ",
+  "measuredM": [
+    0.613,
+    0.615,
+    0.427
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 3675336,
+      "triangles": 8416
+    },
+    "phone": {
+      "bytes": 485336,
+      "triangles": 8416
+    }
+  }
+}

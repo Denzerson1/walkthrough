@@ -1,0 +1,37 @@
+{
+  "id": "kutina-leather-sofa-k9y",
+  "name": "Kutina leather sofa",
+  "category": "sofa",
+  "styles": [
+    "modern-minimal"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    2.03,
+    0.87,
+    0.94
+  ],
+  "glb": "/files/assets/furniture/kutina-leather-sofa-k9y/desktop.glb",
+  "glbPhone": "/files/assets/furniture/kutina-leather-sofa-k9y/phone.glb",
+  "thumbnail": "/files/assets/furniture/kutina-leather-sofa-k9y/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/Y/B07HPTFK9Y.glb",
+  "productId": "B07HPTFK9Y",
+  "measuredM": [
+    2.017,
+    0.875,
+    0.953
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 4898180,
+      "triangles": 25440
+    },
+    "phone": {
+      "bytes": 650940,
+      "triangles": 25440
+    }
+  }
+}

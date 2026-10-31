@@ -129,7 +129,8 @@ def tool_definitions() -> list[dict[str, Any]]:
         ),
         tool(
             "apply_style",
-            "Apply a whole style to a room: its floor and a set of furniture.",
+            "Apply a style kit to a room: its floor and its piece in each of the room's "
+            "furniture slots.",
             {
                 "roomId": {"type": "string"},
                 "styleId": {"type": "string", "description": "Catalog style id."},

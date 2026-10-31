@@ -1,0 +1,27 @@
+{
+  "id": "scandinavian",
+  "name": "Scandinavian",
+  "description": "Light oak, soft wool and linen, white globe lamps: bright and calm.",
+  "swatches": [
+    "#f1ede4",
+    "#c8a97e",
+    "#9aa39b"
+  ],
+  "floorId": "ash-pale-wide",
+  "slots": {
+    "living": {
+      "sofa": "lawson-modern-angled-sofa-3fd2",
+      "armchair": "theresa-accent-chair-cream-zb1q",
+      "coffee_table": "hayes-square-solid-wood-coffee-table-r4wl",
+      "side_table": "modern-rustic-reclaimed-elm-round-accent-tdq6",
+      "rug": "textured-zen-hand-woven-jute-area-rug-vx9c",
+      "floor_lamp": "globe-stick-floor-lamp-b716"
+    },
+    "bedroom": {
+      "bed": "storage-double-bed-x4wz",
+      "nightstand": "bedside-table-5ps1",
+      "table_lamp": "farmhouse-table-lamp-t4zs",
+      "rug": "textured-zen-hand-woven-jute-area-rug-vx9c"
+    }
+  }
+}

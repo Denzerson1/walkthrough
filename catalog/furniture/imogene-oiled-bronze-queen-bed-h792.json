@@ -1,0 +1,37 @@
+{
+  "id": "imogene-oiled-bronze-queen-bed-h792",
+  "name": "Imogene Oiled Bronze Queen Bed",
+  "category": "bed",
+  "styles": [
+    "modern-minimal"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    1.613,
+    1.168,
+    2.159
+  ],
+  "glb": "/files/assets/furniture/imogene-oiled-bronze-queen-bed-h792/desktop.glb",
+  "glbPhone": "/files/assets/furniture/imogene-oiled-bronze-queen-bed-h792/phone.glb",
+  "thumbnail": "/files/assets/furniture/imogene-oiled-bronze-queen-bed-h792/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/2/B07B51H792.glb",
+  "productId": "B07B51H792",
+  "measuredM": [
+    1.572,
+    1.173,
+    2.122
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 1416668,
+      "triangles": 17216
+    },
+    "phone": {
+      "bytes": 301316,
+      "triangles": 17216
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "id": "storage-double-bed-x4wz",
+  "name": "Double bed with storage",
+  "category": "bed",
+  "styles": [
+    "scandinavian"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    1.622,
+    0.8,
+    1.96
+  ],
+  "glb": "/files/assets/furniture/storage-double-bed-x4wz/desktop.glb",
+  "glbPhone": "/files/assets/furniture/storage-double-bed-x4wz/phone.glb",
+  "thumbnail": "/files/assets/furniture/storage-double-bed-x4wz/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/Z/B07GFRX4WZ.glb",
+  "productId": "B07GFRX4WZ",
+  "measuredM": [
+    1.622,
+    0.8,
+    1.96
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 2702176,
+      "triangles": 38764
+    },
+    "phone": {
+      "bytes": 629816,
+      "triangles": 38764
+    }
+  }
+}

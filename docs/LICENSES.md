@@ -59,6 +59,10 @@ Last updated: 2026-10-02
 | `vitest` | 3.2.4 | MIT | [link](https://vitest.dev/) | Web unit tests |
 | `@playwright/test` | 1.56.0 | Apache-2.0 | [link](https://playwright.dev/) | Browser smoke tests and screenshots |
 | `pngjs` | 7.0.0 | MIT | [link](https://github.com/pngjs/pngjs) | Reads back screenshots in the splat render check |
+| `@gltf-transform/core`, `extensions`, `functions` | 4.5.1 | MIT | [link](https://gltf-transform.dev/) | Prepares furniture models (`scripts/prepare-models.mjs`) |
+| `meshoptimizer` | 1.3.0 | MIT | [link](https://github.com/zeux/meshoptimizer) | Simplifies and compresses furniture geometry |
+| `ktx2-encoder` | 0.6.0 | MIT (Basis Universal: Apache-2.0) | [link](https://github.com/gz65555/ktx2-encoder) | Encodes furniture textures to KTX2 |
+| `sharp` | 0.35.5 | Apache-2.0 | [link](https://sharp.pixelplumbing.com/) | Resizes furniture textures before encoding |
 
 ### External tools
 
@@ -120,36 +124,29 @@ own colour, untinted.
 
 ### Furniture
 
-42 entries in `catalog/furniture/`, across four themes.
+36 entries in `catalog/furniture/`, the pieces of four style kits
+(`catalog/styles/`). Every one is a real product's model from the
+**Amazon Berkeley Objects** dataset.
 
-| Source | Licence | Link |
-|---|---|---|
-| Poly Haven (photogrammetry models) | CC0-1.0 | [polyhaven.com](https://polyhaven.com) |
-| Built in the viewer (sofas and beds) | ours, CC0 | `buildProceduralItem` in `SplatScene.tsx` |
+| Source | Licence | Credit | Link |
+|---|---|---|---|
+| Amazon Berkeley Objects (3D models) | CC BY 4.0 | Amazon.com | [ABO](https://amazon-berkeley-objects.s3.amazonaws.com/index.html) |
 
-Fetched by `pnpm seed:assets` into `data/assets/furniture/<id>/` (git-ignored)
-as glTF plus its `.bin` and 1K textures. The mapping, and each piece's stated
-real-world height, live in `scripts/furniture_themes.py`; that script is also
-what writes `catalog/furniture/` and `catalog/styles/`.
+CC BY 4.0 allows commercial use with credit. The credit ("Amazon.com,
+Amazon Berkeley Objects, CC BY 4.0") is shown in the viewer's design menu
+and each catalog entry carries it in `attribution`. The models are changed:
+`pnpm prepare:models` simplifies the phone versions, resizes and recompresses
+the textures (KTX2) and recentres them.
 
-**Models are picked by looking at them, not by their names.** An earlier pass
-chose on names alone and filled a theme called "Modern" with a buttoned
-chesterfield, a carved wing chair and a floral day bed.
+Chosen from the metadata alone by `scripts/shortlist_abo.py`, by product
+photo; downloaded and converted by `scripts/prepare-models.mjs` into
+`data/assets/furniture/<id>/` (git-ignored). A model whose size is more than
+3% off the product's listed size, or outside its category's range
+(`catalog/sizes.json`), is refused; ten of the first 46 picks were, and were
+replaced. `docs/scale-sheet.png` shows them all beside a door and a person.
 
-**Two pieces are built in code rather than downloaded.** Poly Haven's
-furniture library is almost entirely antique, rustic or industrial: across
-roughly 190 furniture assets there is no contemporary sofa and no
-contemporary bed. Those are the two pieces a flat most needs, so the
-Contemporary, Mid-Century and Industrial themes draw them as plain slab forms
-instead. They are ours and carry no third-party licence.
-
-**Scale is not taken on trust.** Each mesh is measured from its glTF
-accessors and scaled to the height stated in the theme table. Measured raw,
-`steel_frame_shelves_01` is 21 m tall and `WoodenChair_01` 2.3 m.
-
-**Open:** a photoreal contemporary sofa and bed would have to be bought — no
-CC0 source has them. Roughly €40–80 each on the usual marketplaces. Until
-then the built ones stand, and they do not pretend to be photographs.
+Not used: CGTrader, TurboSquid and Fab, whose licences restrict handing out
+the model files a browser downloads.
 
 ### Models and datasets
 

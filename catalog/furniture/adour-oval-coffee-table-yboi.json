@@ -1,0 +1,37 @@
+{
+  "id": "adour-oval-coffee-table-yboi",
+  "name": "Adour Oval Coffee Table",
+  "category": "coffee_table",
+  "styles": [
+    "modern-minimal"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    1.1,
+    0.39,
+    0.55
+  ],
+  "glb": "/files/assets/furniture/adour-oval-coffee-table-yboi/desktop.glb",
+  "glbPhone": "/files/assets/furniture/adour-oval-coffee-table-yboi/phone.glb",
+  "thumbnail": "/files/assets/furniture/adour-oval-coffee-table-yboi/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/I/B01M4OYBOI.glb",
+  "productId": "B01M4OYBOI",
+  "measuredM": [
+    1.083,
+    0.39,
+    0.542
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 951024,
+      "triangles": 10190
+    },
+    "phone": {
+      "bytes": 338596,
+      "triangles": 10190
+    }
+  }
+}

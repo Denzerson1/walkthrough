@@ -1,0 +1,37 @@
+{
+  "id": "modern-rustic-reclaimed-elm-round-accent-tdq6",
+  "name": "Modern Rustic Reclaimed Elm Round Accent",
+  "category": "side_table",
+  "styles": [
+    "scandinavian"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.429,
+    0.46,
+    0.429
+  ],
+  "glb": "/files/assets/furniture/modern-rustic-reclaimed-elm-round-accent-tdq6/desktop.glb",
+  "glbPhone": "/files/assets/furniture/modern-rustic-reclaimed-elm-round-accent-tdq6/phone.glb",
+  "thumbnail": "/files/assets/furniture/modern-rustic-reclaimed-elm-round-accent-tdq6/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/6/B075Z8TDQ6.glb",
+  "productId": "B075Z8TDQ6",
+  "measuredM": [
+    0.432,
+    0.46,
+    0.431
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 3399672,
+      "triangles": 9248
+    },
+    "phone": {
+      "bytes": 479016,
+      "triangles": 9248
+    }
+  }
+}

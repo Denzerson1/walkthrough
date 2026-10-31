@@ -1,0 +1,37 @@
+{
+  "id": "round-coffee-table-with-solid-wood-f3mr",
+  "name": "Round Coffee Table with Solid Wood",
+  "category": "coffee_table",
+  "styles": [
+    "mid-century"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.8,
+    0.36,
+    0.8
+  ],
+  "glb": "/files/assets/furniture/round-coffee-table-with-solid-wood-f3mr/desktop.glb",
+  "glbPhone": "/files/assets/furniture/round-coffee-table-with-solid-wood-f3mr/phone.glb",
+  "thumbnail": "/files/assets/furniture/round-coffee-table-with-solid-wood-f3mr/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/R/B07GDSF3MR.glb",
+  "productId": "B07GDSF3MR",
+  "measuredM": [
+    0.8,
+    0.36,
+    0.8
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 1633384,
+      "triangles": 7572
+    },
+    "phone": {
+      "bytes": 337304,
+      "triangles": 7572
+    }
+  }
+}

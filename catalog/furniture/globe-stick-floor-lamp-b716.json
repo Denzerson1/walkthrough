@@ -1,0 +1,37 @@
+{
+  "id": "globe-stick-floor-lamp-b716",
+  "name": "Globe Stick Floor Lamp",
+  "category": "floor_lamp",
+  "styles": [
+    "scandinavian"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.229,
+    1.753,
+    0.229
+  ],
+  "glb": "/files/assets/furniture/globe-stick-floor-lamp-b716/desktop.glb",
+  "glbPhone": "/files/assets/furniture/globe-stick-floor-lamp-b716/phone.glb",
+  "thumbnail": "/files/assets/furniture/globe-stick-floor-lamp-b716/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/6/B082XLB716.glb",
+  "productId": "B082XLB716",
+  "measuredM": [
+    0.224,
+    1.753,
+    0.224
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 539564,
+      "triangles": 5200
+    },
+    "phone": {
+      "bytes": 189344,
+      "triangles": 5200
+    }
+  }
+}

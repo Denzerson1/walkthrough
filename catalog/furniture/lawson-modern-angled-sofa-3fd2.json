@@ -1,0 +1,37 @@
+{
+  "id": "lawson-modern-angled-sofa-3fd2",
+  "name": "Lawson Modern Angled Sofa",
+  "category": "sofa",
+  "styles": [
+    "scandinavian"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    1.981,
+    0.864,
+    0.864
+  ],
+  "glb": "/files/assets/furniture/lawson-modern-angled-sofa-3fd2/desktop.glb",
+  "glbPhone": "/files/assets/furniture/lawson-modern-angled-sofa-3fd2/phone.glb",
+  "thumbnail": "/files/assets/furniture/lawson-modern-angled-sofa-3fd2/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/2/B075X43FD2.glb",
+  "productId": "B075X43FD2",
+  "measuredM": [
+    2,
+    0.846,
+    0.875
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 2741756,
+      "triangles": 17084
+    },
+    "phone": {
+      "bytes": 411968,
+      "triangles": 17084
+    }
+  }
+}

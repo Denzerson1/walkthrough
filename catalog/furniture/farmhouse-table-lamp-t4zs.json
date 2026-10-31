@@ -1,0 +1,37 @@
+{
+  "id": "farmhouse-table-lamp-t4zs",
+  "name": "Farmhouse table lamp",
+  "category": "table_lamp",
+  "styles": [
+    "scandinavian"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.279,
+    0.508,
+    0.279
+  ],
+  "glb": "/files/assets/furniture/farmhouse-table-lamp-t4zs/desktop.glb",
+  "glbPhone": "/files/assets/furniture/farmhouse-table-lamp-t4zs/phone.glb",
+  "thumbnail": "/files/assets/furniture/farmhouse-table-lamp-t4zs/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/S/B075X1T4ZS.glb",
+  "productId": "B075X1T4ZS",
+  "measuredM": [
+    0.273,
+    0.497,
+    0.273
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 3492392,
+      "triangles": 30072
+    },
+    "phone": {
+      "bytes": 618004,
+      "triangles": 30072
+    }
+  }
+}

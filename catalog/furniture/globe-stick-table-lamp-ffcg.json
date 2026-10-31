@@ -1,0 +1,37 @@
+{
+  "id": "globe-stick-table-lamp-ffcg",
+  "name": "Globe Stick Table Lamp",
+  "category": "table_lamp",
+  "styles": [
+    "modern-minimal"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.152,
+    0.483,
+    0.152
+  ],
+  "glb": "/files/assets/furniture/globe-stick-table-lamp-ffcg/desktop.glb",
+  "glbPhone": "/files/assets/furniture/globe-stick-table-lamp-ffcg/phone.glb",
+  "thumbnail": "/files/assets/furniture/globe-stick-table-lamp-ffcg/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/G/B082XLFFCG.glb",
+  "productId": "B082XLFFCG",
+  "measuredM": [
+    0.153,
+    0.48,
+    0.153
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 3163776,
+      "triangles": 15432
+    },
+    "phone": {
+      "bytes": 266884,
+      "triangles": 15432
+    }
+  }
+}
