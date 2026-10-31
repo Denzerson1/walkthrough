@@ -7,6 +7,29 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-10-31 — A menu nothing goes missing from
+
+The owner changed the sofa and could not find the way back to the rest.
+On a phone the "Back" row scrolled away with the sofas; and the tabs
+changed from room to room (a hall had no Style or Furniture), so a tab
+could vanish just by walking.
+
+- The same tabs everywhere: Style, Floor, Furniture, Kitchen, Wardrobe.
+- **Style** is for the whole flat; "None" takes the kit's pieces and the
+  floors it laid out again, and keeps other changes.
+- **Furniture** lists every room's pieces under the room's name; a piece
+  opens its choices inside the tab (the tabs stay), with "‹ All
+  furniture" pinned at the top however far the list scrolls, and
+  "Original" (or "None") first to empty the place. A piece in another
+  room walks you there. A piece tapped in 3D opens the same choices.
+- **Floor** says where it goes: the room's name or "Whole flat".
+- **Reset all** at the foot of the menu (greyed out while nothing has
+  changed), and the one at the top: both offer Undo now.
+- Tested: the store's reset, Undo, removing a style and emptying a slot
+  (vitest 143); the menu's reset and Undo in Playwright (desktop: 14 of
+  15 viewer tests, the landing link failing as before). Screenshots:
+  `m11-furniture-desktop`, `m11-furniture-choice-iphone`.
+
 ## 2026-10-31 — No lag; the kitchen and the wardrobe; a simpler menu
 
 - **The lag:** every frame the view moved woke the render loop from inside

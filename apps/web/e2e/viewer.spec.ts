@@ -106,6 +106,21 @@ test.describe('viewer', () => {
     await expect(page.getByTestId('staged-badge')).toBeHidden();
   });
 
+  test("the menu's Reset all returns to the original, and Undo takes it back", async ({ page }) => {
+    await page.goto(`/p/${PROJECT}`);
+    await page.getByTestId('design-menu-toggle').click();
+    await expect(page.getByTestId('menu-reset')).toBeDisabled();
+    await page.getByTestId('design-tab-floor').click();
+    await page.locator('[data-floor-id]').first().click();
+    await expect(page.getByTestId('staged-badge')).toBeVisible();
+
+    await page.getByTestId('menu-reset').click();
+    await expect(page.getByTestId('staged-badge')).toBeHidden();
+    await expect(page.getByTestId('menu-reset')).toBeDisabled();
+    await page.getByTestId('toast-undo').click();
+    await expect(page.getByTestId('staged-badge')).toBeVisible();
+  });
+
   /**
    * Stub the clipboard rather than granting permissions: WebKit does not
    * support the clipboard-read permission in Playwright, and this records

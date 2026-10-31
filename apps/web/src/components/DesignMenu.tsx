@@ -1,9 +1,11 @@
 /**
- * The design menu: style, floor and furniture for the room you stand in,
- * and the finishes of the flat's kitchen and wardrobe. A bottom sheet on a
+ * The design menu: a style for the flat, floors, every piece of furniture,
+ * and the finishes of the kitchen and the wardrobe. A bottom sheet on a
  * phone, collapsed to one line until opened; a panel at the right on a big
- * screen. Pictures first, a word under each: it reads and changes the one
- * store the 3D taps and the assistant use, so all three always agree.
+ * screen. The same tabs wherever you stand, pictures with a word under
+ * each, choices opening inside their tab, and one button back to the
+ * original. It reads and changes the one store the 3D taps and the
+ * assistant use, so all three always agree.
  */
 
 import { useMemo, useState } from 'react';
@@ -12,7 +14,8 @@ import { type Finish, type Fitting, FITTINGS } from '../lib/finishes';
 import { floorColor } from '../lib/floorColors';
 import type { Room, Slot } from '../lib/manifest';
 import { type CatalogItem, useStore } from '../lib/store';
-import { alternatives, baseFor, kitReady, type StyleKit } from '../lib/styles';
+import { alternatives, baseFor, kitReady } from '../lib/styles';
+import { isStaged } from '../lib/viewerState';
 
 export type DesignTab = 'style' | 'floor' | 'furniture' | Fitting;
 
@@ -38,7 +41,14 @@ const CATEGORY_NAMES: Record<string, string> = {
 
 const categoryName = (category: string) => CATEGORY_NAMES[category] ?? category.replace(/_/g, ' ');
 
+/** A slot being chosen for, in its room. */
+interface Picked {
+  roomId: string;
+  slotId: string;
+}
+
 interface DesignMenuProps {
+  /** The room you stand in: what a floor is laid in unless it is the whole flat. */
   room: Room;
   /** The fittings this flat has finishes for (finishes.fittingsIn). */
   fittings: Fitting[];
@@ -51,42 +61,55 @@ interface DesignMenuProps {
 export function DesignMenu({ room, fittings, compact, open, onOpenChange }: DesignMenuProps) {
   const {
     manifest, viewer, catalog, selectedUid,
-    applyStyle, swapPiece, setFloor, setFinish, reset, selectItem,
+    applyStyle, removeStyle, swapPiece, clearSlot, setFloor, setFinish, reset, selectItem, goToRoom,
   } = useStore();
-  const [chosenTab, setTab] = useState<DesignTab>('style');
-  const [allRooms, setAllRooms] = useState(false);
-  /** A slot chosen from the furniture tiles, in the room it was chosen in. */
-  const [picked, setPicked] = useState<{ roomId: string; slotId: string } | null>(null);
+  const [tab, setTab] = useState<DesignTab>('style');
+  const [picked, setPicked] = useState<Picked | null>(null);
+  const [wholeFlat, setWholeFlat] = useState(false);
 
-  const slots = useMemo(() => room.slots ?? [], [room.slots]);
+  const rooms = useMemo(() => manifest?.rooms ?? [], [manifest]);
+  const furnished = useMemo(() => rooms.filter((r) => r.slots?.length), [rooms]);
   const kits = useMemo(
-    () => catalog.styles.filter((k) => kitReady(k, room.type, slots, catalog.furniture)),
-    [catalog.styles, catalog.furniture, room.type, slots],
+    () =>
+      catalog.styles.filter((k) =>
+        furnished.some((r) => kitReady(k, r.type, r.slots ?? [], catalog.furniture)),
+      ),
+    [catalog.styles, catalog.furniture, furnished],
   );
-  const kit = catalog.styles.find((k) => k.id === viewer.styles[room.id]);
+  const styleIds = [...new Set(Object.values(viewer.styles))];
+  const style = styleIds.length === 1 ? catalog.styles.find((k) => k.id === styleIds[0]) : undefined;
+  const changed = isStaged(viewer);
 
-  // Only what this room can take: no style or furniture tab in a hall.
   const tabs: Array<[DesignTab, string]> = [
-    ...(kits.length ? [['style', 'Style'] as [DesignTab, string]] : []),
+    ['style', 'Style'],
     ['floor', 'Floor'],
-    ...(slots.length ? [['furniture', 'Furniture'] as [DesignTab, string]] : []),
+    ['furniture', 'Furniture'],
     ...FITTINGS.filter((f) => fittings.includes(f.id)).map((f) => [f.id, f.name] as [DesignTab, string]),
   ];
-  const tab = tabs.some(([id]) => id === chosenTab) ? chosenTab : tabs[0][0];
 
-  const inRoom = viewer.items.filter((i) => i.roomId === room.id && i.slotId);
-  const pieceIn = (slot: Slot) => {
-    const placed = inRoom.find((i) => i.slotId === slot.id);
+  // A piece of furniture tapped in 3D opens its choices here (set while
+  // rendering, as React advises for state that follows a prop).
+  const tapped = viewer.items.find((i) => i.uid === selectedUid);
+  const tappedSlot = tapped?.slotId ? `${tapped.roomId}/${tapped.slotId}` : null;
+  const [seenTap, setSeenTap] = useState(tappedSlot);
+  if (tappedSlot !== seenTap) {
+    setSeenTap(tappedSlot);
+    if (tapped?.slotId) {
+      setTab('furniture');
+      setPicked({ roomId: tapped.roomId, slotId: tapped.slotId });
+    }
+  }
+
+  const pieceIn = (roomId: string, slot: Slot) => {
+    const placed = viewer.items.find((i) => i.roomId === roomId && i.slotId === slot.id);
     return placed ? catalog.furniture.find((f) => f.id === placed.itemId) : undefined;
   };
-
-  // The slot whose alternatives are shown: a kit's piece tapped in 3D, or a
-  // tile chosen here, in this room.
-  const tapped = viewer.items.find((i) => i.uid === selectedUid && i.roomId === room.id);
-  const choosing = tapped?.slotId ?? (picked?.roomId === room.id ? picked.slotId : null);
-  const choosingSlot = slots.find((s) => s.id === choosing);
-  const rooms = manifest?.rooms ?? [];
-  const everywhere = allRooms && rooms.length > 1;
+  const pickedRoom = rooms.find((r) => r.id === picked?.roomId);
+  const pickedSlot = pickedRoom?.slots?.find((s) => s.id === picked?.slotId);
+  const closeChoices = () => {
+    setPicked(null);
+    selectItem(null);
+  };
 
   const header = (
     <button
@@ -98,127 +121,147 @@ export function DesignMenu({ room, fittings, compact, open, onOpenChange }: Desi
       data-testid="design-menu-toggle"
     >
       <span className="min-w-0">
-        <span className="block truncate text-[14px] font-semibold tracking-tight">Design · {room.name}</span>
-        <span className="block truncate text-[12px] opacity-70">{kit ? kit.name : 'As it is'}</span>
+        <span className="block text-[15px] font-semibold tracking-tight">Design</span>
+        <span className="block truncate text-[12px] opacity-70">
+          {style ? style.name : changed ? 'Your changes' : 'Original'}
+        </span>
       </span>
-      <span aria-hidden="true" className="text-[16px] opacity-70">
-        {compact ? (open ? '▾' : '▴') : open ? '›' : '‹'}
+      <span className="flex items-center gap-2 text-[12px] font-medium opacity-80">
+        {open ? 'Close' : 'Open'}
+        <span aria-hidden="true" className="text-[15px]">
+          {compact ? (open ? '▾' : '▴') : open ? '›' : '‹'}
+        </span>
       </span>
     </button>
   );
 
-  const panel = () => {
-    if (tab === 'style') {
-      return (
-        <Grid columns={4}>
-          <Choice
-            label="As it is"
-            selected={!kit}
-            onClick={() => (everywhere ? rooms : [room]).forEach((r) => reset(r.id))}
-            testId="style-none"
-          >
-            <Original />
-          </Choice>
-          {kits.map((k) => (
-            <Choice
-              key={k.id}
-              label={k.name}
-              selected={kit?.id === k.id}
-              onClick={() => applyStyle(everywhere ? 'all' : [room.id], k.id)}
-              data={{ 'data-style-id': k.id }}
-            >
-              <Stripes colours={k.swatches} />
-            </Choice>
-          ))}
-        </Grid>
-      );
-    }
-    if (tab === 'floor') {
-      const applied = viewer.floors[room.id];
-      return (
-        <Grid columns={4}>
-          <Choice
-            label="Original"
-            selected={!applied}
-            onClick={() => setFloor(everywhere ? ['all'] : [room.id], null)}
-            testId="floor-original"
-          >
-            <Original />
-          </Choice>
-          {catalog.floors.map((floor) => (
-            <Choice
-              key={floor.id}
-              label={floor.name}
-              selected={floor.id === applied}
-              onClick={() => setFloor(everywhere ? ['all'] : [room.id], floor.id)}
-              data={{ 'data-floor-id': floor.id }}
-            >
-              <span
-                className="block h-full w-full"
-                style={{
-                  background: floor.thumbnail ? `center/cover url(${apiUrl(floor.thumbnail)})` : floorColor(floor),
-                }}
-              />
-            </Choice>
-          ))}
-        </Grid>
-      );
-    }
-    if (tab === 'furniture') {
-      return (
-        <Grid columns={3}>
-          {slots.map((slot) => {
-            const piece = pieceIn(slot);
-            return (
-              <Choice
-                key={slot.id}
-                label={categoryName(slot.category)}
-                onClick={() => setPicked({ roomId: room.id, slotId: slot.id })}
-                data={{ 'data-slot-id': slot.id }}
-              >
-                {piece ? <Thumbnail item={piece} /> : <span className="text-[22px] opacity-40">+</span>}
-              </Choice>
-            );
-          })}
-        </Grid>
-      );
-    }
-    const own = viewer.finishes[tab];
-    return (
-      <Grid columns={4}>
-        <Choice label="Original" selected={!own} onClick={() => setFinish(tab, null)} testId={`${tab}-original`}>
+  const styleTab = (
+    <Grid>
+      <Choice label="None" selected={!styleIds.length} onClick={removeStyle} testId="style-none">
+        <Original />
+      </Choice>
+      {kits.map((k) => (
+        <Choice
+          key={k.id}
+          label={k.name}
+          selected={style?.id === k.id}
+          onClick={() => applyStyle('all', k.id)}
+          data={{ 'data-style-id': k.id }}
+        >
+          <Stripes colours={k.swatches} />
+        </Choice>
+      ))}
+    </Grid>
+  );
+
+  const floorScope = wholeFlat ? ['all'] : [room.id];
+  const floorTab = (
+    <>
+      {rooms.length > 1 && (
+        <Segmented
+          options={[
+            [false, room.name],
+            [true, 'Whole flat'],
+          ]}
+          value={wholeFlat}
+          onChange={setWholeFlat}
+        />
+      )}
+      <Grid>
+        <Choice
+          label="Original"
+          selected={!viewer.floors[room.id]}
+          onClick={() => setFloor(floorScope, null)}
+          testId="floor-original"
+        >
           <Original />
         </Choice>
-        {catalog.finishes
-          .filter((f) => f.fitting === tab)
-          .map((finish) => (
-            <Choice
-              key={finish.id}
-              label={finish.name}
-              selected={own === finish.id}
-              onClick={() => setFinish(tab, finish.id)}
-              data={{ 'data-finish-id': finish.id }}
-            >
-              <FinishSwatch finish={finish} />
-            </Choice>
-          ))}
+        {catalog.floors.map((floor) => (
+          <Choice
+            key={floor.id}
+            label={floor.name}
+            selected={floor.id === viewer.floors[room.id]}
+            onClick={() => setFloor(floorScope, floor.id)}
+            data={{ 'data-floor-id': floor.id }}
+          >
+            <span
+              className="block h-full w-full"
+              style={{
+                background: floor.thumbnail ? `center/cover url(${apiUrl(floor.thumbnail)})` : floorColor(floor),
+              }}
+            />
+          </Choice>
+        ))}
       </Grid>
-    );
-  };
+    </>
+  );
 
-  const body = choosingSlot ? (
-    <Alternatives
-      slot={choosingSlot}
-      room={room}
-      kit={kit}
-      current={pieceIn(choosingSlot)}
-      onBack={() => {
-        setPicked(null);
-        selectItem(null);
-      }}
-      onChoose={(itemId) => swapPiece(room.id, choosingSlot.id, itemId)}
-    />
-  ) : (
+  const furnitureTab =
+    pickedRoom && pickedSlot ? (
+      <Alternatives
+        slot={pickedSlot}
+        room={pickedRoom}
+        current={pieceIn(pickedRoom.id, pickedSlot)}
+        onBack={closeChoices}
+        onChoose={(itemId) => swapPiece(pickedRoom.id, pickedSlot.id, itemId)}
+        onClear={() => clearSlot(pickedRoom.id, pickedSlot.id)}
+      />
+    ) : (
+      <div className="pb-1">
+        {furnished.map((r) => (
+          <section key={r.id}>
+            <h3 className="px-3 pt-3 text-[12px] font-semibold opacity-70">{r.name}</h3>
+            <Grid>
+              {(r.slots ?? []).map((slot) => {
+                const piece = pieceIn(r.id, slot);
+                return (
+                  <Choice
+                    key={slot.id}
+                    label={categoryName(slot.category)}
+                    onClick={() => {
+                      // Walk there, to see what you choose.
+                      if (r.id !== room.id) goToRoom(r.id);
+                      setPicked({ roomId: r.id, slotId: slot.id });
+                    }}
+                    data={{ 'data-slot-id': slot.id }}
+                  >
+                    {piece ? <Thumbnail item={piece} /> : <span className="text-[24px] opacity-40">+</span>}
+                  </Choice>
+                );
+              })}
+            </Grid>
+          </section>
+        ))}
+      </div>
+    );
+
+  const fittingTab = (fitting: Fitting) => (
+    <Grid>
+      <Choice
+        label="Original"
+        selected={!viewer.finishes[fitting]}
+        onClick={() => setFinish(fitting, null)}
+        testId={`${fitting}-original`}
+      >
+        <Original />
+      </Choice>
+      {catalog.finishes
+        .filter((f) => f.fitting === fitting)
+        .map((finish) => (
+          <Choice
+            key={finish.id}
+            label={finish.name}
+            selected={viewer.finishes[fitting] === finish.id}
+            onClick={() => setFinish(fitting, finish.id)}
+            data={{ 'data-finish-id': finish.id }}
+          >
+            <FinishSwatch finish={finish} />
+          </Choice>
+        ))}
+    </Grid>
+  );
+
+  const body = (
     <>
       <div className="rule border-b px-2 py-1.5">
         <div role="tablist" aria-label="Design" className="scroll-x flex gap-1">
@@ -228,7 +271,10 @@ export function DesignMenu({ room, fittings, compact, open, onOpenChange }: Desi
               type="button"
               role="tab"
               aria-selected={tab === id}
-              onClick={() => setTab(id)}
+              onClick={() => {
+                setTab(id);
+                closeChoices();
+              }}
               className={[
                 'tap min-h-10 shrink-0 rounded-full px-3.5 text-[13px] font-medium transition-colors',
                 tab === id ? 'bg-[var(--accent)] text-[var(--paper)]' : 'hover:bg-[var(--paper-warm)]',
@@ -241,20 +287,28 @@ export function DesignMenu({ room, fittings, compact, open, onOpenChange }: Desi
         </div>
       </div>
       <div role="tabpanel" className="min-h-0 flex-1 overflow-y-auto">
-        {(tab === 'style' || tab === 'floor') && rooms.length > 1 && (
-          <label className="flex cursor-pointer items-center justify-end gap-1.5 px-3 pt-2.5 text-[12px]">
-            <input
-              type="checkbox"
-              checked={allRooms}
-              onChange={(e) => setAllRooms(e.target.checked)}
-              className="h-4 w-4 accent-[var(--accent)]"
-              data-testid="all-rooms"
-            />
-            All rooms
-          </label>
-        )}
-        {panel()}
+        {tab === 'style' && styleTab}
+        {tab === 'floor' && floorTab}
+        {tab === 'furniture' && furnitureTab}
+        {(tab === 'kitchen' || tab === 'wardrobe') && fittingTab(tab)}
         {(tab === 'style' || tab === 'furniture') && <Credit />}
+      </div>
+      <div className="rule flex items-center justify-between gap-2 border-t px-3 py-2">
+        <span className="text-[12px] opacity-70">
+          {changed ? 'Only you see these changes.' : 'This is the flat as it is.'}
+        </span>
+        <button
+          type="button"
+          onClick={() => {
+            closeChoices();
+            reset('all');
+          }}
+          disabled={!changed}
+          className="btn tap min-h-10 shrink-0 px-4 text-[13px] font-medium disabled:opacity-40"
+          data-testid="menu-reset"
+        >
+          ↺ Reset all
+        </button>
       </div>
     </>
   );
@@ -268,7 +322,7 @@ export function DesignMenu({ room, fittings, compact, open, onOpenChange }: Desi
     return (
       <section
         className="panel rule flex flex-col border-t"
-        style={{ maxHeight: open ? '64vh' : undefined }}
+        style={{ maxHeight: open ? '60vh' : undefined }}
         aria-label="Design"
         data-testid="design-menu"
         data-open={open}
@@ -293,11 +347,44 @@ export function DesignMenu({ room, fittings, compact, open, onOpenChange }: Desi
 
 // ---------------------------------------------------------------------------
 
-function Grid({ columns, children }: { columns: 3 | 4; children: React.ReactNode }) {
+function Grid({ columns = 4, children }: { columns?: 3 | 4; children: React.ReactNode }) {
   return (
     <ul className={['grid gap-x-2 gap-y-3 p-3', columns === 4 ? 'grid-cols-4' : 'grid-cols-3'].join(' ')}>
       {children}
     </ul>
+  );
+}
+
+/** Two or more choices side by side, the chosen one filled. */
+function Segmented<T>({
+  options,
+  value,
+  onChange,
+}: {
+  options: Array<[T, string]>;
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div className="flex gap-1 px-3 pt-3" role="radiogroup">
+      {options.map(([option, label]) => (
+        <button
+          key={label}
+          type="button"
+          role="radio"
+          aria-checked={value === option}
+          onClick={() => onChange(option)}
+          className={[
+            'tap min-h-10 flex-1 truncate rounded-full border px-3 text-[13px] font-medium transition-colors',
+            value === option
+              ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
+              : 'border-[var(--line)] hover:bg-[var(--paper-warm)]',
+          ].join(' ')}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -348,7 +435,7 @@ function Choice({
   );
 }
 
-/** The flat as it was built: no change. */
+/** As the flat was built: no change. */
 function Original() {
   return (
     <span aria-hidden="true" className="text-[22px] opacity-55">
@@ -404,64 +491,74 @@ function Credit() {
   );
 }
 
+/** What can stand in one slot: the piece there now marked, what does not fit greyed out. */
 function Alternatives({
   slot,
   room,
-  kit,
   current,
   onBack,
   onChoose,
+  onClear,
 }: {
   slot: Slot;
   room: Room;
-  kit?: StyleKit;
   current?: CatalogItem;
   onBack: () => void;
   onChoose: (itemId: string) => void;
+  onClear: () => void;
 }) {
   const { viewer, catalog } = useStore();
+  const kitId = viewer.styles[room.id];
   const options = useMemo(() => {
     const placed = viewer.items.flatMap((i) => {
       const s = i.roomId === room.id ? room.slots?.find((x) => x.id === i.slotId) : undefined;
       const item = catalog.furniture.find((f) => f.id === i.itemId);
       return s && item ? [{ slot: s, item }] : [];
     });
-    return alternatives(slot, catalog.furniture, kit?.id, {
+    return alternatives(slot, catalog.furniture, kitId, {
       ceilings: room.ceilings,
       base: baseFor(slot, placed) ?? 0,
     });
-  }, [slot, room, kit, viewer.items, catalog.furniture]);
+  }, [slot, room, kitId, viewer.items, catalog.furniture]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="rule flex items-center gap-2 border-b px-2 py-1.5">
+    <div>
+      {/* Pinned, so the way back is in sight however far the list scrolls. */}
+      <div className="rule sticky top-0 z-10 flex items-center gap-2 border-b bg-[var(--paper)] px-2 py-1.5">
         <button
           type="button"
           onClick={onBack}
-          className="tap min-h-10 rounded-full px-3 text-[13px] hover:bg-[var(--paper-warm)]"
+          className="tap min-h-10 shrink-0 rounded-full border border-[var(--line)] px-3.5 text-[13px] font-medium hover:bg-[var(--paper-warm)]"
           data-testid="alternatives-back"
         >
-          ‹ Back
+          ‹ All furniture
         </button>
-        <h3 className="text-[13px] font-semibold">{categoryName(slot.category)}</h3>
+        <h3 className="truncate text-[13px] font-semibold">
+          {categoryName(slot.category)} <span className="font-normal opacity-60">· {room.name}</span>
+        </h3>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <Grid columns={3}>
-          {options.map(({ item, fits }) => (
-            <Choice
-              key={item.id}
-              label={item.name}
-              selected={current?.id === item.id}
-              disabled={!fits}
-              onClick={() => onChoose(item.id)}
-              data={{ 'data-furniture-id': item.id }}
-            >
-              <Thumbnail item={item} />
-            </Choice>
-          ))}
-        </Grid>
-        <Credit />
-      </div>
+      <Grid columns={3}>
+        <Choice
+          label={slot.replaces?.length ? 'Original' : 'None'}
+          selected={!current}
+          onClick={onClear}
+          testId="slot-clear"
+        >
+          <Original />
+        </Choice>
+        {options.map(({ item, fits }) => (
+          <Choice
+            key={item.id}
+            label={item.name}
+            selected={current?.id === item.id}
+            disabled={!fits}
+            onClick={() => onChoose(item.id)}
+            data={{ 'data-furniture-id': item.id }}
+          >
+            <Thumbnail item={item} />
+          </Choice>
+        ))}
+      </Grid>
     </div>
   );
 }

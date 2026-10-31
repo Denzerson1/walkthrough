@@ -100,6 +100,10 @@ interface AppState {
   swapPiece: (roomId: string, slotId: string, itemId: string) => void;
   /** Give a fitting a finish, or its own back with null. */
   setFinish: (fitting: Fitting, finishId: string | null) => void;
+  /** Take every style kit out: its pieces, and the floors it laid. */
+  removeStyle: () => void;
+  /** Empty one slot: the flat's own piece shows again where the slot stood in for it. */
+  clearSlot: (roomId: string, slotId: string) => void;
   /** Take back the change the toast announced. */
   undo: () => void;
   dismissToast: () => void;
@@ -201,7 +205,13 @@ export const useStore = create<AppState>((set, get) => ({
 
   reset: (roomId) =>
     set((s) => {
-      if (roomId === 'all') return { viewer: { ...EMPTY_VIEWER_STATE }, selectedUid: null };
+      if (roomId === 'all') {
+        return {
+          viewer: { ...EMPTY_VIEWER_STATE },
+          selectedUid: null,
+          toast: { id: Date.now(), message: 'Back to the original', before: s.viewer },
+        };
+      }
       const floors = { ...s.viewer.floors };
       delete floors[roomId];
       const styles = { ...s.viewer.styles };
@@ -316,6 +326,34 @@ export const useStore = create<AppState>((set, get) => ({
       return {
         viewer: { ...s.viewer, finishes },
         toast: { id: Date.now(), message: `${name} · ${finish?.name ?? 'original'}`, before: s.viewer },
+      };
+    }),
+
+  removeStyle: () =>
+    set((s) => {
+      const floors = { ...s.viewer.floors };
+      for (const [roomId, styleId] of Object.entries(s.viewer.styles)) {
+        const kit = s.catalog.styles.find((k) => k.id === styleId);
+        if (kit && floors[roomId] === kit.floorId) delete floors[roomId];
+      }
+      return {
+        selectedUid: null,
+        viewer: { ...s.viewer, floors, styles: {}, items: s.viewer.items.filter((i) => !i.slotId) },
+        toast: { id: Date.now(), message: 'Style removed', before: s.viewer },
+      };
+    }),
+
+  clearSlot: (roomId, slotId) =>
+    set((s) => {
+      // What stood on it (a lamp on a nightstand) goes with it.
+      const slots = s.manifest?.rooms.find((r) => r.id === roomId)?.slots ?? [];
+      const going = new Set([slotId, ...slots.filter((sl) => sl.on === slotId).map((sl) => sl.id)]);
+      return {
+        selectedUid: null,
+        viewer: {
+          ...s.viewer,
+          items: s.viewer.items.filter((i) => !(i.roomId === roomId && i.slotId && going.has(i.slotId))),
+        },
       };
     }),
 
