@@ -78,6 +78,8 @@ export interface Room {
   obstacles?: Obstacle[];
   /** Where a style kit's pieces go; see styles.ts. */
   slots?: Slot[];
+  /** Floor area in square metres, as the listing gives it; else measured from the outline. */
+  areaM2?: number | null;
 }
 
 /** Where a piece of furniture of `category` goes when a style kit is applied. */

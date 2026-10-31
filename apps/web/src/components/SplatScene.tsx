@@ -46,6 +46,7 @@ import { AutoExposure } from '../lib/exposure';
 import { fetchGlb } from '../lib/glb';
 import { SunShadow, sunAt } from '../lib/sun';
 import { DEFAULT_ITEM_SIZE, FurnitureLayer } from '../lib/furnitureLayer';
+import { nearestOnStretch } from '../lib/rooms';
 import type { CatalogItem } from '../lib/store';
 import type { ViewerState } from '../lib/viewerState';
 
@@ -93,7 +94,25 @@ interface Props {
   onSelectItem?: (uid: string | null) => void;
   /** Fired continuously while an item is dragged across the floor. */
   onMoveItem?: (uid: string, position: [number, number, number], roomId: string) => void;
+  /** Labels standing in the flat (a neighbouring room's name at the way into it). */
+  labels?: SceneLabel[];
+  onLabel?: (id: string) => void;
 }
+
+/**
+ * A label standing over a way into another room (`along`, its two ends on
+ * the floor plan) where you would walk through it, at head height.
+ */
+export interface SceneLabel {
+  id: string;
+  text: string;
+  icon?: React.ReactNode;
+  along: [Vec2, Vec2];
+}
+
+/** How high a label floats, and how far off it still shows, metres. */
+const LABEL_HEIGHT = 2.05;
+const LABEL_RANGE = 9;
 
 /** Walking speed in metres per second, and how fast it reaches that speed. */
 const WALK_SPEED = 1.9;
@@ -173,8 +192,12 @@ export function SplatScene({
   selectedUid = null,
   onSelectItem,
   onMoveItem,
+  labels = [],
+  onLabel,
 }: Props) {
   const mountRef = useRef<HTMLDivElement>(null);
+  /** The label elements, placed over the view each frame it is drawn. */
+  const labelRefs = useRef(new Map<string, { element: HTMLElement; along: [Vec2, Vec2] }>());
   const stateRef = useRef({
     yaw: 0,
     pitch: 0,
@@ -613,6 +636,7 @@ export function SplatScene({
       drawnAt = now;
       sceneRef.current?.exposure?.update(renderer, scene, camera, sinceDrawn);
       renderer.render(scene, camera);
+      placeLabels(labelRefs.current, camera, renderer.domElement);
     };
     tick();
 
@@ -1195,7 +1219,55 @@ export function SplatScene({
     }
   }, [daylight, contentReady, model]);
 
-  return <div ref={mountRef} className="absolute inset-0" data-testid="splat-canvas" />;
+  return (
+    <>
+      <div ref={mountRef} className="absolute inset-0" data-testid="splat-canvas" />
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        {labels.map((label) => (
+          <button
+            key={label.id}
+            type="button"
+            ref={(element) => {
+              if (element) labelRefs.current.set(label.id, { element, along: label.along });
+              else labelRefs.current.delete(label.id);
+            }}
+            onClick={() => onLabel?.(label.id)}
+            className="panel tap absolute left-0 top-0 flex min-h-11 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium opacity-0 transition-opacity duration-200"
+            style={{ pointerEvents: 'none' }}
+            data-room-label={label.id}
+          >
+            {label.icon}
+            {label.text}
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/**
+ * Stand each label over its point in the view, centred on it; hide it when
+ * the point is behind the camera, off the screen or too far away.
+ */
+function placeLabels(
+  labels: Map<string, { element: HTMLElement; along: [Vec2, Vec2] }>,
+  camera: THREE.PerspectiveCamera,
+  canvas: HTMLCanvasElement,
+): void {
+  const point = new THREE.Vector3();
+  for (const { element, along } of labels.values()) {
+    const at = nearestOnStretch(along, [camera.position.x, camera.position.z]);
+    point.set(at[0], LABEL_HEIGHT, at[1]);
+    const far = point.distanceTo(camera.position) > LABEL_RANGE;
+    point.project(camera);
+    const shown = !far && point.z < 1 && Math.abs(point.x) < 0.92 && Math.abs(point.y) < 0.85;
+    element.style.opacity = shown ? '1' : '0';
+    element.style.pointerEvents = shown ? 'auto' : 'none';
+    if (!shown) continue;
+    const x = ((point.x + 1) / 2) * canvas.clientWidth;
+    const y = ((1 - point.y) / 2) * canvas.clientHeight;
+    element.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
+  }
 }
 
 // ---------------------------------------------------------------------------

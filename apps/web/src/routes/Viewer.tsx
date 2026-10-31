@@ -6,6 +6,7 @@ import { Assistant, type AssistantAction } from '../components/Assistant';
 import { DaylightControl } from '../components/DaylightControl';
 import { FloorPlan } from '../components/FloorPlan';
 import { DesignMenu } from '../components/DesignMenu';
+import { RoomIcon } from '../components/RoomIcon';
 import { Sheet } from '../components/Panels';
 import { RoomStrip } from '../components/RoomStrip';
 import { SplatScene } from '../components/SplatScene';
@@ -17,6 +18,7 @@ import type { Manifest } from '../lib/manifest';
 import { type CatalogItem, stagedRoomIds, useStore } from '../lib/store';
 import { isStaged } from '../lib/viewerState';
 import { polygonCentroid } from '../lib/geometry';
+import { doorways, roomArea } from '../lib/rooms';
 
 /** The arguments the assistant's tools carry, as the server defines them. */
 interface AssistantArgs {
@@ -77,6 +79,7 @@ export function Viewer() {
   const compact = useMedia(COMPACT);
   const wide = useMedia(WIDE);
   const [menuOpen, setMenuOpen] = useState(false);
+  const reducedMotion = useMedia('(prefers-reduced-motion: reduce)');
   const [pose, setPose] = useState<{ x: number; z: number; yaw: number } | null>(null);
   const [copied, setCopied] = useState(false);
   const [layoutNote, setLayoutNote] = useState<string | null>(null);
@@ -158,6 +161,30 @@ export function Viewer() {
     },
     [selectItem],
   );
+
+  // The arrival note shows itself once each time it mounts, for a new room.
+  const arrive = useCallback((node: HTMLElement | null) => {
+    node?.animate(
+      [
+        { opacity: 0, transform: 'translate(-50%, 6px)' },
+        { opacity: 1, transform: 'translate(-50%, 0)', offset: 0.12 },
+        { opacity: 1, transform: 'translate(-50%, 0)', offset: 0.8 },
+        { opacity: 0, transform: 'translate(-50%, 0)' },
+      ],
+      { duration: reducedMotion ? 1600 : 2200, fill: 'forwards' },
+    );
+  }, [reducedMotion]);
+
+  // A label at the way into each neighbouring room; the one you are in has none.
+  const labels = useMemo(() => {
+    if (!manifest || !activeRoomId) return [];
+    return doorways(manifest.rooms, activeRoomId).flatMap(({ roomId, along }) => {
+      const room = manifest.rooms.find((r) => r.id === roomId);
+      return room
+        ? [{ id: room.id, text: room.name, icon: <RoomIcon type={room.type} />, along }]
+        : [];
+    });
+  }, [manifest, activeRoomId]);
 
   const staged = isStaged(viewer);
   const stagedRooms = useMemo(
@@ -360,6 +387,8 @@ export function Viewer() {
           onPose={(x, z, yaw) => setPose({ x, z, yaw })}
           selectedUid={selectedUid}
           onSelectItem={onSelectPiece}
+          labels={ready ? labels : []}
+          onLabel={goToRoom}
           onMoveItem={moveItem}
         />
       )}
@@ -463,6 +492,22 @@ export function Viewer() {
             size={compact ? 84 : undefined}
           />
         </div>
+      )}
+
+      {/* Where you have arrived: once per room, briefly. */}
+      {ready && activeRoom && manifest && manifest.rooms.length > 1 && (
+        <p
+          key={activeRoom.id}
+          ref={arrive}
+          className="panel pointer-events-none absolute left-1/2 flex items-center gap-1.5 rounded-full px-4 py-2 text-[13px] font-medium opacity-0"
+          style={{ top: 'calc(5.5rem + var(--safe-top))' }}
+          role="status"
+          data-testid="arrival"
+        >
+          <RoomIcon type={activeRoom.type} />
+          {activeRoom.name}
+          <span className="measure font-normal opacity-65">· {Math.round(roomArea(activeRoom))} m²</span>
+        </p>
       )}
 
       {layoutNote && (

@@ -46,6 +46,11 @@ verified, it says so.** A milestone is not "done" because its code exists.
   what fits there first. Esc closes it. The models' CC BY credit is in it.
   Playwright desktop: 13 of 14 viewer tests pass; the one failing is the
   landing page link, whose uncommitted rework is not part of this.
+- **Room labels:** a pill (icon and name) over the way into each
+  neighbouring room, where you would walk through it; the room you are in
+  has none, and a tap takes you there. Arriving shows "Bedroom · 13 m²"
+  briefly. Rooms carry `areaM2` (`pipeline rooms`). The room strip and the
+  plan already marked the current room. ←/→ still walk, as the owner asked.
 
 ## 2026-10-24 — The landing page is a doorway
 
