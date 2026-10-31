@@ -21,6 +21,8 @@ export function modelUrl(item: Pick<CatalogItem, 'glb' | 'glbPhone'>): string | 
 }
 
 let ktx2: KTX2Loader | null = null;
+/** MeshoptDecoder's method that moves decoding to workers (not a React hook). */
+const WORKERS = 'useWorkers';
 
 /**
  * A glTF loader for furniture models, decoding on worker threads. KTX2
@@ -29,6 +31,8 @@ let ktx2: KTX2Loader | null = null;
  */
 export function furnitureLoader(renderer: THREE.WebGLRenderer): GLTFLoader {
   if (!ktx2) {
+    // Geometry is decoded on two worker threads, not on the one that draws.
+    MeshoptDecoder[WORKERS]?.(2);
     ktx2 = new KTX2Loader()
       .setTranscoderPath(`${import.meta.env.BASE_URL}basis/`)
       .setWorkerLimit(2)

@@ -46,6 +46,8 @@ import { AutoExposure } from '../lib/exposure';
 import { fetchGlb } from '../lib/glb';
 import { SunShadow, sunAt } from '../lib/sun';
 import { DEFAULT_ITEM_SIZE, FurnitureLayer } from '../lib/furnitureLayer';
+import { IS_PHONE } from '../lib/furnitureModels';
+import { Quality } from '../lib/quality';
 import { nearestOnStretch } from '../lib/rooms';
 import type { CatalogItem } from '../lib/store';
 import type { ViewerState } from '../lib/viewerState';
@@ -191,8 +193,14 @@ const GLIDE_SPEED = 2.6;
 const GLIDE_MIN_MS = 320;
 const GLIDE_MAX_MS = 1400;
 
-/** How long after the last change the view drops to its idle frame rate, and that rate. */
-const IDLE_AFTER_MS = 1500;
+/**
+ * How long after the last change the view keeps drawing at full rate, then
+ * how long more at a few frames a second (the exposure settling, a texture
+ * arriving), and that rate. After that it draws nothing until something
+ * changes: a still view costs a phone no battery.
+ */
+const IDLE_AFTER_MS = 1000;
+const SETTLE_MS = 1000;
 const IDLE_FRAME_MS = 250;
 
 function glideDuration(from: Vec2, to: Vec2): number {
@@ -226,6 +234,8 @@ export function SplatScene({
   stillRef,
 }: Props) {
   const mountRef = useRef<HTMLDivElement>(null);
+  /** Starts the render loop again after it has gone to sleep; set by the loop. */
+  const wakeRef = useRef<() => void>(() => undefined);
   /** The label elements, placed over the view each frame it is drawn. */
   const labelRefs = useRef(new Map<string, { element: HTMLElement; along: [Vec2, Vec2] }>());
   const stateRef = useRef({
@@ -287,6 +297,10 @@ export function SplatScene({
     /** The lights placed furniture is lit by (the flat's own light is baked). */
     ambient: THREE.AmbientLight;
     key: THREE.DirectionalLight;
+    /** Draw again: something the view shows has changed. */
+    wake: () => void;
+    /** Draw the reflections again (after a lost context). */
+    reflect?: () => void;
     splat?: SplatMesh;
     floorSplat?: SplatMesh;
     model?: THREE.Group;
@@ -302,6 +316,7 @@ export function SplatScene({
   useEffect(() => {
     daylightRef.current = daylight;
     if (daylight !== undefined) sceneRef.current?.daylight?.set(daylight);
+    sceneRef.current?.wake();
   }, [daylight, contentReady]);
 
   // ---- one-time scene setup -------------------------------------------
@@ -337,10 +352,10 @@ export function SplatScene({
       onError('Could not start WebGL on this device.');
       return;
     }
-    // A phone's full resolution: at 2x on a 3x screen the flat looked soft
-    // and its edges stepped. One that cannot keep up steps down (tick).
-    let pixelRatio = Math.min(window.devicePixelRatio, 3);
-    renderer.setPixelRatio(pixelRatio);
+    // At most 1.5x on a phone, 2x on a desktop: past that a phone runs hot
+    // for detail it cannot show. One that cannot keep up steps down (Quality).
+    const quality = new Quality(window.devicePixelRatio, IS_PHONE ? 1.5 : 2);
+    renderer.setPixelRatio(quality.pixelRatio);
     renderer.setSize(mount.clientWidth, mount.clientHeight);
     // Daylight, not the page's paper colour. Window and door openings are
     // cut out of the wall splats, so whatever is behind the scene is what you
@@ -357,7 +372,10 @@ export function SplatScene({
     scene.add(ambient, key);
 
     const floorGroup = new THREE.Group();
-    const furniture = new FurnitureLayer(renderer, () => sceneRef.current?.sun?.redraw());
+    const furniture = new FurnitureLayer(renderer, () => {
+      sceneRef.current?.sun?.redraw();
+      wakeRef.current();
+    });
     const furnitureGroup = furniture.group;
     scene.add(floorGroup, furnitureGroup);
 
@@ -370,6 +388,7 @@ export function SplatScene({
 
     sceneRef.current = {
       scene, camera, renderer, floorGroup, furnitureGroup, furniture, walkCursor, ambient, key,
+      wake: () => wakeRef.current(),
     };
     if (stillRef) {
       stillRef.current = () => {
@@ -393,6 +412,7 @@ export function SplatScene({
         },
         state: stateRef.current,
         still: () => stillRef?.current?.(),
+        wake: () => wakeRef.current(),
       };
     }
 
@@ -483,7 +503,8 @@ export function SplatScene({
                 .catch(() => {}); // the nearest time that did arrive stands in
             });
           }
-          addReflections(scene, renderer, group, manifest.rooms[0]?.waypoint.position);
+          const reflect = addReflections(scene, renderer, group, manifest.rooms[0]?.waypoint.position);
+          if (sceneRef.current) sceneRef.current.reflect = reflect;
           sceneRef.current.exposure = new AutoExposure(METER_KEY);
           setContentReady(true);
           settle();
@@ -607,22 +628,56 @@ export function SplatScene({
     let lastFrame = performance.now();
 
     // Drawing the same frame 60 times a second runs a phone hot and flat for
-    // nothing. Full rate while the view moves or was touched a moment ago;
-    // otherwise a few frames a second, enough for a texture that arrives
-    // late or the exposure settling.
+    // nothing. Full rate while the view moves or was touched a moment ago,
+    // then a few frames a second while it settles, then none (SETTLE_MS).
     let activeAt = lastFrame;
     let drawnAt = 0;
     const lastPose = [Number.NaN, 0, 0, 0, 0, 0];
     const wake = () => {
       activeAt = performance.now();
+      if (!raf && !document.hidden && !lost) {
+        lastFrame = performance.now();
+        raf = requestAnimationFrame(tick);
+      }
     };
     const wakeOn = ['pointerdown', 'pointermove', 'pointerup', 'keydown', 'wheel', 'input'] as const;
     for (const type of wakeOn) window.addEventListener(type, wake, { passive: true });
-    let judged = 0;
-    let slow = 0;
+    wakeRef.current = wake;
+    // Whatever arrives late (a texture, a model, a light map) is drawn as it lands.
+    THREE.DefaultLoadingManager.onProgress = wake;
+
+    // A hidden tab draws nothing at all, and picks up where it was.
+    const onVisibility = () => {
+      if (document.hidden) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      } else {
+        wake();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    // The GPU can drop the context (a phone short of memory, the app in the
+    // background). Asking to keep it lets the browser restore it; three
+    // uploads everything again on the next frame, without a reload.
+    let lost = false;
+    const onLost = (e: Event) => {
+      e.preventDefault();
+      lost = true;
+      cancelAnimationFrame(raf);
+      raf = 0;
+    };
+    const onRestored = () => {
+      lost = false;
+      sceneRef.current?.sun?.redraw();
+      sceneRef.current?.reflect?.();
+      wake();
+    };
+    renderer.domElement.addEventListener('webglcontextlost', onLost);
+    renderer.domElement.addEventListener('webglcontextrestored', onRestored);
 
     const tick = () => {
-      raf = requestAnimationFrame(tick);
+      raf = 0;
       const st = stateRef.current;
       const now = performance.now();
       // Clamp dt so a backgrounded tab does not resume by teleporting the
@@ -663,20 +718,19 @@ export function SplatScene({
         lastPose.splice(0, 6, ...pose);
         wake();
       }
-      if (furniture.tick(now)) wake();
-      if (now - activeAt > IDLE_AFTER_MS && now - drawnAt < IDLE_FRAME_MS) return;
+      if (furniture.tick(now)) activeAt = now;
+      const idle = now - activeAt;
+      // Asleep: the next wake() starts the loop again.
+      if (idle > IDLE_AFTER_MS + SETTLE_MS) return;
+      raf = requestAnimationFrame(tick);
+      if (idle > IDLE_AFTER_MS && now - drawnAt < IDLE_FRAME_MS) return;
       const sinceDrawn = Math.min(IDLE_FRAME_MS / 1000, (now - drawnAt) / 1000);
-      // Below 45 fps for most of 90 frames at full rate: half a pixel ratio
-      // less, until it keeps up. Never back up, which would only oscillate.
-      if (now - activeAt <= IDLE_AFTER_MS && now > judgeFrom && sinceDrawn < 0.25) {
-        judged += 1;
-        if (sinceDrawn > 1 / 45) slow += 1;
-        if (judged === 90) {
-          if (slow > 45 && pixelRatio > 1) {
-            pixelRatio = Math.max(1, pixelRatio - 0.5);
-            renderer.setPixelRatio(pixelRatio);
-          }
-          judged = slow = 0;
+      // Frame times count only at full rate, once the scene is in.
+      if (idle <= IDLE_AFTER_MS && now > judgeFrom && drawnAt > 0) {
+        const changed = quality.frame(now - drawnAt, now);
+        if (changed) {
+          renderer.setPixelRatio(quality.pixelRatio);
+          if (sceneRef.current?.splat) setSplatDetail(scene, quality.splatDetail);
         }
       }
       drawnAt = now;
@@ -684,13 +738,16 @@ export function SplatScene({
       renderer.render(scene, camera);
       placeLabels(labelRefs.current, camera, renderer.domElement);
     };
-    tick();
+    raf = requestAnimationFrame(tick);
 
     return () => {
       disposed = true;
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', onResize);
       for (const type of wakeOn) window.removeEventListener(type, wake);
+      document.removeEventListener('visibilitychange', onVisibility);
+      renderer.domElement.removeEventListener('webglcontextlost', onLost);
+      renderer.domElement.removeEventListener('webglcontextrestored', onRestored);
 
       disposeChildren(floorGroup);
       furniture.dispose();
@@ -1139,6 +1196,7 @@ export function SplatScene({
       return;
     }
 
+    sceneRef.current?.wake();
     st.transition = {
       from: { position: st.position, yaw: st.yaw },
       to: { position: room.waypoint.position, yaw: room.waypoint.yaw },
@@ -1170,6 +1228,7 @@ export function SplatScene({
       durationMs: ENTRY_MS,
       skippable: true,
     };
+    sceneRef.current?.wake();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when the tour starts
   }, [entering]);
 
@@ -1187,6 +1246,7 @@ export function SplatScene({
   useEffect(() => {
     const ctx = sceneRef.current;
     if (!ctx) return;
+    ctx.wake();
     const group = ctx.floorGroup;
     disposeChildren(group);
 
@@ -1239,6 +1299,7 @@ export function SplatScene({
   useEffect(() => {
     const ctx = sceneRef.current;
     if (!ctx) return;
+    ctx.wake();
     ctx.floorGroup.visible = !showingOriginal;
     ctx.furnitureGroup.visible = !showingOriginal;
     if (ctx.floorSplat) {
@@ -1259,6 +1320,7 @@ export function SplatScene({
       manifest.rooms,
       selectedUid,
     );
+    sceneRef.current?.wake();
   }, [viewer.items, furnitureCatalog, manifest.rooms, selectedUid]);
 
   // The flat's own sofa or bed is hidden while a style kit's piece stands in
@@ -1282,6 +1344,7 @@ export function SplatScene({
     });
     // A hidden sofa must not leave its shadow in the sun.
     sceneRef.current?.sun?.redraw();
+    sceneRef.current?.wake();
   }, [viewer.items, manifest, showingOriginal, contentReady]);
 
   // Lamps glow from dusk: none at midday, fully from 19:30. Placed furniture
@@ -1293,6 +1356,7 @@ export function SplatScene({
     const minutes = daylight ?? 12 * 60;
     ctx.furniture.setGlow(Math.min(1, Math.max(0, (minutes - 16.5 * 60) / (3 * 60))));
     const level = lightLevel(model?.lighting ?? [], minutes);
+    ctx.wake();
     ctx.ambient.intensity = FURNITURE_AMBIENT * level;
     ctx.key.intensity = FURNITURE_KEY * level;
     if (model?.sunPath?.length) {
@@ -1531,7 +1595,7 @@ function addReflections(
   renderer: THREE.WebGLRenderer,
   model: THREE.Object3D,
   at: [number, number, number] | undefined,
-): void {
+): () => void {
   const target = new THREE.WebGLCubeRenderTarget(1024, {
     generateMipmaps: true,
     minFilter: THREE.LinearMipmapLinearFilter,
@@ -1561,6 +1625,8 @@ function addReflections(
     };
     material.needsUpdate = true;
   });
+  // Drawn again after a lost GPU context, which takes the cube's faces with it.
+  return () => camera.update(renderer, scene);
 }
 
 /** The published flat's glTF files are meshopt-compressed (scripts/export_site.py). */
@@ -1774,4 +1840,18 @@ function still(source: HTMLCanvasElement): string {
     if ((data.length * 3) / 4 <= STILL_BYTES) break;
   }
   return data;
+}
+
+/**
+ * Splat detail, 1 full: Spark draws fewer, larger splats below 1 where its
+ * renderer supports level of detail; a scene without splats ignores it.
+ */
+function setSplatDetail(scene: THREE.Scene, detail: number): void {
+  scene.traverse((node) => {
+    const spark = node as unknown as { lodSplatScale?: number; enableLod?: boolean };
+    if ('lodSplatScale' in spark) {
+      spark.enableLod = detail < 1;
+      spark.lodSplatScale = detail;
+    }
+  });
 }

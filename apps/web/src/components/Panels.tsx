@@ -169,7 +169,7 @@ export function FurnitureTile({ item }: { item: CatalogItem }) {
           className="absolute inset-0 h-full w-full object-contain"
         />
       )}
-      <span className="measure relative text-[9px] text-[var(--ink)] opacity-55">
+      <span className="measure relative text-[10px] text-[var(--ink)] opacity-75">
         {item.dimensionsM
           ? `${item.dimensionsM[0].toFixed(1)}×${item.dimensionsM[2].toFixed(1)}`
           : ''}

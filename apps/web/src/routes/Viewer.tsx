@@ -520,7 +520,7 @@ export function Viewer() {
         <div
           className="absolute right-3 flex flex-col items-end"
           style={{
-            top: 'calc(9.25rem + var(--safe-top))',
+            top: 'calc(10.25rem + var(--safe-top))',
             bottom: 'calc(4.5rem + var(--safe-bottom))',
           }}
         >

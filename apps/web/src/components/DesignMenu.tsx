@@ -172,7 +172,7 @@ export function DesignMenu({ room, compact, open, onOpenChange }: DesignMenuProp
             onGoTo={goToRoom}
           />
         )}
-        <p className="px-4 pb-3 pt-1 text-[10.5px] leading-snug opacity-55">
+        <p className="px-4 pb-3 pt-1 text-[10.5px] leading-snug opacity-75">
           Furniture models: Amazon.com, Amazon Berkeley Objects,{' '}
           <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer" className="underline">
             CC BY 4.0
@@ -316,7 +316,7 @@ function FurnitureTab({
             >
               {piece ? <FurnitureTile item={piece} /> : <EmptyTile />}
               <span className="mt-1 block text-[12px] font-medium">{categoryName(slot.category)}</span>
-              <span className="block truncate text-[11px] opacity-65">{piece?.name ?? 'Choose one'}</span>
+              <span className="block truncate text-[11px] opacity-80">{piece?.name ?? 'Choose one'}</span>
             </button>
           </li>
         );
@@ -405,7 +405,7 @@ function RoomTab({
                       data-room-link={r.id}
                     >
                       <span className="font-medium">{r.name}</span>
-                      <span className="truncate text-[12px] opacity-65">
+                      <span className="truncate text-[12px] opacity-80">
                         {kit?.name ?? 'As it is'} · {f?.name ?? 'original floor'}
                       </span>
                     </button>
@@ -437,7 +437,7 @@ function Row({
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[13px] font-medium">{title}</span>
-        <span className="measure block truncate text-[11.5px] opacity-65">{detail}</span>
+        <span className="measure block truncate text-[11.5px] opacity-80">{detail}</span>
       </span>
       {onClick && <span aria-hidden="true" className="opacity-50">›</span>}
     </>
@@ -519,7 +519,7 @@ function Alternatives({
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[13px] font-medium">{item.name}</span>
-                <span className="measure block text-[11.5px] opacity-65">
+                <span className="measure block text-[11.5px] opacity-80">
                   {sizeLabel(item)}
                   {fits ? '' : ' · does not fit here'}
                 </span>

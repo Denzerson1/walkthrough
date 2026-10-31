@@ -125,6 +125,9 @@ function release(url: string): void {
   if (!model) return;
   model.users = Math.max(0, model.users - 1);
   model.lastUsed = performance.now();
+  // Shown nowhere: off the GPU now (three uploads it again if it comes back),
+  // kept parsed for a quick return while the budget allows.
+  if (model.users === 0) disposeModel(model.scene);
   evict();
 }
 
