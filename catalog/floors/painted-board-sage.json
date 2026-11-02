@@ -23,7 +23,7 @@
     "normal": "/files/assets/floors/painted-board-sage/normal.jpg",
     "roughness": "/files/assets/floors/painted-board-sage/roughness.jpg"
   },
-  "thumbnail": "/catalog/floors/thumbnails/painted-board-sage.png",
+  "thumbnail": "/files/assets/floors/painted-board-sage/thumb.jpg",
   "tintAlbedo": true,
   "assetStatus": "ready"
 }

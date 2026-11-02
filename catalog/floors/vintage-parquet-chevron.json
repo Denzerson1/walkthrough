@@ -23,7 +23,7 @@
     "normal": "/files/assets/floors/vintage-parquet-chevron/normal.jpg",
     "roughness": "/files/assets/floors/vintage-parquet-chevron/roughness.jpg"
   },
-  "thumbnail": "/catalog/floors/thumbnails/vintage-parquet-chevron.png",
+  "thumbnail": "/files/assets/floors/vintage-parquet-chevron/thumb.jpg",
   "tintAlbedo": false,
   "assetStatus": "ready"
 }

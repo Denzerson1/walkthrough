@@ -29,6 +29,11 @@ Write down the phone, its OS version and the date. A ✗ anywhere is a bug.
       lit as before. Wardrobe tab: Walnut, then White: the same.
 - [ ] Drag the daylight slider from morning to evening: the furniture
       darkens with the room, lamps glow in the evening.
+- [ ] Design › Floor: the view tilts down and the floor shows above the
+      menu. Tap "Hall", then a floor: you walk to the hall and only the
+      hall changes. "Whole flat", then a floor: every room changes. Close
+      the menu: the view tilts back up.
+- [ ] Share (the arrow beside the flat's name): the phone's share sheet.
 
 ## 3. Heat and battery (2 min)
 
@@ -47,7 +52,7 @@ Write down the phone, its OS version and the date. A ✗ anywhere is a bug.
 - [ ] Switch styles ten times quickly, both rooms: no crash, no reload,
       no "A problem repeatedly occurred" page in Safari.
 - [ ] Hold "Compare": the flat as it is; release: the style again.
-- [ ] Reset: the flat as it is, the menu reads "As it is".
+- [ ] Reset: the flat as it is, the menu reads "Original".
 
 ## Where to look if something fails
 

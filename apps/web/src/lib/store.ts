@@ -107,6 +107,8 @@ interface AppState {
   /** Take back the change the toast announced. */
   undo: () => void;
   dismissToast: () => void;
+  /** A note with nothing to take back, such as a link copied. */
+  notify: (message: string) => void;
 
   /** Placed item the user has tapped, for the move/rotate controls. */
   selectedUid: string | null;
@@ -143,14 +145,20 @@ export const useStore = create<AppState>((set, get) => ({
 
   setFloor: (roomIds, floorId) =>
     set((s) => {
+      const rooms = s.manifest?.rooms ?? [];
       const all = roomIds.includes('all');
-      const targets = all ? (s.manifest?.rooms ?? []).map((r) => r.id) : roomIds;
+      const targets = all ? rooms.map((r) => r.id) : roomIds;
       const floors = { ...s.viewer.floors };
       for (const id of targets) {
         if (floorId) floors[id] = floorId;
         else delete floors[id];
       }
-      return { viewer: { ...s.viewer, floors } };
+      const where = all ? 'Whole flat' : rooms.filter((r) => targets.includes(r.id)).map((r) => r.name).join(', ');
+      const floor = s.catalog.floors.find((f) => f.id === floorId);
+      return {
+        viewer: { ...s.viewer, floors },
+        toast: { id: Date.now(), message: `${where} · ${floor?.name ?? 'original floor'}`, before: s.viewer },
+      };
     }),
 
   // One set() for the whole batch. Adding items one at a time made the
@@ -361,6 +369,7 @@ export const useStore = create<AppState>((set, get) => ({
     set((s) => (s.toast?.before ? { viewer: s.toast.before, toast: null, selectedUid: null } : {})),
 
   dismissToast: () => set({ toast: null }),
+  notify: (message) => set({ toast: { id: Date.now(), message } }),
 
   loadStateFromUrl: (encoded) => set({ viewer: decodeViewerState(encoded), selectedUid: null }),
 

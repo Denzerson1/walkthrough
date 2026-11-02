@@ -23,7 +23,7 @@
     "normal": "/files/assets/floors/stencil-victorian-geometric/normal.jpg",
     "roughness": "/files/assets/floors/stencil-victorian-geometric/roughness.jpg"
   },
-  "thumbnail": "/catalog/floors/thumbnails/stencil-victorian-geometric.png",
+  "thumbnail": "/files/assets/floors/stencil-victorian-geometric/thumb.jpg",
   "tintAlbedo": true,
   "assetStatus": "ready"
 }

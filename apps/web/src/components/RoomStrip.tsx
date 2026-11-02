@@ -12,9 +12,11 @@ interface Props {
   activeRoomId: string | null;
   stagedRoomIds: Set<string>;
   onSelect: (roomId: string) => void;
+  /** Across the whole width, the rooms sharing it (a phone's bottom stack). */
+  fill?: boolean;
 }
 
-export function RoomStrip({ manifest, activeRoomId, stagedRoomIds, onSelect }: Props) {
+export function RoomStrip({ manifest, activeRoomId, stagedRoomIds, onSelect, fill = false }: Props) {
   const listRef = useRef<HTMLDivElement>(null);
 
   // Keep the current room in view when the assistant or a share link moves us.
@@ -45,43 +47,49 @@ export function RoomStrip({ manifest, activeRoomId, stagedRoomIds, onSelect }: P
       role="tablist"
       aria-label="Rooms"
       onKeyDown={onKeyDown}
-      className="scroll-x flex items-stretch gap-1.5 px-3 pb-1"
+      className={['panel scroll-x rounded-[16px]', fill ? 'w-full' : 'w-max max-w-full'].join(' ')}
       data-testid="room-strip"
     >
-      {manifest.rooms.map((room) => {
-        const isActive = room.id === activeRoomId;
-        const area = Math.abs(polygonArea(room.floorPolygon));
-        return (
-          <button
-            key={room.id}
-            role="tab"
-            aria-selected={isActive}
-            data-active={isActive}
-            data-room-id={room.id}
-            onClick={() => onSelect(room.id)}
-            className={[
-              'tap group relative shrink-0 rounded-[var(--radius)] px-3.5 py-1.5 text-left transition-colors',
-              isActive
-                ? 'bg-[var(--accent)] text-[var(--paper)]'
-                : 'panel text-[var(--ink)] hover:bg-[var(--paper)]',
-            ].join(' ')}
-          >
-            <span className="flex items-baseline gap-2 whitespace-nowrap">
-              <span className="text-[13px] font-medium leading-tight">{room.name}</span>
-              <span className={`measure text-[11px] ${isActive ? 'opacity-70' : 'opacity-55'}`}>
+      {/* One card, the rooms in it all one width: a segmented control. */}
+      <div
+        className={[
+          'grid grid-flow-col gap-1 p-1',
+          fill ? 'min-w-full auto-cols-[minmax(96px,1fr)]' : 'w-max auto-cols-[minmax(112px,max-content)]',
+        ].join(' ')}
+      >
+        {manifest.rooms.map((room) => {
+          const isActive = room.id === activeRoomId;
+          const area = Math.abs(polygonArea(room.floorPolygon));
+          return (
+            <button
+              key={room.id}
+              role="tab"
+              aria-selected={isActive}
+              data-active={isActive}
+              data-room-id={room.id}
+              onClick={() => onSelect(room.id)}
+              className={[
+                'tap relative flex min-h-11 flex-col items-center justify-center rounded-[12px] px-3 py-1 transition-colors',
+                isActive
+                  ? 'bg-[var(--accent)] text-[var(--paper)] shadow-[var(--shadow-raised)]'
+                  : 'text-[var(--ink)] hover:bg-[var(--paper-warm)]',
+              ].join(' ')}
+            >
+              <span className="whitespace-nowrap text-[13px] font-medium leading-tight">{room.name}</span>
+              <span className={`measure text-[11px] leading-tight ${isActive ? 'opacity-75' : 'opacity-55'}`}>
                 {area > 0.01 ? `${area.toFixed(1)} m²` : '—'}
               </span>
-            </span>
-            {stagedRoomIds.has(room.id) && (
-              <span
-                aria-label="Changed from the original"
-                className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full"
-                style={{ background: 'var(--staged)' }}
-              />
-            )}
-          </button>
-        );
-      })}
+              {stagedRoomIds.has(room.id) && (
+                <span
+                  aria-label="Changed from the original"
+                  className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full"
+                  style={{ background: 'var(--staged)' }}
+                />
+              )}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

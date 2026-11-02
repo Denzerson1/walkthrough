@@ -114,11 +114,48 @@ test.describe('viewer', () => {
     await page.locator('[data-floor-id]').first().click();
     await expect(page.getByTestId('staged-badge')).toBeVisible();
 
+    // Undo while its toast is up. Its 5 s are less than a click's wait for
+    // two still frames under software rendering (some 5.5 s each here), so
+    // the click goes straight to the button.
+    await page.getByTestId('menu-reset').click();
+    await expect(page.getByTestId('toast')).toContainText('Back to the original');
+    await page.getByTestId('toast-undo').dispatchEvent('click');
+    await expect(page.getByTestId('staged-badge')).toBeVisible();
+
+    // Left alone this time: the original, and nothing more to reset.
     await page.getByTestId('menu-reset').click();
     await expect(page.getByTestId('staged-badge')).toBeHidden();
     await expect(page.getByTestId('menu-reset')).toBeDisabled();
-    await page.getByTestId('toast-undo').click();
-    await expect(page.getByTestId('staged-badge')).toBeVisible();
+  });
+
+  test('a floor goes in the room chosen, or in every room', async ({ page }) => {
+    await page.goto(`/p/${PROJECT}`);
+    const strip = page.getByTestId('room-strip');
+    await expect(strip).toBeVisible({ timeout: 45_000 });
+    const ids = (await strip.locator('[data-room-id]').evaluateAll((all) =>
+      all.map((room) => room.getAttribute('data-room-id') ?? ''),
+    ));
+    const changed = (id: string) =>
+      strip.locator(`[data-room-id="${id}"] [aria-label="Changed from the original"]`);
+    const [first, last] = [ids[0], ids[ids.length - 1]];
+
+    // One room, wherever you stand: the last one, not the one you are in.
+    await page.getByTestId('design-menu-toggle').click();
+    await page.getByTestId('design-tab-floor').click();
+    await page.locator(`[data-scope="${last}"]`).click();
+    await page.locator('[data-floor-id]').first().click();
+    await page.getByTestId('design-menu-toggle').click(); // a phone shows the rooms again
+    await expect(changed(last)).toBeVisible();
+    await expect(changed(first)).toBeHidden();
+
+    // The whole flat: every room, and the floor marked as the one laid.
+    await page.getByTestId('design-menu-toggle').click();
+    await page.locator('[data-scope="all"]').click();
+    const floor = page.locator('[data-floor-id]').nth(1);
+    await floor.click();
+    await expect(floor).toHaveAttribute('aria-pressed', 'true');
+    await page.getByTestId('design-menu-toggle').click();
+    for (const id of ids) await expect(changed(id)).toBeVisible();
   });
 
   /**
@@ -144,9 +181,7 @@ test.describe('viewer', () => {
     await page.getByTestId('design-tab-floor').click();
     await page.locator('[data-floor-id]').first().click();
     await page.getByTestId('share').click();
-    // "Copied", not "Link copied": the bottom bar is a compact pill now and
-    // the longer label made it jump in width on press.
-    await expect(page.getByTestId('share')).toContainText('Copied');
+    await expect(page.getByTestId('toast')).toContainText('Link copied');
     return page.evaluate(() => (window as unknown as { __copied: string }).__copied);
   }
 

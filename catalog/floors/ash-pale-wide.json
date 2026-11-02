@@ -24,5 +24,6 @@
     "roughness": "/files/assets/floors/ash-pale-wide/roughness.jpg"
   },
   "tintAlbedo": false,
-  "assetStatus": "ready"
+  "assetStatus": "ready",
+  "thumbnail": "/files/assets/floors/ash-pale-wide/thumb.jpg"
 }

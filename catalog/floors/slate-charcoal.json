@@ -24,5 +24,6 @@
     "roughness": "/files/assets/floors/slate-charcoal/roughness.jpg"
   },
   "tintAlbedo": false,
-  "assetStatus": "ready"
+  "assetStatus": "ready",
+  "thumbnail": "/files/assets/floors/slate-charcoal/thumb.jpg"
 }

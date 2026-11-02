@@ -2,7 +2,9 @@
 // Evidence for the design features, into docs/screenshots/ as JPEG (each
 // under 1 MB): on an iPhone viewport and a 1440 px desktop, the title screen,
 // the entry view, the menu collapsed and open, each ready style in the living
-// room, a finish for the kitchen and for the wardrobe, and the room labels.
+// room, a finish for the kitchen and for the wardrobe, the room labels, the
+// furniture and a piece's choices, and a floor in the hall alone and then in
+// the whole flat.
 //
 // Real Chrome with the GPU (flat-01 is too heavy for software rendering);
 // a dev build of the viewer serving flat-01 (it reads window.__viewer):
@@ -68,6 +70,29 @@ for (const [label, options] of [
   await pose(1.0, 1.8, 0, 0);
   await page.waitForTimeout(1500);
   await shot('room-labels');
+
+  await page.getByTestId('design-menu-toggle').click();
+  await page.getByTestId('design-tab-furniture').click();
+  await page.waitForTimeout(1200);
+  await shot('furniture');
+  await page.locator('[data-slot-id="sofa-1"]').click();
+  await page.waitForTimeout(1500);
+  await shot('furniture-choice');
+  await page.getByTestId('alternatives-back').click();
+
+  await page.getByTestId('design-tab-floor').click();
+  await page.click('[data-scope="hall"]');
+  await page.click('[data-floor-id="marble-carrara"]');
+  await page.waitForTimeout(4500); // the walk to the hall
+  // From the living room, looking into the hall: the hall's floor alone, then all.
+  await pose(0.3, 0.4, 0, -24);
+  await page.waitForTimeout(1500);
+  await shot('floor-hall');
+  await page.click('[data-scope="all"]');
+  await page.click('[data-floor-id="oak-plank-natural"]');
+  await page.waitForTimeout(2500);
+  await shot('floor-whole-flat');
+  await page.getByTestId('menu-reset').click();
   await page.close();
 }
 await browser.close();

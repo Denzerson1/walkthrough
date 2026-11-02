@@ -5,7 +5,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { Assistant, type AssistantAction } from '../components/Assistant';
 import { DaylightControl } from '../components/DaylightControl';
 import { FloorPlan } from '../components/FloorPlan';
-import { DesignMenu } from '../components/DesignMenu';
+import { type DesignTab, DesignMenu } from '../components/DesignMenu';
 import { RoomIcon } from '../components/RoomIcon';
 import { Sheet } from '../components/Panels';
 import { RoomStrip } from '../components/RoomStrip';
@@ -38,6 +38,12 @@ const COMPACT = '(max-width: 639px), (max-height: 500px)';
 /** Wide enough for the design menu as a panel beside the view. */
 const WIDE = '(min-width: 1024px) and (min-height: 501px)';
 
+/**
+ * Where a phone's view looks while the menu covers its foot, degrees of
+ * pitch: down at the floor, at the furniture; the fittings stand at eye level.
+ */
+const GAZE: Partial<Record<DesignTab, number>> = { floor: -28, style: -12, furniture: -12 };
+
 function useMedia(query: string): boolean {
   const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
   useEffect(() => {
@@ -49,6 +55,24 @@ function useMedia(query: string): boolean {
   return matches;
 }
 
+/** How far up from the foot of the window an element reaches while `on`, px. */
+function useReach(ref: React.RefObject<HTMLElement | null>, on: boolean): number {
+  const [reach, setReach] = useState(0);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element || !on) return;
+    const measure = () => setReach(Math.max(0, window.innerHeight - element.getBoundingClientRect().top));
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [ref, on]);
+  return on ? reach : 0;
+}
+
 export function Viewer() {
   const { projectId = '' } = useParams();
   const [searchParams] = useSearchParams();
@@ -58,7 +82,7 @@ export function Viewer() {
     manifest, error, viewer, activeRoomId, panel, catalog, showingOriginal, selectedUid, toast,
     setManifest, setError, setCatalog, goToRoom, setPanel, setShowingOriginal,
     setFloor, addItems, recolorItem, reset, loadStateFromUrl, shareUrl,
-    moveItem, rotateItem, removeItem, selectItem, clearItems, applyStyle, undo, dismissToast,
+    moveItem, rotateItem, removeItem, selectItem, clearItems, applyStyle, undo, dismissToast, notify,
   } = useStore();
 
   const [ready, setReady] = useState(false);
@@ -82,6 +106,10 @@ export function Viewer() {
   const compact = useMedia(COMPACT);
   const wide = useMedia(WIDE);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [designTab, setDesignTab] = useState<DesignTab | null>(null);
+  // A phone's open menu covers the view's foot: the view moves up out of its way.
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const sheetReach = useReach(sheetRef, menuOpen && !wide);
   /** The visitor has pressed "Start tour" (or there is no title screen). */
   const [started, setStarted] = useState(false);
   /** The title screen has faded out after the start. */
@@ -92,7 +120,6 @@ export function Viewer() {
   const [entryNote, setEntryNote] = useState<string | null>(null);
   const reducedMotion = useMedia('(prefers-reduced-motion: reduce)');
   const [pose, setPose] = useState<{ x: number; z: number; yaw: number } | null>(null);
-  const [copied, setCopied] = useState(false);
   const [layoutNote, setLayoutNote] = useState<string | null>(null);
   /** The rebuilt flat's material names, once it is in: what the fittings' finishes apply to. */
   const [materials, setMaterials] = useState<ReadonlySet<string>>(() => new Set());
@@ -356,8 +383,7 @@ export function Viewer() {
     }
     try {
       await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2200);
+      notify('Link copied');
     } catch {
       window.prompt('Copy this link', url);
     }
@@ -440,6 +466,8 @@ export function Viewer() {
           entering={started}
           stillRef={stillRef}
           onMoveItem={moveItem}
+          viewInset={sheetReach}
+          gaze={!wide && designTab ? (GAZE[designTab] ?? null) : null}
         />
       )}
 
@@ -506,21 +534,49 @@ export function Viewer() {
         </div>
       )}
 
-      {/* Top bar */}
+      {/* Top bar: the flat, with sharing it; comparing and the assistant at the right. */}
       <header
-        className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-3 p-3"
+        className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-3"
         style={{ paddingTop: 'calc(0.75rem + var(--safe-top))' }}
       >
-        <div className="pointer-events-auto panel px-3 py-2">
-          <h1 className="text-[13px] font-semibold leading-tight tracking-tight">
-            {manifest?.name ?? 'walkthrough'}
-          </h1>
-          {/* A flat rebuilt as one room has no room name worth showing. */}
-          {activeRoom && manifest && manifest.rooms.length > 1 && (
-            <p className="measure text-[11px] opacity-65">{activeRoom.name}</p>
-          )}
+        <div className="panel pointer-events-auto flex min-w-0 items-center gap-1 rounded-[16px] py-1 pl-3.5 pr-1">
+          <div className="min-w-0 py-1">
+            <h1 className="display truncate text-[15px] font-semibold leading-tight">
+              {manifest?.name ?? 'walkthrough'}
+            </h1>
+            {/* A flat rebuilt as one room has no room name worth showing. */}
+            {activeRoom && manifest && manifest.rooms.length > 1 && (
+              <p className="truncate text-[11.5px] leading-tight opacity-65">{activeRoom.name}</p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={share}
+            aria-label="Share this view"
+            title="Share"
+            className="tap ml-1 grid h-10 w-10 shrink-0 place-items-center rounded-[12px] transition-colors hover:bg-[var(--paper-warm)]"
+            data-testid="share"
+          >
+            <ShareIcon />
+          </button>
         </div>
-        <div className="pointer-events-auto">
+        <div className="pointer-events-auto flex shrink-0 items-center gap-1.5">
+          {/* The assistant runs on the server, which a static site does not have. */}
+          {!IS_STATIC && (
+            <button
+              type="button"
+              onClick={() => setPanel('assistant')}
+              aria-pressed={panel === 'assistant'}
+              aria-label="Assistant"
+              data-testid="tool-assistant"
+              className={[
+                'panel tap min-h-10 rounded-full px-3.5 text-[12.5px] font-medium transition-colors',
+                panel === 'assistant' ? '!bg-[var(--accent)] text-[var(--paper)]' : 'hover:bg-[var(--paper)]',
+              ].join(' ')}
+            >
+              {compact ? '✦' : 'Assistant'}
+            </button>
+          )}
           <StagedBadge
             staged={staged}
             showingOriginal={showingOriginal}
@@ -536,29 +592,34 @@ export function Viewer() {
           className="absolute right-3 flex flex-col items-end"
           style={{
             top: 'calc(10.25rem + var(--safe-top))',
-            bottom: 'calc(4.5rem + var(--safe-bottom))',
+            bottom: 'calc(0.75rem + var(--safe-bottom))',
           }}
         >
-          <DesignMenu room={activeRoom} fittings={fittings} compact={false} open={menuOpen} onOpenChange={setMenuOpen} />
+          <DesignMenu
+            room={activeRoom}
+            fittings={fittings}
+            compact={false}
+            open={menuOpen}
+            onOpenChange={setMenuOpen}
+            onTabShown={setDesignTab}
+          />
         </div>
       )}
 
       {!compact && daylightControl && (
         <div
-          className="panel absolute right-3 w-[min(260px,46vw)] px-3 py-2"
-          style={{ top: 'calc(5.5rem + var(--safe-top))' }}
+          className="panel absolute right-3 w-[min(400px,46vw)] rounded-[16px] px-4 py-2.5"
+          style={{ top: 'calc(5rem + var(--safe-top))' }}
         >
           {daylightControl}
         </div>
       )}
 
       {/* Floor plan: smaller on a phone, and out of the way of an open sheet. */}
-      {manifest && ready && !(compact && panel) && (
+      {manifest && ready && !(compact && panel) && !(menuOpen && !wide) && (
         <div
-          className="panel absolute left-3 rounded-sm p-2"
-          style={{
-            top: compact ? 'calc(4.25rem + var(--safe-top))' : 'calc(5.5rem + var(--safe-top))',
-          }}
+          className="panel absolute left-3 rounded-[16px] p-2.5"
+          style={{ top: 'calc(5rem + var(--safe-top))' }}
         >
           <FloorPlan
             manifest={manifest}
@@ -626,10 +687,14 @@ export function Viewer() {
         </div>
       )}
 
-      {/* Bottom stack */}
+      {/* Bottom stack: one column of cards, one width, one gap. */}
       <div
-        className="absolute inset-x-0 bottom-0"
-        style={{ paddingBottom: 'var(--safe-bottom)' }}
+        className={[
+          'pointer-events-none absolute bottom-0 left-0 flex flex-col gap-2 px-3 [&>*]:pointer-events-auto',
+          // Beside the design panel on a big screen, not under it.
+          wide ? 'right-[424px]' : 'right-0 mx-auto max-w-[560px]',
+        ].join(' ')}
+        style={{ paddingBottom: 'calc(0.75rem + var(--safe-bottom))' }}
       >
         {panel === 'assistant' && manifest && activeRoom && (
           <Sheet title="Assistant" onClose={() => setPanel(panel)}>
@@ -656,13 +721,13 @@ export function Viewer() {
         )}
 
         {selectedItem && !selectedItem.slotId && (
-          <div className="flex justify-center px-3 pb-2" data-testid="item-controls">
-            <div className="panel flex items-center gap-1 rounded-[9px] p-1">
-              <span className="px-3 text-[12px] font-medium">{selectedItemName}</span>
+          <div className="flex justify-center" data-testid="item-controls">
+            <div className="panel flex items-center gap-1 rounded-full p-1">
+              <span className="px-3 text-[12.5px] font-medium">{selectedItemName}</span>
               <button
                 type="button"
                 onClick={() => rotateItem(selectedItem.uid, -15)}
-                className="tap rounded-[var(--radius-sm)] px-2.5 py-1.5 text-[13px] hover:bg-[var(--paper-warm)]"
+                className="tap grid h-9 w-9 place-items-center rounded-full text-[14px] hover:bg-[var(--paper-warm)]"
                 aria-label="Rotate left"
               >
                 ⟲
@@ -670,7 +735,7 @@ export function Viewer() {
               <button
                 type="button"
                 onClick={() => rotateItem(selectedItem.uid, 15)}
-                className="tap rounded-[var(--radius-sm)] px-2.5 py-1.5 text-[13px] hover:bg-[var(--paper-warm)]"
+                className="tap grid h-9 w-9 place-items-center rounded-full text-[14px] hover:bg-[var(--paper-warm)]"
                 aria-label="Rotate right"
               >
                 ⟳
@@ -678,7 +743,7 @@ export function Viewer() {
               <button
                 type="button"
                 onClick={() => removeItem(selectedItem.uid)}
-                className="tap rounded-[var(--radius-sm)] px-3 py-1.5 text-[12px] font-medium text-[var(--staged)] hover:bg-[var(--paper-warm)]"
+                className="tap min-h-9 rounded-full px-3.5 text-[12.5px] font-medium text-[var(--staged)] hover:bg-[var(--paper-warm)]"
                 data-testid="remove-item"
               >
                 Remove
@@ -695,58 +760,39 @@ export function Viewer() {
             activeRoomId={activeRoomId}
             stagedRoomIds={stagedRooms}
             onSelect={goToRoom}
+            fill={!wide}
           />
         )}
 
-        {!wide && activeRoom && ready && (
-          <div className="px-3 pb-1.5">
-            <DesignMenu room={activeRoom} fittings={fittings} compact open={menuOpen} onOpenChange={setMenuOpen} />
-          </div>
-        )}
-
         {compact && !panel && !menuOpen && daylightControl && (
-          <div className="flex justify-center px-3 pb-1.5">
-            <div className="panel w-full max-w-[360px] rounded-[9px] px-3 py-1.5">
-              {daylightControl}
-            </div>
-          </div>
+          <div className="panel rounded-[16px] px-4 py-2.5">{daylightControl}</div>
         )}
 
-        <nav
-          className="flex items-center justify-center gap-1.5 px-3 pb-3 pt-1"
-          aria-label="Tools"
-        >
-          <div className="panel flex items-center gap-0.5 rounded-[9px] p-1">
-            {/* The assistant runs on the server, which a static site does not have. */}
-            {!IS_STATIC && (
-              <button
-                type="button"
-                onClick={() => setPanel('assistant')}
-                aria-pressed={panel === 'assistant'}
-                data-testid="tool-assistant"
-                className={[
-                  'tap rounded-[var(--radius-sm)] px-4 py-1.5 text-[13px] font-medium',
-                  'transition-colors',
-                  panel === 'assistant'
-                    ? 'bg-[var(--accent)] text-[var(--paper)]'
-                    : 'text-[var(--ink)] hover:bg-[var(--paper-warm)]',
-                ].join(' ')}
-              >
-                Assistant
-              </button>
-            )}
-            <span className="mx-0.5 h-4 w-px bg-[var(--line)]" aria-hidden="true" />
-            <button
-              type="button"
-              onClick={share}
-              className="tap rounded-[var(--radius-sm)] px-4 py-1.5 text-[13px] font-medium text-[var(--ink)] transition-colors hover:bg-[var(--paper-warm)]"
-              data-testid="share"
-            >
-              {copied ? 'Copied' : 'Share'}
-            </button>
+        {!wide && activeRoom && ready && (
+          <div ref={sheetRef}>
+            <DesignMenu
+              room={activeRoom}
+              fittings={fittings}
+              compact
+              open={menuOpen}
+              onOpenChange={setMenuOpen}
+              onTabShown={setDesignTab}
+            />
           </div>
-        </nav>
+        )}
       </div>
     </main>
+  );
+}
+
+/** The usual mark for sharing: a box with an arrow leaving it. */
+function ShareIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 3v12" />
+      <path d="m7.5 7.5 4.5-4.5 4.5 4.5" />
+      <path d="M8 10H6.5A1.5 1.5 0 0 0 5 11.5v8A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-8a1.5 1.5 0 0 0-1.5-1.5H16" />
+    </svg>
   );
 }

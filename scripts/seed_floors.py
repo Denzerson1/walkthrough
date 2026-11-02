@@ -309,7 +309,7 @@ GENERATORS = {
 #: Re-seeding used to blank `maps` and restore a "not downloaded yet" note, so
 #: running `pnpm seed:floors` after `pnpm seed:assets` silently reverted every
 #: floor to a flat colour.
-_FETCHED_KEYS = ("maps", "tintAlbedo", "assetStatus", "license", "source")
+_FETCHED_KEYS = ("maps", "thumbnail", "tintAlbedo", "assetStatus", "license", "source")
 
 _NOT_FETCHED = {
     "maps": {},

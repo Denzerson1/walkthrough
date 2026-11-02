@@ -26,7 +26,7 @@ export function StagedBadge({
 
   return (
     <div
-      className="flex items-center gap-1"
+      className="flex items-center gap-1.5"
       data-testid="staged-badge"
     >
       <button
@@ -36,7 +36,7 @@ export function StagedBadge({
         onPointerLeave={onHoldEnd}
         onPointerCancel={onHoldEnd}
         aria-pressed={showingOriginal}
-        className="panel tap whitespace-nowrap rounded-[var(--radius)] px-3 py-1.5 text-[12px] font-medium hover:bg-[var(--paper)]"
+        className="panel tap min-h-10 whitespace-nowrap rounded-full px-3.5 text-[12.5px] font-medium transition-colors hover:bg-[var(--paper)] aria-pressed:bg-[var(--accent)] aria-pressed:text-[var(--paper)]"
         data-testid="hold-original"
       >
         <span className="hidden sm:inline">
@@ -48,7 +48,7 @@ export function StagedBadge({
       <button
         type="button"
         onClick={onReset}
-        className="panel tap whitespace-nowrap rounded-[var(--radius)] px-3 py-1.5 text-[12px] font-medium hover:bg-[var(--paper)]"
+        className="panel tap min-h-10 whitespace-nowrap rounded-full px-3.5 text-[12.5px] font-medium transition-colors hover:bg-[var(--paper)]"
         data-testid="reset-all"
       >
         Reset

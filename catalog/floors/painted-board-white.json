@@ -23,7 +23,7 @@
     "normal": "/files/assets/floors/painted-board-white/normal.jpg",
     "roughness": "/files/assets/floors/painted-board-white/roughness.jpg"
   },
-  "thumbnail": "/catalog/floors/thumbnails/painted-board-white.png",
+  "thumbnail": "/files/assets/floors/painted-board-white/thumb.jpg",
   "tintAlbedo": true,
   "assetStatus": "ready"
 }

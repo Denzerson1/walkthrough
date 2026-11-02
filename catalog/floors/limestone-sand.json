@@ -24,5 +24,6 @@
     "roughness": "/files/assets/floors/limestone-sand/roughness.jpg"
   },
   "tintAlbedo": false,
-  "assetStatus": "ready"
+  "assetStatus": "ready",
+  "thumbnail": "/files/assets/floors/limestone-sand/thumb.jpg"
 }

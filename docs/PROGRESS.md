@@ -7,6 +7,60 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-11-02 — A floor for each room; a phone layout that fits
+
+The owner could not change the hall's floor, and the floor changed with
+the room they stood in. The rebuilt flat has one floor mesh for the scan's
+single room (an open plan cut into rooms afterwards) and the hall's tiles
+as a separate zone on top: the floor took whatever was chosen where you
+stood, and the tiles took nothing.
+
+- **One floor per room** (`floorSplit.ts`, tested): at load the floor is
+  cut along the rooms' outlines into one mesh per room, every triangle
+  into convex pieces, each to the room it lies in or the nearest, so the
+  floor is covered once with no gap where outlines do not quite meet.
+  Texture and light-map coordinates are carried over by interpolation, so
+  a floor laid in two rooms runs on without a seam. The hall's tiles are
+  cut the same way and are taken up where a room gets a new floor. The
+  model's positions are quantized (KHR_mesh_quantization); they are copied
+  into floats before being cut, or they clamp.
+- **Floor › where:** "Whole flat" or any room by name, whichever room you
+  stand in; a room walks you there. The floor marked is the one that room
+  has (for the whole flat, the one every room shares). Laying a floor
+  leaves a toast with Undo, as every other change does.
+- **Floor pictures:** eleven of sixteen floors were a flat colour in the
+  menu, several nothing like the floor laid (a "light oak" tile over a dark
+  scan). Each now has a 192 px picture of its texture, tinted as the viewer
+  tints it, written beside its maps by `pnpm seed:assets`
+  (`data/assets/floors/<id>/thumb.jpg`, some 10 KB each; served from
+  `/files/` like the furniture's, as the API does not serve `/catalog/`).
+  The floor's colour shows under it until it loads.
+- **A phone's layout:** one column of cards at the foot, all one width,
+  one corner radius and one gap: the rooms as one segmented card (name over
+  area), the daylight, then the design menu. Share moved from its own bar
+  to an icon beside the flat's name, and the copied link is a toast.
+- **Seeing what you choose on a phone:** the open menu covered the foot of
+  the view, where the floor and the furniture are. The view's centre now
+  moves up into what the menu leaves (a lens offset at the same scale, not
+  a resize), and the gaze dips to what is being chosen: 28° down for
+  floors, 12° for styles and furniture. Closing the menu brings the gaze
+  back, unless you have looked up or down yourself.
+- **The menu:** a segmented tab bar with a dot on each tab that holds a
+  change; tiles with the chosen one ringed and ticked, every label two
+  lines high so the rows line up; "Reset all" with its icon.
+- Tested: the cut per room, including a quantized floor (`floorSplit`,
+  7 tests), floors in a room or the whole flat with Undo (store); vitest
+  151, pytest 149. Playwright, desktop and iPhone: 30 of 32 viewer tests,
+  among them a new one for a floor in one room and then the whole flat;
+  the landing page's link fails as before (the uncommitted landing work
+  links to flat-01). The Reset-all test now clicks Undo without waiting
+  for still frames: under software rendering a frame takes some 5.5 s
+  here, longer than the toast stays. On flat-01 in Chrome: the hall takes
+  a floor of its own, the whole flat one floor without a seam, the gaze
+  dips and comes back. Not verified on a real phone (`DEVICE-CHECK.md`).
+  Screenshots: `m11-floor-hall`, `m11-floor-whole-flat`, `m11-furniture`,
+  `m11-furniture-choice`, and the menu shots retaken.
+
 ## 2026-10-31 — A menu nothing goes missing from
 
 The owner changed the sofa and could not find the way back to the rest.

@@ -66,4 +66,21 @@ describe('the design store', () => {
     useStore.getState().clearSlot('bedroom', 'stand');
     expect(useStore.getState().viewer.items.map((i) => i.slotId)).toEqual(['rug']);
   });
+
+  it('lays a floor in one room or the whole flat, and Undo takes it up', () => {
+    const hall = { ...bedroom, id: 'hall', name: 'Hall', slots: [] };
+    useStore.setState((s) => ({
+      manifest: { ...s.manifest!, rooms: [bedroom, hall] },
+      catalog: { ...s.catalog, floors: [{ id: 'slate', name: 'Slate' } as never] },
+    }));
+    useStore.getState().setFloor(['hall'], 'slate');
+    expect(useStore.getState().viewer.floors).toEqual({ bedroom: 'oak', hall: 'slate' });
+    expect(useStore.getState().toast?.message).toBe('Hall · Slate');
+
+    useStore.getState().setFloor(['all'], 'slate');
+    expect(useStore.getState().viewer.floors).toEqual({ bedroom: 'slate', hall: 'slate' });
+    expect(useStore.getState().toast?.message).toBe('Whole flat · Slate');
+    useStore.getState().undo();
+    expect(useStore.getState().viewer.floors).toEqual({ bedroom: 'oak', hall: 'slate' });
+  });
 });

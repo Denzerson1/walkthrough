@@ -21,6 +21,8 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
+from PIL import Image
+
 REPO = Path(__file__).resolve().parents[1]
 CATALOG = REPO / "catalog"
 ASSETS = REPO / "data" / "assets"
@@ -83,6 +85,20 @@ MAP_FILES = {
     "roughness": "_Roughness.jpg",
 }
 
+#: The menu's picture of a floor, px (some 10 KB), beside its maps.
+THUMB_PX = 192
+
+
+def write_thumbnail(colour: Path, out: Path, tint: str | None) -> None:
+    """One tile of the floor as the viewer lays it: the scan, tinted where
+    the viewer tints it (TINTED), so the menu shows what the room will get."""
+    image = Image.open(colour).convert("RGB").resize((THUMB_PX, THUMB_PX), Image.Resampling.LANCZOS)
+    if tint:
+        r, g, b = (int(tint.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))
+        image = Image.merge("RGB", [band.point(lambda v, k=k: v * k // 255)
+                                    for band, k in zip(image.split(), (r, g, b), strict=True)])
+    image.save(out, "JPEG", quality=82, optimize=True)
+
 
 def fetch(url: str, timeout: int = 180) -> bytes:
     request = urllib.request.Request(url, headers=UA)
@@ -132,6 +148,9 @@ def fetch_floors() -> int:
             written += 1
 
         entry = json.loads(catalog_file.read_text(encoding="utf-8"))
+        tint = entry.get("baseColor") if floor_id in TINTED else None
+        write_thumbnail(expected["color"], out_dir / "thumb.jpg", tint)
+        entry["thumbnail"] = f"/files/assets/floors/{floor_id}/thumb.jpg"
         entry["maps"] = {
             "albedo": f"/files/assets/floors/{floor_id}/color.jpg",
             "normal": f"/files/assets/floors/{floor_id}/normal.jpg",

@@ -45,6 +45,7 @@ import {
 } from '../lib/daylight';
 import { AutoExposure } from '../lib/exposure';
 import { type Finish, surfaceFinish } from '../lib/finishes';
+import { splitFloors } from '../lib/floorSplit';
 import { fetchGlb } from '../lib/glb';
 import { SunShadow, sunAt } from '../lib/sun';
 import { DEFAULT_ITEM_SIZE, FurnitureLayer } from '../lib/furnitureLayer';
@@ -111,6 +112,17 @@ interface Props {
   entering?: boolean;
   /** Filled with a function taking a still of the current view, for the editor. */
   stillRef?: React.MutableRefObject<(() => Still) | null>;
+  /**
+   * How much of the view's foot a sheet covers, px (a phone's open menu): the
+   * view's centre eases up into the middle of what is left, at the same scale.
+   */
+  viewInset?: number;
+  /**
+   * Where to look while something is being chosen with the view's foot
+   * covered, degrees of pitch (down at a floor, at the furniture); null for
+   * the visitor's own gaze, which it comes back to.
+   */
+  gaze?: number | null;
 }
 
 /** A camera pose to open at. */
@@ -235,6 +247,8 @@ export function SplatScene({
   entry = null,
   entering = false,
   stillRef,
+  viewInset = 0,
+  gaze = null,
 }: Props) {
   const mountRef = useRef<HTMLDivElement>(null);
   /** Starts the render loop again after it has gone to sleep; set by the loop. */
@@ -245,6 +259,10 @@ export function SplatScene({
     yaw: 0,
     pitch: 0,
     fov: DEFAULT_FOV,
+    /** The covered foot of the view as drawn, px, easing towards viewInset. */
+    inset: 0,
+    /** Set when the visitor turns the gaze up or down themselves. */
+    looked: false,
     position: [0, EYE_HEIGHT, 0] as [number, number, number],
     /** Horizontal velocity in m/s, damped towards whatever the keys ask for. */
     velocity: [0, 0] as Vec2,
@@ -306,6 +324,13 @@ export function SplatScene({
     sun?: SunShadow;
     exposure?: AutoExposure;
   } | null>(null);
+  const viewInsetRef = useRef(viewInset);
+  useEffect(() => {
+    viewInsetRef.current = viewInset;
+    sceneRef.current?.wake();
+  }, [viewInset]);
+  /** While something is being chosen, a walk between rooms ends looking at it. */
+  const gazeRef = useRef(gaze);
   // Effects that touch the rebuilt flat or the splats must run again once
   // they are in the scene.
   const [contentReady, setContentReady] = useState(false);
@@ -354,7 +379,9 @@ export function SplatScene({
     // for detail it cannot show. One that cannot keep up steps down (Quality).
     const quality = new Quality(window.devicePixelRatio, IS_PHONE ? 1.5 : 2);
     renderer.setPixelRatio(quality.pixelRatio);
-    renderer.setSize(mount.clientWidth, mount.clientHeight);
+    // The view's size, read when it changes rather than every frame.
+    const size = { w: mount.clientWidth, h: mount.clientHeight };
+    renderer.setSize(size.w, size.h);
     // Daylight, not the page's paper colour. Window and door openings are
     // cut out of the wall splats, so whatever is behind the scene is what you
     // see through them — and beige reads as a panel painted on the wall
@@ -463,7 +490,7 @@ export function SplatScene({
       // Every file at once rather than one after another. The model is the
       // largest of them, so how much of it has arrived is the progress shown.
       Promise.all([
-        loadBakedModel(model, anisotropy, (fraction) => onProgress?.(fraction * 0.95)),
+        loadBakedModel(model, manifest.rooms, anisotropy, (fraction) => onProgress?.(fraction * 0.95)),
         model.viewPhoto ? loadViewPhoto(model.viewPhoto.url) : null,
         lighting ? loadDaylightKey(lighting[opening], anisotropy) : null,
       ])
@@ -535,9 +562,10 @@ export function SplatScene({
 
     const onResize = () => {
       if (!mount) return;
-      camera.aspect = mount.clientWidth / mount.clientHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(mount.clientWidth, mount.clientHeight);
+      size.w = mount.clientWidth;
+      size.h = mount.clientHeight;
+      renderer.setSize(size.w, size.h);
+      wake(); // the loop fits the lens to the new size
     };
     window.addEventListener('resize', onResize);
 
@@ -632,7 +660,7 @@ export function SplatScene({
     // then a few frames a second while it settles, then none (SETTLE_MS).
     let activeAt = lastFrame;
     let drawnAt = 0;
-    const lastPose = [Number.NaN, 0, 0, 0, 0, 0];
+    const lastPose = [Number.NaN, 0, 0, 0, 0, 0, 0, 0, 0];
     // One loop only: everything that wants a frame goes through here, so a
     // wake from inside a frame cannot start a second loop beside the first.
     const schedule = () => {
@@ -716,14 +744,18 @@ export function SplatScene({
         st.position[1] + dir[1],
         st.position[2] + dir[2],
       );
-      if (camera.fov !== st.fov) {
-        camera.fov = st.fov;
-        camera.updateProjectionMatrix();
+      const goal = viewInsetRef.current;
+      if (st.inset !== goal) {
+        const step = (goal - st.inset) * Math.min(1, dt * 9);
+        st.inset = Math.abs(goal - st.inset) < 0.5 ? goal : st.inset + step;
       }
 
-      const pose = [...st.position, st.yaw, st.pitch, st.fov];
+      const pose = [...st.position, st.yaw, st.pitch, st.fov, st.inset, size.w, size.h];
       if (pose.some((v, i) => v !== lastPose[i])) {
-        lastPose.splice(0, 6, ...pose);
+        if (pose.slice(5).some((v, i) => v !== lastPose[5 + i])) {
+          fitLens(camera, size.w, size.h, st.fov, st.inset);
+        }
+        lastPose.splice(0, pose.length, ...pose);
         activeAt = now;
       }
       if (furniture.tick(now)) activeAt = now;
@@ -1042,6 +1074,7 @@ export function SplatScene({
       // phone does; the mouse turns the way it moves.
       st.yaw += (e.pointerType === 'touch' ? 1 : -1) * (e.clientX - lastX) * k;
       st.pitch = clampPitch(st.pitch + (e.clientY - lastY) * k);
+      st.looked = true;
       lastX = e.clientX;
       lastY = e.clientY;
       // Looking round during a glide takes the gaze over from it.
@@ -1120,6 +1153,7 @@ export function SplatScene({
       // the keyboard-only and automated path.
       else if (PITCH_KEYS.has(e.key)) {
         st.pitch = clampPitch(st.pitch + (PITCH_KEYS.get(e.key) as number));
+        st.looked = true;
       } else if (WALK_KEYS.has(e.key) || TURN_KEYS.has(e.key)) {
         st.keys.add(e.key);
         // Walking overrides a glide that is still in flight.
@@ -1215,7 +1249,11 @@ export function SplatScene({
     const path = new Path(route(manifest.rooms, leaving, room.id, from, to));
     st.transition = {
       from: { position: st.position, yaw: st.yaw, pitch: st.pitch },
-      to: { position: room.waypoint.position, yaw: room.waypoint.yaw, pitch: 0 },
+      to: {
+        position: room.waypoint.position,
+        yaw: room.waypoint.yaw,
+        pitch: gazeRef.current ?? 0,
+      },
       startedAt: performance.now(),
       durationMs: walkDuration(path.length),
       path,
@@ -1223,6 +1261,37 @@ export function SplatScene({
     sceneRef.current?.wake();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the entry only matters on the first placement
   }, [activeRoomId, manifest]);
+
+  // Choosing on a phone, the menu over the view's foot: the gaze dips to
+  // what is being chosen, and comes back up to the visitor's own after,
+  // unless they have looked up or down themselves meanwhile.
+  const ownPitch = useRef<number | null>(null);
+  useEffect(() => {
+    gazeRef.current = gaze;
+    const st = stateRef.current;
+    const glidePitch = (pitch: number) => {
+      // A walk under way ends on the new gaze instead of being cut short.
+      if (st.transition?.path) {
+        st.transition.to = { ...st.transition.to, pitch };
+        return;
+      }
+      st.transition = {
+        from: { position: st.position, yaw: st.yaw, pitch: st.pitch },
+        to: { position: st.position, yaw: st.yaw, pitch },
+        startedAt: performance.now(),
+        durationMs: 700,
+      };
+      sceneRef.current?.wake();
+    };
+    if (gaze !== null) {
+      ownPitch.current ??= st.pitch;
+      st.looked = false;
+      glidePitch(gaze);
+    } else if (ownPitch.current !== null) {
+      if (!st.looked) glidePitch(ownPitch.current);
+      ownPitch.current = null;
+    }
+  }, [gaze]);
 
   // The visitor starts the tour: a gentle move into the entry view, from a
   // little further back and turned a little, unless motion is to be reduced.
@@ -1269,22 +1338,14 @@ export function SplatScene({
     // A rebuilt flat swaps the floor's texture in place, keeping its baked
     // light and shadows; drawing a separate floor over it would lose both.
     if (ctx.model) {
-      // A floor mesh belongs to the room it was baked for. An open plan cut
-      // into rooms afterwards (pipeline `rooms`) still has one floor, baked
-      // for the scan's single room: it takes the floor chosen where you stand.
-      const known = new Set(manifest.rooms.map((r) => r.id));
+      // Each room's floor is its own mesh (floorSplit.ts cut an open plan's).
       const meshRooms = new Set<string>();
       ctx.model.traverse((node) => {
         if (typeof node.userData.roomId === 'string') meshRooms.add(node.userData.roomId);
       });
       for (const id of meshRooms) {
-        const floorId = showingOriginal
-          ? undefined
-          : known.has(id)
-            ? viewer.floors[id]
-            : (viewer.floors[activeRoomId ?? ''] ?? Object.values(viewer.floors)[0]);
-        const floor = floorId ? floorCatalog.find((f) => f.id === floorId) : undefined;
-        swapModelFloor(ctx.model, id, floor);
+        const floorId = showingOriginal ? undefined : viewer.floors[id];
+        swapModelFloor(ctx.model, id, floorCatalog.find((f) => f.id === floorId));
       }
       return;
     }
@@ -1308,7 +1369,7 @@ export function SplatScene({
       group.add(buildFloorMesh(room, floor));
     }
     // showingOriginal only matters for a rebuilt flat (above).
-  }, [viewer.floors, manifest, floorCatalog, showingOriginal, contentReady, activeRoomId]);
+  }, [viewer.floors, manifest, floorCatalog, showingOriginal, contentReady]);
 
   // "Hold to compare" must not hitch: toggle visibility rather than
   // disposing and rebuilding every floor and furniture mesh twice per press.
@@ -1678,6 +1739,7 @@ function gltfLoader(): GLTFLoader {
  */
 async function loadBakedModel(
   model: BakedModel,
+  rooms: Room[],
   anisotropy: number,
   onProgress: (fraction: number) => void,
 ): Promise<THREE.Group> {
@@ -1702,6 +1764,7 @@ async function loadBakedModel(
   // The light in vertices it opens with: the neighbourhood's, and the
   // vertex-lit pieces' (glTF `_LIGHT_<time>`, which three lowercases).
   const opening = model.lighting?.find((k) => k.lightmapUrl === model.lightmapUrl)?.colours;
+  splitFloors(gltf.scene, rooms);
   gltf.scene.traverse((node) => {
     if (!(node instanceof THREE.Mesh)) return;
     const source = node.material as THREE.MeshStandardMaterial;
@@ -1774,11 +1837,16 @@ async function loadViewPhoto(url: string): Promise<THREE.Object3D> {
 /**
  * Put a catalog floor's texture on a rebuilt room's floor, or restore the
  * scanned one when `floor` is undefined. The baked light stays: only the
- * colour under it changes.
+ * colour under it changes. A zone laid on the floor (a hall's tiles) is
+ * taken up for a new floor, which runs on unbroken beneath it.
  */
 function swapModelFloor(model: THREE.Group, roomId: string, floor: CatalogItem | undefined): void {
   model.traverse((node) => {
     if (!(node instanceof THREE.Mesh) || node.userData.roomId !== roomId) return;
+    if (node.userData.zone) {
+      node.visible = !floor;
+      return;
+    }
     const material = node.material as THREE.MeshBasicMaterial;
     const swapped = material.userData.swapped as THREE.Texture | undefined;
     if (swapped) {
@@ -1812,6 +1880,23 @@ function swapModelFloor(model: THREE.Group, roomId: string, floor: CatalogItem |
       material.needsUpdate = true;
     });
   });
+}
+
+/**
+ * The lens for a view w × h px whose foot `inset` px is covered: its centre
+ * in the middle of what is left, and `fov` scaled to the taller whole, so
+ * that nothing looks bigger or smaller than it did.
+ */
+function fitLens(camera: THREE.PerspectiveCamera, w: number, h: number, fov: number, inset: number): void {
+  if (inset > 0.5) {
+    const tall = h + inset;
+    camera.fov = (2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(fov) / 2) * (tall / h))) / THREE.MathUtils.DEG2RAD;
+    camera.setViewOffset(w, tall, 0, inset, w, h); // sets the aspect, updates the matrix
+    return;
+  }
+  camera.fov = fov;
+  camera.aspect = w / h;
+  camera.clearViewOffset(); // updates the matrix
 }
 
 const NO_FINISHES: Finish[] = [];

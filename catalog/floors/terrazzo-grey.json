@@ -24,5 +24,6 @@
     "roughness": "/files/assets/floors/terrazzo-grey/roughness.jpg"
   },
   "tintAlbedo": false,
-  "assetStatus": "ready"
+  "assetStatus": "ready",
+  "thumbnail": "/files/assets/floors/terrazzo-grey/thumb.jpg"
 }

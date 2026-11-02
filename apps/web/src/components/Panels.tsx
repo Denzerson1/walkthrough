@@ -9,7 +9,7 @@ interface SheetProps {
 export function Sheet({ title, onClose, children }: SheetProps) {
   return (
     <section
-      className="panel rule flex max-h-[58vh] flex-col border-t [@media(max-height:500px)]:max-h-[calc(100vh-8.5rem)]"
+      className="panel flex max-h-[58vh] flex-col overflow-hidden rounded-[16px] [@media(max-height:500px)]:max-h-[calc(100vh-8.5rem)]"
       role="dialog"
       aria-label={title}
       data-testid={`sheet-${title.toLowerCase()}`}

@@ -25,5 +25,6 @@
     "roughness": "/files/assets/floors/marble-carrara/roughness.jpg"
   },
   "tintAlbedo": false,
-  "assetStatus": "ready"
+  "assetStatus": "ready",
+  "thumbnail": "/files/assets/floors/marble-carrara/thumb.jpg"
 }

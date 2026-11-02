@@ -23,7 +23,7 @@
     "normal": "/files/assets/floors/stencil-moroccan-blue/normal.jpg",
     "roughness": "/files/assets/floors/stencil-moroccan-blue/roughness.jpg"
   },
-  "thumbnail": "/catalog/floors/thumbnails/stencil-moroccan-blue.png",
+  "thumbnail": "/files/assets/floors/stencil-moroccan-blue/thumb.jpg",
   "tintAlbedo": true,
   "assetStatus": "ready"
 }
