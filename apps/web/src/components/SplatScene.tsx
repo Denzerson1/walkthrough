@@ -1837,16 +1837,13 @@ async function loadViewPhoto(url: string): Promise<THREE.Object3D> {
 /**
  * Put a catalog floor's texture on a rebuilt room's floor, or restore the
  * scanned one when `floor` is undefined. The baked light stays: only the
- * colour under it changes. A zone laid on the floor (a hall's tiles) is
- * taken up for a new floor, which runs on unbroken beneath it.
+ * colour under it changes. A zone laid on the floor (a hall's tiles) takes
+ * the new floor too, at the same scale, so the room has one floor in one
+ * light.
  */
 function swapModelFloor(model: THREE.Group, roomId: string, floor: CatalogItem | undefined): void {
   model.traverse((node) => {
     if (!(node instanceof THREE.Mesh) || node.userData.roomId !== roomId) return;
-    if (node.userData.zone) {
-      node.visible = !floor;
-      return;
-    }
     const material = node.material as THREE.MeshBasicMaterial;
     const swapped = material.userData.swapped as THREE.Texture | undefined;
     if (swapped) {

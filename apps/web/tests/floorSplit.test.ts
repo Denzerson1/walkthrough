@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 
-import { splitByRooms, splitFloors } from '../src/lib/floorSplit';
+import { splitByRooms, splitFloors, tileOf } from '../src/lib/floorSplit';
 import type { Room, Vec2 } from '../src/lib/manifest';
 
 const room = (id: string, floorPolygon: Vec2[]): Room => ({
@@ -92,6 +92,15 @@ describe('a floor shared out among rooms', () => {
     const parts = splitByRooms(side, [living, bedroom]);
     expect([...parts.keys()]).toEqual(['living']);
     expect(parts.get('living')!.getAttribute('position').count).toBe(3);
+    expect(splitByRooms(side, [living, bedroom], { sides: false }).size).toBe(0);
+  });
+});
+
+describe("a floor's tile", () => {
+  it('is read off its texture coordinates', () => {
+    const [w, d] = tileOf(floor(-1, 3, 0, 2, 0.8))!;
+    expect(w).toBeCloseTo(0.8, 6);
+    expect(d).toBeCloseTo(0.8, 6);
   });
 });
 
@@ -108,18 +117,21 @@ describe('the model floors cut per room', () => {
 
     splitFloors(model, [living, bedroom, hall]);
 
-    const pieces = model.children.map((c) => [c.name, c.userData.roomId, c.userData.zone ?? null]);
+    const pieces = model.children.map((c) => [c.name, c.userData.roomId]);
     expect(pieces).toEqual(
       expect.arrayContaining([
-        ['', 'living', null],
-        ['', 'living', false],
-        ['', 'bedroom', false],
-        ['', 'hall', false],
-        ['floorzone-Other', 'hall', true],
+        ['', 'living'],
+        ['', 'bedroom'],
+        ['', 'hall'],
+        ['floorzone-Other', 'hall'],
       ]),
     );
     expect(model.children).toHaveLength(5);
-    expect(model.children.find((c) => c.userData.zone === false)?.userData.tileM).toEqual([1.5, 1.5]);
+    // Every piece knows its tile, the zone's read off its coordinates.
+    for (const piece of model.children.filter((c) => c !== own)) {
+      expect(piece.userData.tileM[0]).toBeCloseTo(1.5, 5);
+      expect(piece.userData.tileM[1]).toBeCloseTo(1.5, 5);
+    }
     // Each piece its own material, to change on its own.
     const materials = new Set(model.children.map((c) => (c as THREE.Mesh).material));
     expect(materials.size).toBe(5);

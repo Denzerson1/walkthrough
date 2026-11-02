@@ -7,6 +7,27 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-11-02 — The sofa as photographed; one floor in the hall
+
+- **The sofa** (`sofa()` in `build_flat.py`, from sofa1-3): it was boxes
+  with 6 cm bevels, the arms lower than the back. Now the back and arms are
+  one band of bouclé at one height, round in plan where the back turns into
+  the arms (15 cm) and at the arms' fronts (11 cm), its top rolled over
+  (11.5 cm); a deep seat cushion on a base set back under it; two flat
+  lumbar cushions leaning on the back. Shaded smooth where round.
+- **One floor in the hall:** a floor chosen for the hall showed two
+  shades. The tiled part is a zone 2 mm over the floor, and was taken up
+  for a new floor; the floor beneath it had baked in its shadow, darker.
+  The new floor is now laid on the zone too, at the same scale (the zone's
+  tile read off its coordinates, `tileOf`), its edge faces left out; and
+  the rebuild bakes the floor under the zone as lit (the zone casts no
+  shadow or bounce), so the two meet without a line.
+- Tested: vitest 152 (the zone's tile, zone pieces without edge faces),
+  pipeline pytest 205 (4 skipped), ruff and eslint clean. Full rebuild at
+  4096 samples (148 min); in the exported site the sofa is round as
+  photographed, and oak and marble chosen for the hall each lie in one
+  shade end to end.
+
 ## 2026-11-02 — A floor for each room; a phone layout that fits
 
 The owner could not change the hall's floor, and the floor changed with

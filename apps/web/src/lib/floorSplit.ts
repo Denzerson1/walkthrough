@@ -93,9 +93,13 @@ function cut(poly: Vec2[], a: Vec2, b: Vec2, line = false): [Vec2[], Vec2[]] | n
  * that gets any, its attributes (texture coordinates, light-map coordinates,
  * normals) carried over by interpolation. Seen from above the floor plane is
  * x–z; a triangle standing on edge (a slab's side) goes whole to the room
- * nearest its middle.
+ * nearest its middle, or is left out with `sides: false`.
  */
-export function splitByRooms(geometry: THREE.BufferGeometry, rooms: Room[]): Map<string, THREE.BufferGeometry> {
+export function splitByRooms(
+  geometry: THREE.BufferGeometry,
+  rooms: Room[],
+  { sides = true }: { sides?: boolean } = {},
+): Map<string, THREE.BufferGeometry> {
   const out = new Map<string, Map<string, number[]>>();
   const usable = rooms.filter((r) => r.floorPolygon.length >= 3);
   if (!usable.length) return new Map();
@@ -123,6 +127,7 @@ export function splitByRooms(geometry: THREE.BufferGeometry, rooms: Room[]): Map
     const [pa, pb, pc] = corners;
     const area = cross(pa, pb, pc);
     if (Math.abs(area) < FLAT) {
+      if (!sides) continue;
       const middle: Vec2 = [(pa[0] + pb[0] + pc[0]) / 3, (pa[1] + pb[1] + pc[1]) / 3];
       const roomId = ownerOf(middle, usable).id;
       for (let k = 0; k < 3; k++) emit(roomId, base, [k === 0 ? 1 : 0, k === 1 ? 1 : 0, k === 2 ? 1 : 0]);
@@ -166,12 +171,32 @@ export function splitByRooms(geometry: THREE.BufferGeometry, rooms: Room[]): Map
 }
 
 /**
+ * The metres one tile of a floor's texture spans along x and z, read off its
+ * texture coordinates, which the rebuild lays flat in tiles (`floor_uvs`).
+ */
+export function tileOf(geometry: THREE.BufferGeometry): [number, number] | undefined {
+  const position = geometry.getAttribute('position');
+  const uv = geometry.getAttribute('uv');
+  if (!uv) return undefined;
+  const span = (get: (i: number) => number) => {
+    let [lo, hi] = [Infinity, -Infinity];
+    for (let i = 0; i < position.count; i++) [lo, hi] = [Math.min(lo, get(i)), Math.max(hi, get(i))];
+    return hi - lo;
+  };
+  const [u, v] = [span((i) => uv.getX(i)), span((i) => uv.getY(i))];
+  if (u < 1e-6 || v < 1e-6) return undefined;
+  return [span((i) => position.getX(i)) / u, span((i) => position.getZ(i)) / v];
+}
+
+/**
  * Give every room its own part of the model's floors. A floor baked for a
  * room the manifest no longer has (an open plan cut into rooms afterwards),
  * and a zone laid on top of it (`floorzone-*`, the tiled part of a hall), are
- * replaced by one mesh per room, tagged with its `roomId`; a zone's pieces
- * are also tagged `zone`. Run before the materials are set up: each piece
- * gets a copy of its floor's material, so that each can change on its own.
+ * replaced by one mesh per room, tagged with its `roomId` and the size of
+ * its texture's tile (`tileM`), so that a new floor is laid on all of a
+ * room's pieces at one scale. Run before the materials are set up: each
+ * piece gets a copy of its floor's material, so that each can change on its
+ * own.
  */
 export function splitFloors(model: THREE.Object3D, rooms: Room[]): void {
   const known = new Set(rooms.map((r) => r.id));
@@ -179,7 +204,9 @@ export function splitFloors(model: THREE.Object3D, rooms: Room[]): void {
   model.traverse((node) => {
     if (!(node instanceof THREE.Mesh)) return;
     const roomId = node.userData.roomId;
-    if ((typeof roomId === 'string' && !known.has(roomId)) || node.name.startsWith('floorzone-')) whole.push(node);
+    if ((typeof roomId === 'string' && !known.has(roomId)) || node.name.startsWith('floorzone-')) {
+      whole.push(node);
+    }
   });
   model.updateMatrixWorld(true);
   for (const mesh of whole) {
@@ -187,7 +214,11 @@ export function splitFloors(model: THREE.Object3D, rooms: Room[]): void {
     if (!parent) continue;
     // Cut where the rooms are, in the model's space, then put back in the parent's.
     const placed = floatCopy(mesh.geometry).applyMatrix4(mesh.matrixWorld);
-    const pieces = splitByRooms(placed, rooms);
+    // A zone lies on the floor like a sheet: its 2 mm edge drew a line
+    // across a new floor laid over both.
+    const zone = mesh.name.startsWith('floorzone-');
+    const pieces = splitByRooms(placed, rooms, { sides: !zone });
+    const tileM = mesh.userData.tileM ?? tileOf(placed);
     placed.dispose();
     if (!pieces.size) continue;
     const back = parent.matrixWorld.clone().invert();
@@ -195,7 +226,7 @@ export function splitFloors(model: THREE.Object3D, rooms: Room[]): void {
     for (const [roomId, geometry] of pieces) {
       const piece = new THREE.Mesh(geometry.applyMatrix4(back), material.clone());
       piece.name = mesh.name;
-      piece.userData = { ...mesh.userData, roomId, zone: mesh.name.startsWith('floorzone-') };
+      piece.userData = { ...mesh.userData, roomId, tileM };
       parent.add(piece);
     }
     parent.remove(mesh);

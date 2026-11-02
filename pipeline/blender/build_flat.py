@@ -834,7 +834,7 @@ BLOCK_COLOURS = {"bed": "#e9e4dc", "sofa": "#8d9390", "tv": "#1b1c1e", "applianc
 FRONT_T, GAP, GRIP = 0.019, 0.003, 0.03  # front thickness, gap between fronts, grip channel
 
 #: Rounded edges, for the pieces that have them: (bevel width, segments).
-SOFTNESS = {"sofa": (0.06, 5), "bed": (0.025, 3), "air-con": (0.09, 10), "tv": (0.003, 1),
+SOFTNESS = {"bed": (0.025, 3), "air-con": (0.09, 10), "tv": (0.003, 1),
             "bed-frame": (0.004, 1)}
 
 Part = tuple[str, tuple[float, float, float, float, float, float]]
@@ -1205,13 +1205,6 @@ def finish_parts(finish: str, w: float, h: float, d: float, opts: dict) -> list[
         # platform as photographed (bed1-3), dark wood, its plinth set back.
         return [("wenge", (x0, x1, y0, y1, 0.03, h)),
                 ("wenge", (x0 + 0.05, x1 - 0.05, y0 + 0.05, y1 - 0.05, 0, 0.03))]
-    if finish == "sofa":
-        return [("boucle", (x0, x1, y0, y1, 0, 0.42)),
-                ("boucle", (x0, x1, y1 - 0.26, y1, 0.42, h)),
-                ("boucle", (x0, x0 + 0.24, y0, y1 - 0.26, 0.42, 0.62)),
-                ("boucle", (x1 - 0.24, x1, y0, y1 - 0.26, 0.42, 0.62)),
-                ("boucle", (x0 + 0.34, x0 + 0.8, y1 - 0.38, y1 - 0.24, 0.42, 0.7)),
-                ("boucle", (x1 - 0.8, x1 - 0.34, y1 - 0.38, y1 - 0.24, 0.42, 0.7))]
     if finish == "tv":
         return [("black", (x0, x1, y0, y0 + 0.012, 0, h)),
                 ("vent", (x0 + 0.08, x1 - 0.08, y0 + 0.012, y1, 0.08, h - 0.08))]
@@ -1393,6 +1386,102 @@ def stool(bm: bmesh.types.BMesh, w: float, h: float, d: float, slot, surfaces: d
     for face in wood:
         face.material_index = slot("beech")
     box_uvs(bm, wood, (0.03, 0.03, seat), surfaces["beech"].get("tile", (1.0, 1.0)))
+
+
+#: The sofa as photographed (sofa1-3): its back and arms one thick band of
+#: boucle at one height, round in plan where the back turns into the arms
+#: and at the arms' fronts, its top rolled over; a deep seat cushion on a
+#: base set back under it; two cushions leaning on the back. Metres: the
+#: arms' and the back's thickness, the radius of their top, of the corners
+#: in plan (the arms' fronts, where back meets arm, the back's outer
+#: corners), the base's and the cushion's top.
+SOFA_ARM, SOFA_BACK, SOFA_ROLL = 0.27, 0.25, 0.115
+SOFA_CORNERS = {"front": 0.11, "inner": 0.15, "back": 0.1}
+SOFA_BASE, SOFA_SEAT = 0.24, 0.45
+
+
+def rounded_prism(outline: list[tuple[float, float]], z0: float, z1: float,
+                  corners: list[float], top: float, bottom: float) -> bmesh.types.BMesh:
+    """
+    A prism on `outline` (counter-clockwise in plan) from z0 to z1, each
+    upright corner rounded to its radius in `corners` (0: left sharp), then
+    its top edge rolled over by `top` and its foot by `bottom`: a soft,
+    upholstered block. Round where it is round, flat where it is flat.
+    """
+    bm = bmesh.new()
+    low = [bm.verts.new((x, y, z0)) for x, y in outline]
+    high = [bm.verts.new((x, y, z1)) for x, y in outline]
+    bm.faces.new(high)
+    bm.faces.new(list(reversed(low)))
+    n = len(outline)
+    uprights = []
+    for i in range(n):
+        j = (i + 1) % n
+        bm.faces.new([low[i], low[j], high[j], high[i]])
+        uprights.append(bm.edges.get((low[i], high[i])))
+    # Largest first: a corner rounded small beside a large one is not clamped.
+    for radius in sorted({r for r in corners if r > 0}, reverse=True):
+        edges = [e for e, r in zip(uprights, corners, strict=True) if r == radius]
+        bmesh.ops.bevel(bm, geom=edges, offset=radius, segments=8, profile=0.5,
+                        affect="EDGES", clamp_overlap=True)
+    for z, radius, segments in ((z1, top, 8), (z0, bottom, 3)):
+        if radius <= 0:
+            continue
+        rim = [e for e in bm.edges
+               if all(abs(v.co.z - z) < 1e-6 for v in e.verts) and len(e.link_faces) == 2
+               and any(abs(f.normal.z) < 0.5 for f in e.link_faces)]
+        bmesh.ops.bevel(bm, geom=rim, offset=radius, segments=segments, profile=0.5,
+                        affect="EDGES", clamp_overlap=True)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    return bm
+
+
+def sofa(bm: bmesh.types.BMesh, w: float, h: float, d: float, slot, surfaces: dict) -> None:
+    """The sofa as photographed (SOFA_*): the wrap of back and arms, the
+    base and seat cushion between the arms, two cushions on the back."""
+    x0, x1, y0, y1 = -w / 2, w / 2, -d / 2, d / 2
+    a, b, c = SOFA_ARM, SOFA_BACK, SOFA_CORNERS
+    inside = y1 - b  # the back's face, where the seat meets it
+    wrap = rounded_prism(
+        [(x0, y0), (x0 + a, y0), (x0 + a, inside), (x1 - a, inside),
+         (x1 - a, y0), (x1, y0), (x1, y1), (x0, y1)],
+        0.0, h,
+        [c["front"], c["front"], c["inner"], c["inner"], c["front"], c["front"],
+         c["back"], c["back"]],
+        SOFA_ROLL, 0.02)
+    # Between the arms, tucked a little into them and into the back.
+    base = rounded_prism(
+        [(x0 + a - 0.02, y0 + 0.05), (x1 - a + 0.02, y0 + 0.05),
+         (x1 - a + 0.02, inside + 0.02), (x0 + a - 0.02, inside + 0.02)],
+        0.02, SOFA_BASE, [0.03] * 4, 0.03, 0.01)
+    seat = rounded_prism(
+        [(x0 + a + 0.004, y0 + 0.015), (x1 - a - 0.004, y0 + 0.015),
+         (x1 - a - 0.004, inside + 0.03), (x0 + a + 0.004, inside + 0.03)],
+        SOFA_BASE, SOFA_SEAT, [0.05] * 4, 0.07, 0.03)
+    parts = [wrap, base, seat]
+    # The two cushions: lying back against it, a little turned, as left.
+    for x, turn in ((-0.27, 7), (0.27, -5)):
+        # Flat lumbar cushions, as the photos have them.
+        pillow = rounded_prism([(-0.25, -0.05), (0.25, -0.05), (0.25, 0.05), (-0.25, 0.05)],
+                               -0.13, 0.13, [0.045] * 4, 0.045, 0.045)
+        bmesh.ops.transform(
+            pillow, verts=pillow.verts,
+            matrix=Matrix.Translation((x, inside - 0.1, SOFA_SEAT + 0.13))
+            @ Matrix.Rotation(math.radians(turn), 4, "Z")
+            @ Matrix.Rotation(math.radians(-18), 4, "X"))
+        parts.append(pillow)
+    tile = surfaces["boucle"].get("tile", (1.0, 1.0))
+    for part in parts:
+        mesh = bpy.data.meshes.new("sofa-part")
+        part.to_mesh(mesh)
+        part.free()
+        before = set(bm.faces)
+        bm.from_mesh(mesh)
+        bpy.data.meshes.remove(mesh)
+        faces = [f for f in bm.faces if f not in before]
+        for face in faces:
+            face.material_index, face.smooth = slot("boucle"), True
+        box_uvs(bm, faces, (w, d, h), tile)
 
 
 #: What hangs on a rail, from the left: (surface, length, turn in degrees,
@@ -1649,6 +1738,8 @@ def finished(item: dict, surfaces: dict) -> bpy.types.Object:
     opts = item.get("options") or {}
     if item["finish"] == "stool":
         stool(bm, w, h, d, slot, surfaces)
+    elif item["finish"] == "sofa":
+        sofa(bm, w, h, d, slot, surfaces)
     elif item["finish"] == "pendant":
         # A drum shade on a cable from the ceiling. Its light is baked per
         # vertex through the fabric (vertex_light), so its side is cut into
@@ -1683,6 +1774,8 @@ def finished(item: dict, surfaces: dict) -> bpy.types.Object:
         mesh.materials.append(surface_material(surface, surfaces[surface]))
     obj = bpy.data.objects.new(item["id"], mesh)
     bpy.context.collection.objects.link(obj)
+    if item["finish"] == "sofa":
+        mesh.set_sharp_from_angle(angle=math.radians(40))
     if item["finish"] == "pendant":
         mesh.shade_smooth()
         mesh.set_sharp_from_angle(angle=math.radians(40))
@@ -3008,6 +3101,10 @@ def main() -> None:
             obj["roomId"] = obj.name.removeprefix("floor-")
         elif obj.name.startswith("floorzone-"):
             floor_uvs(obj, spec["floors"][obj.name.removeprefix("floorzone-")]["tile"])
+            # Seen, but no shadow or bounce on the floor 2 mm beneath: that
+            # floor bakes lit as the room is, so a new floor laid over both
+            # (the viewer lays it on the zone too) is one light, no edge.
+            obj.visible_shadow = obj.visible_diffuse = obj.visible_glossy = False
         else:
             plain_uvs(obj)
     scratch = Path(spec["out"]["meta"]).parent
