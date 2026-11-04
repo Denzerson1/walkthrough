@@ -514,14 +514,23 @@ def rebuild(
     )
     scan = None
     if scan_file is not None:
-        loaded = roomplan_mod.load(scan_file)
+        # A balcony scanned with the flat is left out (`dropZones`).
+        loaded = roomplan_mod.without(roomplan_mod.load(scan_file), dressing.get("dropZones", []))
         room, items, floor_y = roomplan_mod.to_rooms(loaded)
+        # What the scan took for furniture and the dressing does not (`drop`),
+        # and what stands outside the flat (on a dropped balcony).
+        dressed = dressing.get("items", {})
+        items = [i for i in items if not dressed.get(i.id, {}).get("drop")
+                 and flat_geometry.point_in_polygon(i.box.center[0], i.box.center[2],
+                                                    room.floorPolygon)]
         manifest.rooms, manifest.items = [room], items
         scan = {
             "ceilings": flat_geometry.merge_ceilings(roomplan_mod.ceilings(loaded, floor_y)),
             "partitions": roomplan_mod.partitions(loaded, np.array(room.floorPolygon), floor_y),
             "zones": [(label, poly.tolist()) for label, poly in roomplan_mod.floor_zones(loaded)],
         }
+        rebuild_mod.add_walls(room, scan, dressing.get("partitions", []))
+        rebuild_mod.add_openings(room, scan, dressing.get("openings", []))
         if dressing.get("widen"):
             rebuild_mod.widen(room, items, scan, **dressing["widen"])
         # The viewer keeps a standing person's head under a slope.
@@ -541,6 +550,10 @@ def rebuild(
         raise typer.BadParameter(f"Unknown floor {floor!r}. Known: {', '.join(sorted(catalog))}")
     floors = {"main": rebuild_mod.catalog_floor(catalog[floor])}
     for name, entry in dressing.get("floors", {}).items():
+        if "catalog" in entry:  # where the photos give no floor to re-lay
+            floors[name] = rebuild_mod.catalog_floor(catalog[entry["catalog"]])
+            console.print(f"  floor {name}: {entry['catalog']}")
+            continue
         floors[name] = rebuild_mod.photo_floor(paths, name, entry)
         console.print(f"  floor {name}: re-laid from {entry['photo']}, {floors[name]['colour']}")
     spec = rebuild_mod.scene_spec(
@@ -574,6 +587,8 @@ def rebuild(
         manifest.assets.sunPath = [SunSample(**t) for t in meta.get("sunPath", [])]
         manifest.rooms[0].obstacles = [Obstacle(**o) for o in meta.get("obstacles", [])]
         _outside(paths, manifest, spec, dressing)
+        if scan is not None:
+            manifest.rooms[0] = rebuild_mod.with_partitions(manifest.rooms[0], scan["partitions"])
         (paths.work / SCANNED_ROOM).write_text(manifest.rooms[0].model_dump_json(indent=1))
         room_split.split(manifest, manifest.rooms[0], dressing.get("rooms", []))
         _listing(paths, manifest, dressing)

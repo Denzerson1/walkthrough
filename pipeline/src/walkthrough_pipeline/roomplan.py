@@ -65,6 +65,12 @@ SECTION_TYPES = {
 
 EYE_HEIGHT = 1.6
 
+#: How far a door may stand off the outline and still be in it: one further
+#: in stands in a partition (a flat's inner walls), on the one nearest it
+#: within ON_PARTITION_M.
+ON_OUTLINE_M = 0.2
+ON_PARTITION_M = 0.3
+
 
 class RoomPlanError(ValueError):
     pass
@@ -451,6 +457,49 @@ def floor_zones(scan: Scan) -> list[tuple[str, np.ndarray]]:
     return zones
 
 
+def without(scan: Scan, labels: list[str]) -> Scan:
+    """
+    The scan without the floor zones `labels` and what stands only in them
+    (a balcony scanned with the flat): their ceilings, and the walls, doors
+    and windows on no edge of a zone that stays. The walls between a dropped
+    zone and the rest stay, on the outline now. Furniture stays, so every
+    piece keeps its number (`to_rooms` counts them); what stands outside the
+    outline is the caller's to leave out.
+    """
+    if not labels:
+        return scan
+    zones = floor_zones(scan)
+    missing = set(labels) - {label for label, _ in zones}
+    if missing:
+        raise RoomPlanError(f"No floor zone {', '.join(sorted(missing))} in the scan")
+    gone = [poly for label, poly in zones if label in labels]
+    kept = [poly for label, poly in zones if label not in labels]
+
+    def in_gone(x: float, z: float) -> bool:
+        return (any(flat_geometry.point_in_polygon(x, z, g) for g in gone)
+                and not any(flat_geometry.point_in_polygon(x, z, k) for k in kept))
+
+    def on_edge(p: np.ndarray, polygons: list[np.ndarray]) -> bool:
+        return any(_distance_to_segment(p, k[i], k[(i + 1) % len(k)]) < ON_OUTLINE_M
+                   for k in polygons for i in range(len(k)))
+
+    elements = []
+    for e in scan.elements:
+        if e.kind == "floors":
+            label = e.identifier.split("_", 1)[1] if "_" in e.identifier else "Floor"
+            keep = label not in labels
+        elif e.kind == "ceilings":
+            keep = e.corners is None or not in_gone(*np.mean(e.corners, axis=0)[[0, 2]])
+        elif e.kind in SURFACE_KINDS:
+            at = e.centre[[0, 2]]
+            keep = on_edge(at, kept) or not (in_gone(*at) or on_edge(at, gone))
+        else:
+            keep = True
+        if keep:
+            elements.append(e)
+    return Scan(elements, scan.room_type)
+
+
 def ceilings(scan: Scan, floor_y: float) -> list[list[list[float]]]:
     """The ceiling pieces as 3D outlines above the floor: flat ones and slopes."""
     return [
@@ -464,8 +513,10 @@ def ceilings(scan: Scan, floor_y: float) -> list[list[list[float]]]:
 def partitions(scan: Scan, polygon: np.ndarray, floor_y: float) -> list[dict]:
     """
     Walls that are not on the room's outline: partitions inside an open plan,
-    such as the sides of a wardrobe niche. The outline's own walls come from
-    the polygon; these are what the scan saw besides them.
+    such as the sides of a wardrobe niche, or a flat's inner walls. The
+    outline's own walls come from the polygon; these are what the scan saw
+    besides them, each with the doors standing in it (`openings`, as the
+    spec has them: centre `offset` from its start, `bottom` 0).
     """
     out = []
     for wall, (a, b) in zip(scan.of("walls"), wall_segments(scan), strict=True):
@@ -479,8 +530,38 @@ def partitions(scan: Scan, polygon: np.ndarray, floor_y: float) -> list[dict]:
                 "start": [round(float(v), 4) for v in a],
                 "end": [round(float(v), 4) for v in b],
                 "height": round(float(wall.centre[1] + wall.dimensions[1] / 2 - floor_y), 3),
+                "openings": [],
             })
+    outline = [Wall(start=tuple(polygon[i]), end=tuple(polygon[(i + 1) % len(polygon)]),
+                    height=1.0) for i in range(len(polygon))]
+    for e in (*scan.of("doors"), *scan.of("openings")):
+        at = e.centre[[0, 2]]
+        if _nearest_wall(outline, at)[2] <= ON_OUTLINE_M:
+            continue  # the outline's: to_rooms hangs it there
+        place_door(out, at, float(e.dimensions[0]), float(e.dimensions[1]))
     return out
+
+
+def place_door(partitions: list[dict], at, width: float, height: float, **hung) -> None:
+    """
+    A door centred at plan point `at` hung in the partition it stands in;
+    `hung` (how: `hinge`, `swing`) goes along with it. Where the scan has a
+    door there already, only `hung` is taken. Raises when no partition is
+    within ON_PARTITION_M.
+    """
+    walls = [Wall(start=tuple(p["start"]), end=tuple(p["end"]), height=p["height"])
+             for p in partitions]
+    index, offset, off = _nearest_wall(walls, np.asarray(at, dtype=float))
+    if not walls or off > ON_PARTITION_M:
+        raise RoomPlanError(f"No partition within {ON_PARTITION_M} m of the door at {list(at)}")
+    for door in partitions[index]["openings"]:
+        if abs(door["offset"] - offset) < (door["width"] + width) / 2:
+            door.update(hung)  # the scanned door there: how it is hung
+            return
+    partitions[index]["openings"].append({
+        "type": "door", "offset": round(offset, 3), "width": round(width, 3),
+        "height": round(height, 3), "bottom": 0.0, **hung,
+    })
 
 
 def _distance_to_segment(p: np.ndarray, a, b) -> float:
@@ -564,7 +645,9 @@ def to_rooms(
 
     openings: list[Opening] = []
     for e in (*scan.of("doors"), *scan.of("windows"), *scan.of("openings")):
-        index, offset = _nearest_wall(walls, e.centre[[0, 2]])
+        index, offset, off = _nearest_wall(walls, e.centre[[0, 2]])
+        if off > ON_OUTLINE_M and e.kind != "windows":
+            continue  # in a partition: partitions() hangs it there
         openings.append(
             Opening(
                 # An open doorway (RoomPlan "opening") is walkable, so it is a door.
@@ -625,8 +708,9 @@ def to_rooms(
     return room, items, floor_y
 
 
-def _nearest_wall(walls: list[Wall], point: np.ndarray) -> tuple[int, float]:
-    """Index of the wall nearest `point`, and the distance along it from its start."""
+def _nearest_wall(walls: list[Wall], point: np.ndarray) -> tuple[int, float, float]:
+    """Index of the wall nearest `point`, the distance along it from its
+    start, and how far off it the point is."""
     best, best_d, best_offset = 0, math.inf, 0.0
     for i, w in enumerate(walls):
         a, b = np.array(w.start), np.array(w.end)
@@ -638,5 +722,5 @@ def _nearest_wall(walls: list[Wall], point: np.ndarray) -> tuple[int, float]:
         d = float(np.linalg.norm(point - (a + t * ab)))
         if d < best_d:
             best, best_d, best_offset = i, d, t * length
-    return best, best_offset
+    return best, best_offset, best_d
 

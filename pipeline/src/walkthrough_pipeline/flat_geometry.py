@@ -545,6 +545,13 @@ def join_partitions(partitions: list[dict], thickness: float) -> list[dict]:
                 along, off = rx * dx + rz * dz, rx * nx + rz * nz
                 if -thickness <= along <= length + thickness and abs(off) <= thickness * 0.6:
                     p[key] = [p[key][0] - nx * off, p[key][1] - nz * off]
+    # Its doors stay where they stood: offsets count from the moved start.
+    for p, before in zip(out, partitions, strict=True):
+        if p.get("openings"):
+            (dx, dz), _, _ = wall_frame(p["start"], p["end"])
+            shift = ((before["start"][0] - p["start"][0]) * dx
+                     + (before["start"][1] - p["start"][1]) * dz)
+            p["openings"] = [dict(o, offset=o["offset"] + shift) for o in p["openings"]]
     return out
 
 

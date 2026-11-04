@@ -29,8 +29,8 @@ from pathlib import Path
 
 import numpy as np
 
-from . import flat_geometry, photo_texture, site
-from .manifest import Manifest, ManifestItem, Room
+from . import flat_geometry, photo_texture, roomplan, site
+from .manifest import Manifest, ManifestItem, Opening, Room, Wall
 from .paths import ProjectPaths, repo_root
 
 DEFAULT_BLENDER = Path("/opt/blender/blender")
@@ -82,17 +82,21 @@ SURFACES: dict[str, tuple[str, float, str | None]] = {
 }
 
 
-def surfaces(paths: ProjectPaths, photos: dict | None = None) -> dict[str, dict]:
+def surfaces(paths: ProjectPaths, photos: dict | None = None,
+             palette: dict | None = None) -> dict[str, dict]:
     """
     The surfaces as build_flat.py takes them, textures written into the
     scene folder. A surface the dressing gives a photo patch for is cut from
     the customer's photo of it (photo_texture.photo_patch); the rest get a
     generated texture or a plain colour. `tile` is the metres one texture
-    repeat spans.
+    repeat spans. The dressing's `palette` adds surfaces of the flat's own
+    (name: [colour, roughness, generated texture or null]), which a piece's
+    `options.surfaces` draws its parts in.
     """
     photos = photos or {}
     out = {}
-    for i, (name, (colour, roughness, kind)) in enumerate(SURFACES.items()):
+    table = {**SURFACES, **{k: tuple(v) for k, v in (palette or {}).items()}}
+    for i, (name, (colour, roughness, kind)) in enumerate(table.items()):
         texture, tile = None, [1.0, 1.0]
         path = paths.scene / f"surface-{name}.jpg"
         if name in photos:
@@ -271,6 +275,57 @@ def box_from_corners(lo, hi, front) -> tuple[list[float], list[float]]:
     centre = [(a + b) / 2 for a, b in zip(lo, hi, strict=True)]
     dx, dy, dz = (abs(b - a) for a, b in zip(lo, hi, strict=True))
     return centre, [dz, dy, dx] if abs(front[0]) > abs(front[1]) else [dx, dy, dz]
+
+
+def add_walls(room: Room, scan: dict, walls: list[dict]) -> None:
+    """
+    The dressing's `partitions`: inner walls the scan missed (one beside an
+    open door can come out as no wall at all), `start` to `end` in plan,
+    floor to ceiling, as the scanned ones are.
+    """
+    height = max((w.height for w in room.walls), default=2.5)
+    for wall in walls:
+        scan["partitions"].append({"start": list(wall["start"]), "end": list(wall["end"]),
+                                   "height": round(height, 3), "openings": []})
+
+
+def add_openings(room: Room, scan: dict, openings: list[dict]) -> None:
+    """
+    The dressing's `openings`: doors and windows the scan missed, each
+    centred `at` a plan point, `width` and `height` in metres (a window's
+    `sill` above the floor). A door on the outline is the outline's; one
+    further in hangs in the partition it stands in, with how it is hung
+    (`hinge`: "start" or "end" of the wall, `swing`: 1 or -1, the side of
+    the wall it opens to).
+    """
+    for o in openings:
+        at = np.asarray(o["at"], dtype=float)
+        index, offset, off = roomplan._nearest_wall(room.walls, at)
+        if o["type"] == "window" or off <= roomplan.ON_OUTLINE_M:
+            if off > roomplan.ON_OUTLINE_M:
+                raise ValueError(f"The window at {o['at']} is not on the outline")
+            room.openings.append(Opening(
+                type=o["type"], wallIndex=index, offset=round(offset, 3), width=o["width"],
+                height=o["height"], sill=o.get("sill", 0.0 if o["type"] == "door" else None)))
+        else:
+            hung = {k: o[k] for k in ("hinge", "swing") if k in o}
+            roomplan.place_door(scan["partitions"], at, o["width"], o["height"], **hung)
+
+
+def with_partitions(room: Room, partitions: list[dict]) -> Room:
+    """
+    The room with its partitions as walls too, their doors as its openings:
+    the walk then stops at a flat's inner walls but for their doorways, and
+    the rooms the dressing cuts it into each keep the walls along their
+    edges (room_split).
+    """
+    walls, openings = list(room.walls), list(room.openings)
+    for p in partitions:
+        walls.append(Wall(start=tuple(p["start"]), end=tuple(p["end"]), height=p["height"]))
+        openings += [Opening(type="door", wallIndex=len(walls) - 1, offset=o["offset"],
+                             width=o["width"], height=o["height"], sill=o["bottom"])
+                     for o in p.get("openings", [])]
+    return room.model_copy(update={"walls": walls, "openings": openings})
 
 
 def widen(room: Room, items: list[ManifestItem], scan: dict, at: float, by: float) -> None:
@@ -525,7 +580,7 @@ def scene_spec(
         "strips": dressing.get("strips", []),
         "outside": outside_view(paths, wanted),
         "site": surroundings,
-        "surfaces": surfaces(paths, dressing.get("surfaces")),
+        "surfaces": surfaces(paths, dressing.get("surfaces"), dressing.get("palette")),
         "sun": light,
         "suns": suns,
         "sun_path": path,

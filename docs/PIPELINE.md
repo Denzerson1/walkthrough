@@ -344,6 +344,35 @@ cannot see; placed by hand from the capture photos):
 - `doors`: how each door is hung, by the index of its wall: `latch`
   (`start` or `end` of the wall: the handle's side) and `frame` (false: a
   concealed frame, the leaf flush with the wall in a 4 mm dark gap).
+- **A flat of rooms** (flat-02) rather than an open plan: walls inside the
+  outline are partitions, 10 cm, built both sides with skirting. A scanned
+  door more than 20 cm off the outline hangs in the partition it stands in
+  (within 30 cm), as a doorway: lined reveals, an architrave on both faces,
+  the leaf standing open square to the wall. The manifest's room gets the
+  partitions as walls with their doors, so the walk stops at them but for
+  the doorways, and the dressing's `rooms` each keep the ones along their
+  edges (draw their outlines on the partitions' centre lines).
+  - `dropZones`: floor zones scanned with the flat that are not part of it
+    (a balcony): their walls, windows and ceiling go, the wall to them
+    stays as outline, and the pieces standing in them are left out. The
+    pieces keep the numbers the whole scan gives them.
+  - `partitions`: inner walls the scan missed, `start` to `end`.
+  - `openings`: doors and windows the scan missed, centred `at` a plan
+    point, `width`, `height` (a window's `sill`). A door off the outline
+    hangs in its partition, `hinge` (`start`/`end`) and `swing` (1/-1: the
+    side its leaf opens to); one where the scan has a door already only
+    hangs that one.
+- `palette`: surfaces of the flat's own (`name: [colour, roughness,
+  texture kind or null]`); a piece's `options.surfaces` maps its finish's
+  surfaces onto them (`{"gloss": "kitchen-green", "stone": "oak-top"}`).
+- `floors` may name a catalog floor (`{"catalog": "oak-plank-natural"}`)
+  where no photo can be re-laid (flat-02's: a slatted wall in every shot
+  threw the plank fit off).
+- An item's `"drop": true` leaves out what the scan took for furniture
+  (a step stool, a basin counted twice). Finishes for flat-02: `curtain`
+  (cloth in folds every `options.pitch` m on a rod, in `options.surface`;
+  lit through, per vertex, and casting no shadow in the bake, so drawn
+  sheers do not darken the room), `wc` (wall-hung) and `washer`.
 - `hero`: the preview's view, also the walkthrough's start.
 - `widen`: a strip `by` metres deep let into the scanned plan at z = `at`,
   where the owner knows the flat is roomier than the scan: walls, slopes

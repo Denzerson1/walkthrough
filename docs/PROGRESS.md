@@ -7,6 +7,50 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-11-04 — flat-02: a flat of rooms
+
+A second flat, from the owner's Polycam scan (`3.11.2026.glb`) and 89 HEIC
+photos taken that night (in `data/projects/flat-02/input`, git-ignored; the
+photos converted to JPEG without their metadata, which held no location).
+The owner's word: no people, fitting furniture, nothing lying on the floor.
+
+- **Inner walls with doors** (`roomplan.py`, `rebuild.py`, `build_flat.py`,
+  tested in `test_inner_walls.py`): flat-01 was an open plan; flat-02 has
+  rooms. A scanned door off the outline used to be pulled onto the nearest
+  outer wall (the bathroom's door came out as a second front door); now it
+  hangs in the partition it stands in, built as a doorway with lined
+  reveals, architraves both sides and the leaf standing open. Partitions
+  get skirting both sides. The manifest's room gets the partitions as walls
+  with their doors, so the walk stops at inner walls but for the doorways,
+  and each room the dressing draws keeps the walls along its edges.
+- **What the scan missed, from the photos** (dressing): the balcony behind
+  the living room's glass door left out (`dropZones`: its walls and ceiling
+  go, the pieces on it too; pieces keep their scan numbers); the study's
+  wall to the hall (`partitions`); four doors, the balcony door's glass and
+  the window behind the sofa (`openings`).
+- **Colours of its own** (`palette`, a piece's `options.surfaces`): the
+  kitchen's dark green fronts on an oak worktop, the hall's blue built-ins,
+  the bathroom's sage. **Furniture**: ABO models (CC BY 4.0, credit
+  "Amazon.com") picked by eye against the photos: the grey corner sofa, the
+  black faux-leather dining chairs, the oak pedestal table, green velvet
+  tub chairs, the oak and black-metal coffee table, an upholstered bed,
+  white three-drawer nightstands, desks and office chairs. New finishes:
+  `curtain` (drawn as photographed; lit through, casting no shadow in the
+  bake), a wall-hung `wc`, a `washer`.
+- **Not like flat-01:** the floors are catalog floors (oak plank, grey
+  stone in the bathroom): re-laying from the photos failed, the slatted
+  oak screen in every shot read as planks. The photos are at night and
+  carry no location, so there is no view out (the curtains are drawn),
+  no real sun or neighbourhood, and one daylight bake, so no time slider.
+- Tested: pipeline pytest 210 (4 skipped; 5 new in `test_inner_walls.py`),
+  vitest 152, ruff and eslint clean. Two full bakes (2048 samples, 36 and
+  38 min); in the exported site every room was looked at, and walking was
+  tried at each door: through the bathroom, bedroom, small bedroom and study
+  doors and the passage to the living room, stopped at the walls beside
+  them. The first bake showed the window sills through the curtains' folds
+  as a row of dots; the curtains now hang 5 cm off the wall. Not checked
+  on a phone.
+
 ## 2026-11-02 — The sofa as photographed; one floor in the hall
 
 - **The sofa** (`sofa()` in `build_flat.py`, from sofa1-3): it was boxes

@@ -44,6 +44,7 @@ from flat_geometry import (  # noqa: E402  (standard library only, so importable
 
 SLAB_T = 0.2  # floor and ceiling slab thickness, so no light leaks at edges
 PARTITION_T = 0.1
+LEAF_T, DOOR_LINING = 0.04, 0.02  # an inner door's leaf; its reveals' lining
 SKIRTING_H, SKIRTING_D = 0.08, 0.012
 TRIM_W, TRIM_D = 0.07, 0.015  # door architrave
 FRAME_W, FRAME_D = 0.05, 0.07  # window frame
@@ -248,13 +249,21 @@ def build_room(b: Builder, room: dict, skylights: list[dict]) -> list[dict]:
                        start if u0 < 1e-6 else 0.0, end if u1 > length - 1e-6 else 0.0)
         skirting(b, wall, [o for o in openings if o["type"] == "door"], length)
 
+    t = PARTITION_T / 2
     for part in join_partitions(room.get("partitions", []), PARTITION_T):
-        wall = {"start": part["start"], "end": part["end"], "openings": []}
+        wall = {"start": part["start"], "end": part["end"], "openings": part.get("openings", [])}
         _, _, length = wall_frame(wall["start"], wall["end"])
         profile = (wall_profile(wall["start"], wall["end"], ceilings, h) if ceilings
                    else [(0.0, h), (length, h)])
-        for u0, u1, y0, t0, t1 in wall_pieces(length, profile, []):
-            wall_prism(b, "wall", wall, u0, u1, y0, t0, t1, -PARTITION_T / 2, PARTITION_T / 2)
+        spans = opening_spans(wall, h)
+        for u0, u1, y0, t0, t1 in wall_pieces(length, profile, spans):
+            wall_prism(b, "wall", wall, u0, u1, y0, t0, t1, -t, t)
+        doors = sorted(wall["openings"], key=lambda o: o["offset"])
+        for o, (lo, hi, _, top) in zip(doors, spans, strict=True):
+            doorway(b, wall, lo, hi, top, o.get("hinge", "start"), o.get("swing", 1))
+        # A flat's inner walls are seen from both sides.
+        skirting(b, wall, doors, length, -t - SKIRTING_D, -t)
+        skirting(b, wall, doors, length, t, t + SKIRTING_D)
 
     for sk in skylights:
         roof_window(b, sk)
@@ -737,6 +746,41 @@ def door(b: Builder, wall: dict, lo: float, hi: float, top: float, framed: bool 
     wall_box(b, "trim", wall, lo - TRIM_W, hi + TRIM_W, top, top + TRIM_W, -TRIM_D, 0)
 
 
+def doorway(b: Builder, wall: dict, lo: float, hi: float, top: float, hinge: str = "start",
+            swing: int = 1) -> None:
+    """
+    A doorway in a partition (an inner wall, centred on its line), as the
+    flat's are photographed: lined reveals, an architrave on both faces, and
+    its leaf standing open square to the wall on the `swing` side (1: the
+    side the wall's normal points to), hinged at its `hinge` end ("start" or
+    "end" of the wall), a lever handle on each face by its free edge.
+    """
+    t, g = PARTITION_T / 2, DOOR_LINING
+    wall_box(b, "trim", wall, lo, lo + g, 0, top, -t, t)
+    wall_box(b, "trim", wall, hi - g, hi, 0, top, -t, t)
+    wall_box(b, "trim", wall, lo + g, hi - g, top - g, top, -t, t)
+    # Sides stop where the head starts: overlapping coplanar boxes render black.
+    for v0, v1 in ((-t - TRIM_D, -t), (t, t + TRIM_D)):
+        wall_box(b, "trim", wall, lo - TRIM_W, lo, 0, top, v0, v1)
+        wall_box(b, "trim", wall, hi, hi + TRIM_W, 0, top, v0, v1)
+        wall_box(b, "trim", wall, lo - TRIM_W, hi + TRIM_W, top, top + TRIM_W, v0, v1)
+    width = hi - lo - 2 * g
+    u = lo + g + 0.002 if hinge == "start" else hi - g - 0.002 - LEAF_T
+    # Clear of the architrave on its face, so no two faces share a plane.
+    near = t + TRIM_D + 0.002
+    v0, v1 = (near, near + width) if swing > 0 else (-near - width, -near)
+    wall_box(b, "trim", wall, u, u + LEAF_T, 0.008, top - g - 0.004, v0, v1)
+    # The lever points back towards the hinges, along the leaf.
+    free, back = (v1 - 0.07, -1) if swing > 0 else (v0 + 0.07, 1)
+    for out in (-1, 1):
+        face = u if out < 0 else u + LEAF_T
+        neck = sorted((face, face + out * 0.05))
+        wall_box(b, "steel", wall, *neck, 1.04, 1.06, free - 0.01, free + 0.01)
+        tip = sorted((neck[0], neck[0] - 0.016) if out < 0 else (neck[1], neck[1] + 0.016))
+        wall_box(b, "steel", wall, *tip, 1.04, 1.06,
+                 *sorted((free - 0.01 * back, free + 0.14 * back)))
+
+
 def window(b: Builder, wall: dict, lo: float, hi: float, bottom: float, top: float) -> None:
     v0, v1 = WALL_T / 2 - FRAME_D / 2, WALL_T / 2 + FRAME_D / 2
     wall_box(b, "trim", wall, lo, lo + FRAME_W, bottom, top, v0, v1)
@@ -750,16 +794,18 @@ def window(b: Builder, wall: dict, lo: float, hi: float, bottom: float, top: flo
         wall_box(b, "trim", wall, lo - 0.03, hi + 0.03, bottom - 0.03, bottom, -0.04, WALL_T / 2)
 
 
-def skirting(b: Builder, wall: dict, doors: list[dict], length: float) -> None:
+def skirting(b: Builder, wall: dict, doors: list[dict], length: float,
+             v0: float = -SKIRTING_D, v1: float = 0.0) -> None:
+    """Skirting along the wall's face from `v0` to `v1` (the room side), broken at its doors."""
     u = 0.0
     for o in doors:
         trim = TRIM_W if o.get("frame", True) else 0.0
         lo = max(0.0, o["offset"] - o["width"] / 2 - trim)
         if lo > u:
-            wall_box(b, "trim", wall, u, lo, 0, SKIRTING_H, -SKIRTING_D, 0)
+            wall_box(b, "trim", wall, u, lo, 0, SKIRTING_H, v0, v1)
         u = o["offset"] + o["width"] / 2 + trim
     if u < length:
-        wall_box(b, "trim", wall, u, length, 0, SKIRTING_H, -SKIRTING_D, 0)
+        wall_box(b, "trim", wall, u, length, 0, SKIRTING_H, v0, v1)
 
 
 def mark_unseen(obj: bpy.types.Object, rooms: list[dict]) -> None:
@@ -835,7 +881,7 @@ FRONT_T, GAP, GRIP = 0.019, 0.003, 0.03  # front thickness, gap between fronts, 
 
 #: Rounded edges, for the pieces that have them: (bevel width, segments).
 SOFTNESS = {"bed": (0.025, 3), "air-con": (0.09, 10), "tv": (0.003, 1),
-            "bed-frame": (0.004, 1)}
+            "bed-frame": (0.004, 1), "wc": (0.1, 6), "washer": (0.012, 2)}
 
 Part = tuple[str, tuple[float, float, float, float, float, float]]
 
@@ -1208,6 +1254,21 @@ def finish_parts(finish: str, w: float, h: float, d: float, opts: dict) -> list[
     if finish == "tv":
         return [("black", (x0, x1, y0, y0 + 0.012, 0, h)),
                 ("vent", (x0 + 0.08, x1 - 0.08, y0 + 0.012, y1, 0.08, h - 0.08))]
+    if finish == "wc":
+        # Wall-hung, as photographed: the bowl off the floor, rounded by the
+        # bevel (SOFTNESS), its seat a hair proud, the flush plate on the wall.
+        foot = 0.22
+        return [("basin", (-0.18, 0.18, y0, y1 - 0.02, foot, h - 0.03)),
+                ("basin", (-0.18, 0.18, y0 - 0.005, y1 - 0.02, h - 0.03, h)),
+                ("steel", (-0.12, 0.12, y1 - 0.02, y1, 0.85, 1.0))]
+    if finish == "washer":
+        # A front loader: white body, the round door seen as its dark glass
+        # behind a steel rim, the control strip along the top.
+        cz, r = h * 0.45, min(w, h) * 0.25
+        return [("white", (x0, x1, y0 + 0.01, y1, 0, h)),
+                ("steel", (-r - 0.03, r + 0.03, y0, y0 + 0.012, cz - r - 0.03, cz + r + 0.03)),
+                ("black", (-r, r, y0 - 0.006, y0 + 0.01, cz - r, cz + r)),
+                ("alu", (x0 + 0.02, x1 - 0.02, y0, y0 + 0.012, h - 0.12, h - 0.02))]
     raise ValueError(f"Unknown finish {finish!r}")
 
 
@@ -1484,6 +1545,39 @@ def sofa(bm: bmesh.types.BMesh, w: float, h: float, d: float, slot, surfaces: di
         box_uvs(bm, faces, (w, d, h), tile)
 
 
+def curtain(bm: bmesh.types.BMesh, w: float, h: float, d: float, slot, surface: str,
+            pitch: float) -> None:
+    """
+    A curtain on its rail, drawn across `w`: the cloth in soft vertical
+    folds every `pitch` metres, deeper towards the hem, 5 mm thick (one
+    sheet bakes black on its back), hanging from just under the rail to a
+    centimetre off the floor; the rail a steel rod across the top.
+    """
+    amp = max(0.01, min(d / 2 - 0.012, 0.04))
+    across = max(2, round(w / pitch)) * 8
+    rows = 10
+    grid = []
+    for j in range(rows + 1):
+        z = 0.01 + (h - 0.06) * j / rows
+        deep = amp * (1.25 - 0.35 * j / rows)
+        grid.append([bm.verts.new((-w / 2 + w * i / across,
+                                   deep * math.sin(2 * math.pi * (w * i / across) / pitch), z))
+                     for i in range(across + 1)])
+    faces = [bm.faces.new((grid[j][i], grid[j][i + 1], grid[j + 1][i + 1], grid[j + 1][i]))
+             for j in range(rows) for i in range(across)]
+    bmesh.ops.solidify(bm, geom=faces, thickness=0.005)
+    for face in bm.faces:
+        face.material_index = slot(surface)
+    rod = bmesh.ops.create_cone(bm, cap_ends=True, segments=12, radius1=0.009, radius2=0.009,
+                                depth=w)
+    bmesh.ops.rotate(bm, verts=rod["verts"], cent=(0, 0, 0),
+                     matrix=Matrix.Rotation(math.radians(90), 3, "Y"))
+    bmesh.ops.translate(bm, verts=rod["verts"], vec=(0, 0, h - 0.02))
+    for face in {f for v in rod["verts"] for f in v.link_faces}:
+        face.material_index = slot("steel")
+        face.smooth = True
+
+
 #: What hangs on a rail, from the left: (surface, length, turn in degrees,
 #: shift along the rail as a share of it). Facing out and fanned a little,
 #: as the owner's open wardrobe has them (garderobe1-3: the burgundy leather
@@ -1736,7 +1830,9 @@ def finished(item: dict, surfaces: dict) -> bpy.types.Object:
         return slots.index(surface)
 
     opts = item.get("options") or {}
-    if item["finish"] == "stool":
+    if item["finish"] == "curtain":
+        curtain(bm, w, h, d, slot, opts.get("surface", "sheer"), opts.get("pitch", 0.11))
+    elif item["finish"] == "stool":
         stool(bm, w, h, d, slot, surfaces)
     elif item["finish"] == "sofa":
         sofa(bm, w, h, d, slot, surfaces)
@@ -1756,7 +1852,11 @@ def finished(item: dict, surfaces: dict) -> bpy.types.Object:
         for face in bm.faces:
             face.material_index = slot("shade")
     else:
+        # A piece in other colours than the finish's own: `surfaces` names
+        # the dressing's palette entry each of its surfaces is drawn in.
+        remap = opts.get("surfaces", {})
         for surface, (px0, px1, py0, py1, pz0, pz1) in finish_parts(item["finish"], w, h, d, opts):
+            surface = remap.get(surface, surface)
             cube = bmesh.ops.create_cube(bm, size=1.0)
             size = (px1 - px0, py1 - py0, pz1 - pz0)
             bmesh.ops.scale(bm, verts=cube["verts"], vec=size)
@@ -1776,6 +1876,14 @@ def finished(item: dict, surfaces: dict) -> bpy.types.Object:
     bpy.context.collection.objects.link(obj)
     if item["finish"] == "sofa":
         mesh.set_sharp_from_angle(angle=math.radians(40))
+    if item["finish"] == "curtain":
+        # Lit per vertex through the fabric, as the pendant's shade. It lets
+        # the window's light into the room: in the bake it casts no shadow.
+        mesh.shade_smooth()
+        plain_uvs(obj)
+        VERTEX_LIT.add(obj.name)
+        TRANSLUCENT.add(obj.name)
+        obj.visible_shadow = False
     if item["finish"] == "pendant":
         mesh.shade_smooth()
         mesh.set_sharp_from_angle(angle=math.radians(40))
