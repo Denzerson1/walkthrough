@@ -23,9 +23,9 @@ from mathutils.bvhtree import BVHTree
 from mathutils.geometry import barycentric_transform
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src" / "walkthrough_pipeline"))
+import flat_geometry  # noqa: E402
 from flat_geometry import (  # noqa: E402  (standard library only, so importable here)
     WALL_T,
-    atlas_cells,
     convex_hull,
     grow,
     is_air,
@@ -276,7 +276,8 @@ def build_room(b: Builder, room: dict, skylights: list[dict]) -> list[dict]:
                 window(b, wall, lo, hi, bottom, top, glass=False)
                 wall_box(b, "trim", wall, lo, hi, -SLAB_T, 0.003, 0, WALL_T)
             elif o["type"] == "door":
-                door(b, wall, lo, hi, top, o.get("frame", True), o.get("latch", "end"))
+                door(b, wall, lo, hi, top, o.get("frame", True), o.get("latch", "end"),
+                     o.get("depth"))
             else:
                 window(b, wall, lo, hi, bottom, top)
                 (dx, dz), (nx, nz), _ = wall_frame(wall["start"], wall["end"])
@@ -297,9 +298,17 @@ def build_room(b: Builder, room: dict, skylights: list[dict]) -> list[dict]:
                        start if u0 < 1e-6 else 0.0, end if u1 > length - 1e-6 else 0.0)
         skirting(b, wall, [o for o in openings if o["type"] == "door"], length)
 
-    t = PARTITION_T / 2
-    for part in join_partitions(room.get("partitions", []), PARTITION_T):
-        wall = {"start": part["start"], "end": part["end"], "openings": part.get("openings", [])}
+    parts = room.get("partitions", [])
+    # A floor plan's walls (each with its thickness) already meet exactly;
+    # joined, the small bedroom's 32 cm wall was pulled onto the 25 cm one
+    # beside it and both ran 3.5 cm askew.
+    if not all("thickness" in p for p in parts):
+        parts = join_partitions(parts, PARTITION_T)
+    for part in parts:
+        # As thick as drawn on a floor plan (25 cm of brick, 13 of plasterboard).
+        t = part.get("thickness", PARTITION_T) / 2
+        wall = {"start": part["start"], "end": part["end"], "openings": part.get("openings", []),
+                "thickness": 2 * t}
         _, _, length = wall_frame(wall["start"], wall["end"])
         profile = (wall_profile(wall["start"], wall["end"], ceilings, h) if ceilings
                    else [(0.0, h), (length, h)])
@@ -308,7 +317,8 @@ def build_room(b: Builder, room: dict, skylights: list[dict]) -> list[dict]:
             wall_prism(b, "wall", wall, u0, u1, y0, t0, t1, -t, t)
         doors = sorted(wall["openings"], key=lambda o: o["offset"])
         for o, (lo, hi, _, top) in zip(doors, spans, strict=True):
-            doorway(b, wall, lo, hi, top, o.get("hinge", "start"), o.get("swing", 1))
+            doorway(b, wall, lo, hi, top, o.get("hinge", "start"), o.get("swing", 1),
+                    o.get("leaf", True), o.get("frame", True))
         # A flat's inner walls are seen from both sides.
         skirting(b, wall, doors, length, -t - SKIRTING_D, -t)
         skirting(b, wall, doors, length, t, t + SKIRTING_D)
@@ -755,14 +765,16 @@ def bake_neighbourhood(objects: list[bpy.types.Object], label: str,
 
 
 def door(b: Builder, wall: dict, lo: float, hi: float, top: float, framed: bool = True,
-         latch: str = "end") -> None:
+         latch: str = "end", depth: float | None = None) -> None:
     """
     A door in the wall from lo to hi: its leaf, the handle at the `latch`
     end of the wall ("start" or "end"), and either an architrave round it
     (`framed`) or, for a concealed-frame door, the leaf flush with the wall
-    and only a 4 mm dark shadow gap round it.
+    and only a 4 mm dark shadow gap round it. The leaf stands `depth` into
+    the wall (default its middle): a flat's front door hangs near the hall's
+    face, not halfway into a 43 cm outer wall.
     """
-    mid = WALL_T / 2
+    mid = WALL_T / 2 if depth is None else depth
     if framed:
         face = mid - 0.02
         wall_box(b, "trim", wall, lo + 0.005, hi - 0.005, 0, top - 0.005, face, mid + 0.02)
@@ -795,23 +807,27 @@ def door(b: Builder, wall: dict, lo: float, hi: float, top: float, framed: bool 
 
 
 def doorway(b: Builder, wall: dict, lo: float, hi: float, top: float, hinge: str = "start",
-            swing: int = 1) -> None:
+            swing: int = 1, leaf: bool = True, framed: bool = True) -> None:
     """
     A doorway in a partition (an inner wall, centred on its line), as the
     flat's are photographed: lined reveals, an architrave on both faces, and
     its leaf standing open square to the wall on the `swing` side (1: the
     side the wall's normal points to), hinged at its `hinge` end ("start" or
-    "end" of the wall), a lever handle on each face by its free edge.
+    "end" of the wall), a lever handle on each face by its free edge. A
+    passage without a door has no `leaf`; one cased in oak above has no
+    architrave (`framed`).
     """
-    t, g = PARTITION_T / 2, DOOR_LINING
+    t, g = wall.get("thickness", PARTITION_T) / 2, DOOR_LINING
     wall_box(b, "trim", wall, lo, lo + g, 0, top, -t, t)
     wall_box(b, "trim", wall, hi - g, hi, 0, top, -t, t)
     wall_box(b, "trim", wall, lo + g, hi - g, top - g, top, -t, t)
     # Sides stop where the head starts: overlapping coplanar boxes render black.
-    for v0, v1 in ((-t - TRIM_D, -t), (t, t + TRIM_D)):
+    for v0, v1 in ((-t - TRIM_D, -t), (t, t + TRIM_D)) if framed else ():
         wall_box(b, "trim", wall, lo - TRIM_W, lo, 0, top, v0, v1)
         wall_box(b, "trim", wall, hi, hi + TRIM_W, 0, top, v0, v1)
         wall_box(b, "trim", wall, lo - TRIM_W, hi + TRIM_W, top, top + TRIM_W, v0, v1)
+    if not leaf:
+        return
     width = hi - lo - 2 * g
     u = lo + g + 0.002 if hinge == "start" else hi - g - 0.002 - LEAF_T
     # Clear of the architrave on its face, so no two faces share a plane.
@@ -1589,6 +1605,9 @@ def bath_vanity(w: float, h: float, d: float, opts: dict) -> list[Part]:
     crown = h - 0.05
     a, b, c = x0 + tall, x0 + tall + upright, x0 + tall + upright + shelf_w
     t = 0.018
+    # Four open compartments, about a hand and a half each, up to the
+    # mirror's top third (0117, 0120).
+    roof = 1.86
     parts: list[Part] = [
         ("white", (x0, x1, y0 + FRONT_T, y1, low, top - 0.03)),
         *fronts(x0, x1, low + GAP, top - 0.03 - GAP, y0, [[c - x0, 2], [0, 2]], grips=False),
@@ -1596,11 +1615,11 @@ def bath_vanity(w: float, h: float, d: float, opts: dict) -> list[Part]:
         ("white", (x0, a, yu + FRONT_T, y1, top, crown)),
         *fronts(x0, a, top + GAP, crown - GAP, yu, [[0, 1]], grips=False),
         ("oak-warm", (a, b, yu, y1, top, h)),
-        ("oak-warm", (b, c, y1 - 0.01, y1, top, 1.56)),
-        *[("oak-warm", (b, c, yu + 0.01, y1 - 0.01, z, z + t)) for z in (1.08, 1.32)],
-        ("oak-warm", (b, c, yu, y1, 1.56, 1.56 + t)),
-        ("white", (b, c, yu + FRONT_T, y1, 1.56 + t, crown)),
-        *fronts(b, c, 1.56 + t + GAP, crown - GAP, yu, [[0, 1]], grips=False),
+        ("oak-warm", (b, c, y1 - 0.01, y1, top, roof)),
+        *[("oak-warm", (b, c, yu + 0.01, y1 - 0.01, z, z + t)) for z in (1.10, 1.34, 1.60)],
+        ("oak-warm", (b, c, yu, y1, roof, roof + t)),
+        ("white", (b, c, yu + FRONT_T, y1, roof + t, crown)),
+        *fronts(b, c, roof + t + GAP, crown - GAP, yu, [[0, 1]], grips=False),
         ("oak-warm", (c, c + t, yu, y1, top, h)),
         ("oak-warm", (x0, a, yu - 0.01, y1, crown, h)),
         ("oak-warm", (b, c, yu - 0.01, y1, crown, h))]
@@ -1787,15 +1806,24 @@ def sliding_wardrobe(w: float, h: float, d: float, opts: dict) -> list[Part]:
 
 
 def slat_wall(w: float, h: float, d: float, opts: dict) -> list[Part]:
-    """The TV wall's acoustic panel (0073): narrow dark oak slats on black felt, floor to `h`."""
+    """
+    The TV wall's acoustic panel (0073): narrow dark oak slats on black felt,
+    floor to `h`. As a barn door, a `back` board behind the felt: seen from
+    the hall when it is shut.
+    """
     x0, x1, y0, y1 = -w / 2, w / 2, -d / 2, d / 2
-    parts: list[Part] = [("felt", (x0, x1, y1 - 0.006, y1, 0, h))]
+    behind = y1 - 0.006
+    parts: list[Part] = [("felt", (x0, x1, behind, y1, 0, h))]
+    if opts.get("back"):
+        behind = y1 - 0.012
+        parts = [("felt", (x0, x1, behind, y1 - 0.006, 0, h)),
+                 (opts["back"], (x0, x1, y1 - 0.006, y1, 0, h))]
     pitch, slat = opts.get("pitch", 0.045), opts.get("slat", 0.027)
     count = int((w + pitch - slat) / pitch)
     start = -(count - 1) * pitch / 2
     for i in range(count):
         xm = start + i * pitch
-        parts.append(("walnut", (xm - slat / 2, xm + slat / 2, y0, y1 - 0.006, 0, h)))
+        parts.append(("walnut", (xm - slat / 2, xm + slat / 2, y0, behind, 0, h)))
     return parts
 
 
@@ -2045,6 +2073,8 @@ PIECES = {
     "washer-column": washer_column, "roll-shelf": roll_shelf, "niche-wall": niche_wall,
     "box-bed": box_bed, "folding-bed": folding_bed, "standing-desk": standing_desk,
     "nightstand": nightstand, "sliding-wardrobe": sliding_wardrobe, "slat-wall": slat_wall,
+    # The living room's barn door (0073, 0074): the slat panel on its rail.
+    "sliding-door": slat_wall,
     "floating-shelf": floating_shelf, "step-stool": step_stool, "towels": towels,
     "picture": picture, "box-cushion": box_cushion, "blinds": blinds, "railing": railing,
     "garden-table": garden_table, "garden-chair": garden_chair, "lounge-chair": lounge_chair,
@@ -2688,7 +2718,7 @@ def finished(item: dict, surfaces: dict) -> bpy.types.Object:
                 face.material_index = slot(surface)
             box_uvs(bm, faces, size, surfaces[surface].get("tile", (1.0, 1.0)))
             if item["finish"] == "picture" and surface == opts.get("image"):
-                picture_uvs(bm, faces, (px0, px1, pz0, pz1))
+                picture_uvs(bm, faces, (px0, px1, pz0, pz1), py0)
         if item["finish"] == "island":
             add_slab(bm, island_top(w, h, d, opts), slot, surfaces)
     bm.to_mesh(mesh)
@@ -2955,14 +2985,27 @@ def hang_glass_door(obj: bpy.types.Object, item: dict) -> None:
     obj["door"] = tag
 
 
-def picture_uvs(bm: bmesh.types.BMesh, faces, span: tuple[float, float, float, float]) -> None:
-    """A picture's image across its face, once: u along x, v up z."""
+def picture_uvs(bm: bmesh.types.BMesh, faces, span: tuple[float, float, float, float],
+                front: float) -> None:
+    """
+    A picture's image across its face, once: u along x, v up z. On a
+    canvas's sides the image's edge wraps round, as a gallery-wrapped print's
+    does: mapped flat, each side stretched one row of pixels over its depth
+    and read as a smear.
+    """
     x0, x1, z0, z1 = span
+    w, h = x1 - x0, z1 - z0
     layer = bm.loops.layers.uv.verify()
     for face in faces:
+        n = face.normal
         for loop in face.loops:
             co = loop.vert.co
-            loop[layer].uv = ((co.x - x0) / (x1 - x0), (co.z - z0) / (z1 - z0))
+            u, v, back = (co.x - x0) / w, (co.z - z0) / h, co.y - front
+            if abs(n.x) > 0.5:
+                u = back / w if n.x < 0 else 1 - back / w
+            elif abs(n.z) > 0.5:
+                v = 1 - back / h if n.z > 0 else back / h
+            loop[layer].uv = (u, v)
 
 
 def vanity_basin(item: dict, piece: bpy.types.Object, surfaces: dict) -> bpy.types.Object | None:
@@ -2977,21 +3020,23 @@ def vanity_basin(item: dict, piece: bpy.types.Object, surfaces: dict) -> bpy.typ
     opts = item.get("options") or {}
     x0, x1, y1 = -w / 2, w / 2, d / 2
     right = x0 + opts.get("tall", 0.6) + 0.05 + opts.get("shelves", 0.27) + 0.018
-    cx, cy, top = (right + x1) / 2, y1 - 0.25, 0.86
-    hw, hd, n, deck = 0.3, 0.21, 64, 0.06
+    # 50 x 38 cm and 11 cm tall, as photographed beside the shelves: at
+    # 60 x 42 x 14 it read as a trough.
+    hw, hd, n, deck, rise = 0.25, 0.19, 64, 0.055, 0.11
+    cx, cy, top = (right + x1) / 2 + 0.02, y1 - 0.24, 0.86
     # Outside up to the rim, then the bowl in front of a flat deck at the
     # back the mixer stands on (0119, 0120): its wall steep below the rim,
     # rounding into a flat floor. Rings close down it, so the light baked
     # per vertex shades the hollow (a few rings left it as bright as the
     # rim, and the basin read as a solid block).
-    rings = [(cx, cy, hw, hd, 0.03, top), (cx, cy, hw, hd, 0.035, top + 0.135),
-             (cx, cy, hw - 0.012, hd - 0.012, 0.03, top + 0.14)]
+    rings = [(cx, cy, hw, hd, 0.03, top), (cx, cy, hw, hd, 0.035, top + rise - 0.005),
+             (cx, cy, hw - 0.01, hd - 0.01, 0.03, top + rise)]
     bowl_cy = cy - deck / 2
     for k in range(10):
         f = k / 9
-        inset = 0.022 + 0.07 * (1 - math.cos(f * math.pi / 2))
-        rings.append((cx, bowl_cy, hw - inset, hd - deck / 2 - inset, 0.04 + 0.04 * f,
-                      top + 0.138 - 0.11 * math.sin(f * math.pi / 2)))
+        inset = 0.02 + 0.06 * (1 - math.cos(f * math.pi / 2))
+        rings.append((cx, bowl_cy, hw - inset, hd - deck / 2 - inset, 0.04 + 0.03 * f,
+                      top + rise - 0.002 - (rise - 0.03) * math.sin(f * math.pi / 2)))
     bm = bmesh.new()
     loops = [[bm.verts.new((px, py, z)) for px, py in rounded_rect(ox, oy, a, b, r, n)]
              for ox, oy, a, b, r, z in rings]
@@ -3005,7 +3050,7 @@ def vanity_basin(item: dict, piece: bpy.types.Object, surfaces: dict) -> bpy.typ
     for face in tube(bm, (cx, bowl_cy, top + 0.024), (cx, bowl_cy, top + 0.031), 0.022, 0.022,
                      segments=24):
         face.material_index = 1  # the drain
-    tx, ty, foot = cx, cy + hd - 0.045, top + 0.14
+    tx, ty, foot = cx, cy + hd - 0.04, top + rise
     for a, b, r0, r1 in (((tx, ty, foot), (tx, ty, foot + 0.15), 0.022, 0.02),
                          ((tx, ty, foot + 0.14), (tx, ty - 0.13, foot + 0.14), 0.012, 0.011),
                          ((tx, ty, foot + 0.16), (tx, ty + 0.08, foot + 0.19), 0.008, 0.006)):
@@ -3361,6 +3406,16 @@ def furniture(item: dict, surfaces: dict, scratch: Path) -> bpy.types.Object:
     )
     if item.get("finish") == "glass-door":
         hang_glass_door(obj, item)
+    elif item.get("finish") == "sliding-door":
+        # Built shut over the doorway, so its light is baked where both rooms
+        # see it; it opens by `slide` (plan x, z) along its rail. Nothing
+        # else sees it while baking: where it stands open, the wall behind
+        # kept its shadow once it was slid shut.
+        opts = item.get("options") or {}
+        dx, dz = opts["slide"]
+        obj["door"] = {"open": 1.0, "close": 0.0, "slide": [dx, 0.0, dz],
+                       "at": list(opts["doorway"]), "width": opts["doorWidth"]}
+        obj.visible_shadow = obj.visible_diffuse = obj.visible_glossy = False
     return obj
 
 
@@ -3656,29 +3711,31 @@ def preview(spec: dict, windows: list[dict], patch: tuple[float, float] | None,
     bpy.ops.render.render(write_still=True)
 
 
+#: Atlas share of a piece of furniture, and its extra smoothing: on few
+#: texels its light came out in blotches on the kitchen's white fronts.
+PIECE_WEIGHT, PIECE_SMOOTH = 1.5, 2.0
 #: Atlas share per object, as a multiple of its surface: the trim (door
-#: frames, leaves, skirtings, window frames) gets 6x, 2.5x the texels per
+#: frames, leaves, skirtings, window frames) gets 6x the texels per square
 #: metre. At the walls' density a 7 cm architrave was 4 texels wide and its
-#: light came out in grey blotches. Walls and ceilings, their light smooth
-#: since the sun's patches are drawn live, give up a little to the
-#: furniture, whose narrow sides baked speckled.
-ATLAS_WEIGHT = {"trim": 6.0, "wall": 0.8, "ceiling": 0.8,
+#: light came out in grey blotches. The floors carry the furniture's
+#: shadows, so they get a piece's share (main).
+ATLAS_WEIGHT = {"trim": 6.0, "wall": 1.0, "ceiling": 1.0,
                 # Thin boards with frames on them, seen close: at a piece's
                 # share their light came out pixelated.
                 "kitchen-shelves": 5.0, "backsplash": 2.0, "shelf-back": 2.0}
-#: Texels between two islands in the atlas, at least: wider than the
-#: smoothing kernel (smooth_within_islands, 3 sigma), so neighbours never mix.
-ISLAND_GAP = 8
-#: Where each object's light lies in the atlas, (x, y, side) in UV units.
-CELLS: dict[str, tuple[float, float, float]] = {}
+#: Texels between two islands in the atlas. Smoothing stays within an
+#: island (ISLANDS), so this only keeps a far-off surface's coarse mip
+#: levels from mixing its neighbours' light in.
+ISLAND_GAP = 4
+#: Each texel's island in the atlas (-1: none), rows up from v = 0 like the
+#: pixels, and each island's object's name: set by layout_lightmap.
+ISLANDS = None
+ISLAND_OWNER: list[str] = []
 #: Extra smoothing for an object's light: painted trim's light is smooth,
 #: and on few texels the denoiser leaves blotches. So is a white wall's: the
 #: hall, lit only by bounce, showed the denoiser's blotches as grey bands,
 #: and at 3.5 still as a faint mottle round flat-02's hall mirrors.
 SMOOTH = {"trim": 2.5, "wall": 6.0, "ceiling": 6.0}
-#: The same for every piece of furniture: on few texels its light came out
-#: in blotches on the kitchen's white fronts once exposed.
-PIECE_WEIGHT, PIECE_SMOOTH = 1.5, 2.0
 #: What is lit per vertex instead of from the atlas (vertex_light): the
 #: generated models, whose folds unwrapped into ~800 islands of a few
 #: texels each and baked black specks, the clothes, and the pendant.
@@ -3688,29 +3745,37 @@ VERTEX_LIT: set[str] = set()
 TRANSLUCENT: set[str] = set()
 
 
-def layout_lightmap(objects: list[bpy.types.Object], size: int, margin: float = 0.006) -> None:
+def layout_lightmap(objects: list[bpy.types.Object], size: int) -> None:
     """
-    A second UV set laid out so no two objects share atlas space.
+    A second UV set shared by all objects, laid out once for the whole atlas.
 
-    Each object gets its own square cell of the `size` atlas, sized by the
-    root of its surface area so texel density stays roughly even, and is
-    unwrapped on its own into it, its islands packed tight (rotated, by
-    their outlines) but ISLAND_GAP texels apart. Unwrapping several objects
-    at once and packing them together left their islands on top of each
-    other, and each object's bake overwrote the last — walls came out near
-    black. Packed as the unwrap leaves them, half of each cell was gaps.
+    Each object's seen faces are unwrapped on their own, scaled to its share
+    of texels per square metre (ATLAS_WEIGHT), and then every island of every
+    object is packed together, tight (rotated, by their outlines) but
+    ISLAND_GAP texels apart. Packed object by object into square cells,
+    flat-02's atlas was three quarters empty and its walls' light came out
+    in 2.4 cm squares, the floor's in 3.7 cm. Unseen faces shrink to a point.
     """
+    global ISLANDS
     bpy.context.tool_settings.mesh_select_mode = (False, False, True)
-    hiddens, areas = [], []
+    bpy.context.scene.tool_settings.use_uv_select_sync = True
+    # Unwrapping and packing correct islands for the aspect of a material's
+    # active image: the parquet's long strip image squashed the floor's
+    # islands 9:1, and its light came out smeared along the boards. A square
+    # one in each material meanwhile.
+    square = bpy.data.images.new("square", 8, 8)
+    added = []
+    for mat in {m for obj in objects for m in obj.data.materials if m and m.node_tree}:
+        node = mat.node_tree.nodes.new("ShaderNodeTexImage")
+        node.image = square
+        mat.node_tree.nodes.active = node
+        added.append((mat, node))
+    hiddens = []
     for obj in objects:
         flag = obj.data.attributes.get("unseen")
         count = len(obj.data.polygons)
         hidden = [bool(flag.data[i].value) for i in range(count)] if flag else [False] * count
         hiddens.append(hidden)
-        seen = sum(p.area for p, h in zip(obj.data.polygons, hidden, strict=True) if not h)
-        areas.append(ATLAS_WEIGHT.get(obj.name, 1.0) * seen)
-    corners, sides = atlas_cells(areas, margin)
-    for obj, hidden, side, (cx, cy) in zip(objects, hiddens, sides, corners, strict=True):
         layer = obj.data.uv_layers.new(name="lightmap")
         obj.data.uv_layers.active = layer
         for poly, is_hidden in zip(obj.data.polygons, hidden, strict=True):
@@ -3724,44 +3789,127 @@ def layout_lightmap(objects: list[bpy.types.Object], size: int, margin: float = 
         # across, and a drawer front's light came out black.
         bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.0,
                                  correct_aspect=False)
-        # A small piece's cell cannot spare the full gap: at 9% of its square
-        # per island, the packer shrank every island of the shelves to a point.
-        # Its smoothing is edge-preserving, so a narrower gap mixes little.
-        gap = max(ISLAND_GAP, 3 * SMOOTH.get(obj.name, 1.0) + 2)
-        bpy.ops.uv.pack_islands(margin=min(gap / (side * size), 0.02),
-                                margin_method="FRACTION", rotate=True, shape_method="CONCAVE")
         bpy.ops.object.mode_set(mode="OBJECT")
-        fit_unit_square(obj.data, hidden)
-        # Unseen faces shrink to a point: in the bake, but on no texels. The
-        # point is the nearest point of a seen face, not the atlas's empty
+        to_density(obj.data, hidden, ATLAS_WEIGHT.get(obj.name, 1.0))
+    packed = [o for o, h in zip(objects, hiddens, strict=True) if not all(h)]
+    bpy.ops.object.select_all(action="DESELECT")
+    for obj in packed:
+        obj.select_set(True)
+    bpy.context.view_layer.objects.active = packed[0]
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.uv.pack_islands(rotate=True, scale=True, margin_method="FRACTION",
+                            margin=ISLAND_GAP / size, shape_method="CONCAVE")
+    bpy.ops.object.mode_set(mode="OBJECT")
+    for mat, node in added:
+        mat.node_tree.nodes.remove(node)
+    bpy.data.images.remove(square)
+    for obj, hidden in zip(objects, hiddens, strict=True):
+        # The point is the nearest point of a seen face, not the atlas's empty
         # corner: where one shows after all (the slope's cut beside a roof
         # window's lining, a lining board's edge), it carries the light
         # beside it rather than black.
         shrink_unseen(obj.data, hidden)
-        CELLS[obj.name] = (cx, cy, side)
-        for loop in obj.data.uv_layers["lightmap"].data:
-            loop.uv = (cx + loop.uv[0] * side, cy + loop.uv[1] * side)
+    ISLANDS = island_map(packed, size)
 
 
-def fit_unit_square(mesh: bpy.types.Mesh, hidden: list[bool]) -> None:
-    """
-    Scale an object's light map UVs (its seen faces') to just fill the unit
-    square, as its atlas cell expects: packed with a wide margin, a small
-    piece's islands came out past it, into the next cell or off the atlas,
-    and the shelves under the air conditioner baked black.
-    """
+def to_density(mesh: bpy.types.Mesh, hidden: list[bool], weight: float) -> None:
+    """Scale an object's light map UVs so their area is `weight` times its seen faces' area."""
     import numpy as np
 
     uv = mesh.uv_layers["lightmap"].data
     coords = np.empty(len(uv) * 2, np.float32)
     uv.foreach_get("uv", coords)
     coords = coords.reshape(-1, 2)
-    seen = [i for p, h in zip(mesh.polygons, hidden, strict=True) if not h for i in p.loop_indices]
-    if not seen:
-        return
-    lo, hi = coords[seen].min(axis=0), coords[seen].max(axis=0)
-    coords = (coords - lo) / max(float((hi - lo).max()), 1e-6)
-    uv.foreach_set("uv", coords.ravel())
+    flat, uv_area = 0.0, 0.0
+    for poly, is_hidden in zip(mesh.polygons, hidden, strict=True):
+        if is_hidden:
+            continue
+        flat += poly.area
+        p = coords[list(poly.loop_indices)]
+        uv_area += 0.5 * abs(float(np.dot(p[:, 0], np.roll(p[:, 1], -1))
+                                   - np.dot(p[:, 1], np.roll(p[:, 0], -1))))
+    if uv_area > 0:
+        uv.foreach_set("uv", (coords * math.sqrt(weight * flat / uv_area)).ravel())
+
+
+def island_map(objects: list[bpy.types.Object], size: int):
+    """
+    Each texel's light map island, from the islands' triangles drawn into the
+    atlas; texels round an island (its bake margin) take the nearest one's.
+    Smoothing a texel's light then mixes in only its own surface's, however
+    close another lies in the atlas.
+    """
+    import numpy as np
+    from bpy_extras.bmesh_utils import bmesh_linked_uv_islands
+
+    ISLAND_OWNER.clear()
+    corners = [[], [], []]
+    ids = []
+    for obj in objects:
+        bm = bmesh.new()
+        bm.from_mesh(obj.data)
+        layer = bm.loops.layers.uv["lightmap"]
+        bm.faces.ensure_lookup_table()
+        for island in bmesh_linked_uv_islands(bm, layer):
+            index = len(ISLAND_OWNER)
+            ISLAND_OWNER.append(obj.name)
+            for f in island:
+                loops = bm.faces[f].loops if isinstance(f, int) else f.loops
+                uvs = [tuple(loop[layer].uv) for loop in loops]
+                for k in range(1, len(uvs) - 1):
+                    for c, p in zip(corners, (uvs[0], uvs[k], uvs[k + 1]), strict=True):
+                        c.append(p)
+                    ids.append(index)
+        bm.free()
+    grid = np.full((size, size), -1, np.int32)
+    if ids:
+        a, b, c = (np.asarray(p, np.float64) * size for p in corners)
+        fill_triangles(grid, a, b, c, np.asarray(ids, np.int32))
+    # The bake's margin round each island, and texels an edge only grazes.
+    for _ in range(ISLAND_GAP):
+        empty = grid < 0
+        if not empty.any():
+            break
+        for axis, step in ((0, 1), (0, -1), (1, 1), (1, -1)):
+            near = np.roll(grid, step, axis=axis)
+            take = empty & (near >= 0) & (grid < 0)
+            grid[take] = near[take]
+    return grid
+
+
+def fill_triangles(grid, a, b, c, values) -> None:
+    """Triangles in texels (x along a row) into `grid`: each texel whose centre is in one."""
+    import numpy as np
+
+    size = grid.shape[0]
+    lo = np.floor(np.minimum(np.minimum(a, b), c)).astype(np.int64)
+    hi = np.ceil(np.maximum(np.maximum(a, b), c)).astype(np.int64)
+    span = (hi - lo).max(axis=1)
+    below = 0
+    for cap in (2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192):
+        sel = np.nonzero((span > below) & (span <= cap) | ((below == 0) & (span == 0)))[0]
+        below = cap
+        if not len(sel):
+            continue
+        offs = np.arange(cap + 1)
+        ox, oy = np.meshgrid(offs, offs)
+        ox, oy = ox.ravel(), oy.ravel()
+        chunk = max(1, 4_000_000 // len(ox))
+        for start in range(0, len(sel), chunk):
+            s = sel[start:start + chunk]
+            x = lo[s, 0][:, None] + ox[None]
+            y = lo[s, 1][:, None] + oy[None]
+            px, py = x + 0.5, y + 0.5
+            (ax, ay), (bx, by), (cx, cy) = ((p[s, 0][:, None], p[s, 1][:, None]) for p in (a, b, c))
+            w0 = (bx - ax) * (py - ay) - (by - ay) * (px - ax)
+            w1 = (cx - bx) * (py - by) - (cy - by) * (px - bx)
+            w2 = (ax - cx) * (py - cy) - (ay - cy) * (px - cx)
+            eps = 1e-9
+            inside = (((w0 >= -eps) & (w1 >= -eps) & (w2 >= -eps))
+                      | ((w0 <= eps) & (w1 <= eps) & (w2 <= eps)))
+            inside &= (x >= 0) & (x < size) & (y >= 0) & (y < size)
+            rows, cols = np.nonzero(inside)
+            grid[y[rows, cols], x[rows, cols]] = values[s][rows]
 
 
 def shrink_unseen(mesh: bpy.types.Mesh, hidden: list[bool]) -> None:
@@ -3838,14 +3986,14 @@ DIM_BELOW, DIM_SIGMA = 0.9, 8.0
 EDGE = 0.5
 
 
-def smooth_within_islands(rgb, covered, sigma: float = 1.6):
+def smooth_within_islands(rgb, covered, sigma: float = 1.6, islands=None):
     """
     Bake noise, blurred away without bleeding between surfaces or across
     shadows: a Gaussian over covered texels only, each neighbour weighted
     down the further its light is from this texel's (an edge-preserving,
     bilateral blur, one axis at a time), renormalised. A plain Gaussian
     spread the dark behind a wardrobe onto the wall beside it as a grey
-    band; islands sit wider apart than the kernel, so neighbours never mix.
+    band. With the atlas's `islands`, only a texel's own island counts.
     """
     import numpy as np
 
@@ -3859,7 +4007,10 @@ def smooth_within_islands(rgb, covered, sigma: float = 1.6):
         norm = np.zeros(out.shape[:2], np.float32)
         for k, w in zip(offsets, kernel, strict=True):
             near = np.roll(lum, k, axis=axis)
-            weight = (w * np.roll(covered, k, axis=axis)
+            same = np.roll(covered, k, axis=axis)
+            if islands is not None:
+                same = same & (np.roll(islands, k, axis=axis) == islands)
+            weight = (w * same
                       * np.exp(-((near - lum) ** 2) / (2 * EDGE**2))).astype(np.float32)
             total += np.roll(out, k, axis=axis) * weight[..., None]
             norm += weight
@@ -4010,19 +4161,24 @@ def save_lightmap(baked: bpy.types.Image, path: str, scratch: Path,
     clean, covered = downsample(denoise(baked, scratch)[..., :3], covered, fine // size)
     clean = despeckle(clean, covered)
     # A light smoothing after, kept inside each island, takes the denoiser's
-    # last grain off; outside the islands stays empty.
-    rgb = smooth_within_islands(clean, covered, sigma=1.0)
-    for name, sigma in SMOOTH.items():
-        if name in CELLS:  # rows run up from v = 0, like the pixels
-            cx, cy, side = CELLS[name]
-            rows = slice(int(cy * size), min(size, int((cy + side) * size) + 1))
-            cols = slice(int(cx * size), min(size, int((cx + side) * size) + 1))
-            rgb[rows, cols] = smooth_within_islands(clean[rows, cols], covered[rows, cols], sigma)
+    # last grain off; outside the islands stays empty. Each object's own
+    # smoothing (SMOOTH) on its islands' texels.
+    islands = ISLANDS if ISLANDS is not None and ISLANDS.shape == covered.shape else None
+    rgb = smooth_within_islands(clean, covered, 1.0, islands)
+    if islands is not None:
+        owner_sigma = np.array([SMOOTH.get(name, 1.0) for name in ISLAND_OWNER] + [1.0],
+                               np.float32)
+        sigmas = owner_sigma[islands]  # -1, no island, takes the last
+        for sigma in sorted({float(s) for s in owner_sigma} - {1.0}):
+            mask = covered & (sigmas == sigma)
+            if mask.any():
+                rgb = np.where(mask[..., None],
+                               smooth_within_islands(clean, mask, sigma, islands), rgb)
     light = rgb.mean(axis=-1)
     if covered.any():
         share = light / max(float(np.median(light[covered])), 1e-6)
         dim = np.clip((DIM_BELOW - share) / DIM_BELOW, 0.0, 1.0)[..., None]
-        rgb = rgb * (1 - dim) + smooth_within_islands(rgb, covered, DIM_SIGMA) * dim
+        rgb = rgb * (1 - dim) + smooth_within_islands(rgb, covered, DIM_SIGMA, islands) * dim
     rgb = rgb.reshape(-1, 3)
     covered = covered.ravel()
     balance = np.array(WARMTH, dtype=np.float32)
@@ -4034,11 +4190,9 @@ def save_lightmap(baked: bpy.types.Image, path: str, scratch: Path,
     # camera exposes for. Over the whole atlas, the trim's larger share of
     # it (ATLAS_WEIGHT) and a lit hall pulled the median up, the room down.
     room = np.zeros((size, size), bool)
-    for name in ("wall", "ceiling"):
-        if name in CELLS:
-            cx, cy, side = CELLS[name]
-            room[int(cy * size) : int((cy + side) * size) + 1,
-                 int(cx * size) : int((cx + side) * size) + 1] = True
+    if islands is not None:
+        is_room = np.array([name in ("wall", "ceiling") for name in ISLAND_OWNER] + [False])
+        room = is_room[islands]
     sample = covered & room.ravel() if (covered & room.ravel()).any() else covered
     typical = float(np.median(rgb.max(axis=1)[sample])) if sample.any() else 1.0
     scale = float(max(min(np.percentile(rgb.max(axis=1), 99.9), CLIP * typical), 1e-6))
@@ -4056,7 +4210,7 @@ def save_lightmap(baked: bpy.types.Image, path: str, scratch: Path,
 
 def write_jpeg(path: str, pixels) -> None:
     """
-    An 8-bit RGB image as a JPEG at quality 95, its colour kept at full
+    An 8-bit RGB image as a JPEG at quality 97, its colour kept at full
     resolution (4:4:4). Blender's own JPEGs halve the colour's resolution,
     which mixed neighbouring islands' colour into coloured specks along
     edges; at its default quality (90) white fronts showed blocks.
@@ -4065,7 +4219,7 @@ def write_jpeg(path: str, pixels) -> None:
 
     h, w, _ = pixels.shape
     spec = oiio.ImageSpec(w, h, 3, "uint8")
-    spec.attribute("Compression", "jpeg:95")
+    spec.attribute("Compression", "jpeg:97")
     spec.attribute("jpeg:subsampling", "4:4:4")
     out = oiio.ImageOutput.create(path)
     out.open(path, spec)
@@ -4133,11 +4287,11 @@ def bake(objects: list[bpy.types.Object], size: int, path: str,
     # of the face beside it in 3D, which for a wall's top edge is its top
     # face hidden in the ceiling slab, and the joint showed a dashed dark line.
     bpy.ops.object.bake(type="DIFFUSE", pass_filter={"DIRECT", "INDIRECT"}, uv_layer="lightmap",
-                        margin=6 * factor, margin_type="EXTEND", use_clear=True)
+                        margin=ISLAND_GAP * factor, margin_type="EXTEND", use_clear=True)
     if live_sun:
         full = np.empty(fine * fine * 4, dtype=np.float32)
         image.pixels.foreach_get(full)
-        bake_sun_direct(uv_layer="lightmap", margin=6 * factor, margin_type="EXTEND",
+        bake_sun_direct(uv_layer="lightmap", margin=ISLAND_GAP * factor, margin_type="EXTEND",
                         use_clear=True)
         direct = np.empty_like(full)
         image.pixels.foreach_get(direct)
@@ -4302,9 +4456,12 @@ def clock(time: str) -> int:
 
 
 def main() -> None:
+    global WALL_T
     args = sys.argv[sys.argv.index("--") + 1 :]
     spec = json.loads(Path(args[0]).read_text())
     preview_only = "--preview-only" in args
+    # A flat drawn from its floor plan has its outer walls' real thickness.
+    WALL_T = flat_geometry.WALL_T = spec["rooms"][0].get("wallT", WALL_T)
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
     setup_cycles(spec["samples"])
@@ -4337,6 +4494,8 @@ def main() -> None:
         elif obj.name == "skylight":
             mark_lining(obj, spec["skylights"], LINING_T)
     for obj in shell:
+        if obj.name.startswith(("floor-", "floorzone-")):
+            ATLAS_WEIGHT[obj.name] = PIECE_WEIGHT
         if obj.name.startswith("floor-"):
             floor_uvs(obj, spec["floors"]["main"]["tile"])
             # Exported as glTF extras: the viewer scales a swapped floor's
@@ -4354,6 +4513,11 @@ def main() -> None:
     scratch = Path(spec["out"]["meta"]).parent
     pieces = [furniture(item, spec["surfaces"], scratch) for item in spec["items"]]
     leaves = leaf_objects(DOOR_LEAVES, mats)
+    for item, piece in zip(spec["items"], pieces, strict=True):
+        # Its own share of the atlas: a balcony's floor and ceiling, seen
+        # from a distance, need not a sofa's texels per metre.
+        if "atlas" in (item.get("options") or {}):
+            ATLAS_WEIGHT[piece.name] = item["options"]["atlas"]
     for piece in pieces + leaves:
         ATLAS_WEIGHT.setdefault(piece.name, PIECE_WEIGHT)
         SMOOTH.setdefault(piece.name, PIECE_SMOOTH)

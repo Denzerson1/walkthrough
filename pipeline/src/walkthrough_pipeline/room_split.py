@@ -86,7 +86,9 @@ def part(room: Room, zone: dict) -> Room:
         waypoint=Waypoint(position=(ex, EYE_HEIGHT, ez),
                           yaw=round(math.degrees(math.atan2(-(lx - ex), -(lz - ez))) % 360, 1)),
         floorPolygon=polygon, walls=walls, openings=openings,
-        areaM2=round(abs(_area(polygon)), 1),
+        # A floor plan's net area where the dressing gives it: the outline
+        # runs along the inner walls' centre lines, so it counts half of each.
+        areaM2=zone.get("areaM2", round(abs(_area(polygon)), 1)),
         originalFloorColor=room.originalFloorColor, ceilings=room.ceilings,
         obstacles=[o for o in room.obstacles
                    if point_in_polygon(polygon_centroid(o.footprint), polygon)],

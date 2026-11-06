@@ -90,3 +90,22 @@ describe('doors', () => {
     expect(doorsInTheWay([leaf('open')], across)).toEqual([]);
   });
 });
+
+describe('a sliding door', () => {
+  // Built shut over its doorway; open, slid 0.84 m along the wall beside it.
+  const spec = { open: 1, close: 0, slide: [0, 0, -0.84] as [number, number, number], at: doorway, width: 0.9 };
+
+  it('starts open, slides shut to its built pose, and shuts its doorway then', () => {
+    expect(isDoorSpec(spec)).toBe(true);
+    const door = doorState(spec);
+    expect([door.angle, door.target]).toEqual([1, 1]);
+    expect(isClosed(door)).toBe(false);
+    expect(walkableWith([left, right], [door])[0]).toBe(left);
+    door.target = toggled(door);
+    expect(door.target).toBe(0);
+    expect(isClosed(door)).toBe(true);
+    expect(walkableWith([left, right], [door])[0].openings).toHaveLength(0);
+    door.angle = swingStep(door.angle, door.target, 10);
+    expect(door.angle).toBe(0);
+  });
+});

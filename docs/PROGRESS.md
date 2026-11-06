@@ -7,6 +7,60 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-11-06 — flat-02 from its floor plan; doors, mirrors, no pixels
+
+The owner sent the architect's floor plan (TOP 4, WNF 79.92 m²) and asked
+for every dimension to it, the scuffed balcony wall fixed, the doors hung
+right, nothing pixelated, working mirrors and perfect shadows; then the
+bathroom's shelves and basin, the fridge, and the barn door behind the TV.
+Items 56–67 of `docs/flat-02-punchlist.md`.
+
+- **Floor plan** (`rebuild.apply_plan`, tested; dressing `plan`): the outline,
+  its windows and doors, and the inner walls with their thickness (25, 13,
+  32 cm, a 29 cm shaft) replace the scan's. The scan had the living room's
+  balcony wall 52 cm too far north (41 cm too deep); the rest was within
+  2–11 cm. Outer walls are 43 cm (`wallT`), so reveals are as deep as built.
+  Rooms carry the plan's net areas (`areaM2`), which the room strip shows.
+  A plan's walls are not "joined" (that skewed two of them by 3.5 cm).
+- **Openings:** at the plan's axes and shell widths; sills and heights as
+  photographed. Two openings that only touch (balcony door and fixed pane)
+  both stay (`add_openings`, tested).
+- **Doors** as drawn: small bedroom hinged east (was west), front door at
+  its north jamb; the hall–living passage keeps the photos' oak casing and
+  gets the barn door (0073, 0074): slats on felt on an oak rail, standing
+  open behind the TV, sliding shut on a click (`doors.ts` `slide`, tested).
+  It is baked shut and unseen by the rest of the bake, so the wall it opens
+  in front of carries no shadow and both its faces are lit.
+- **Furniture** moved with its walls (dressing); the kitchen's fridge unit is
+  the run's first cabinet; two wall cupboards and the shelves keep clear of
+  the south window; the sofa ends short of the east pane.
+- **Light map** (`build_flat.layout_lightmap`): all objects' islands packed
+  as one atlas instead of a square cell each. The old atlas was 27 % used;
+  the packer also squashed islands to the active image's aspect, the
+  parquet's 1:9, so the floor's light was smeared along the boards. Now
+  88 % used: walls 2.4 → 1.2 cm per texel, floor 3.7 → 1.0, furniture
+  ~1.0, trim 0.5. Smoothing stays inside each island (a rasterised island
+  map), so islands sit 4 texels apart; the balcony takes a third of a
+  piece's share. JPEG at quality 97.
+- **Mirrors** (`SplatScene.addMirrors`): planar reflections (three's
+  Reflector) re-drawn from the viewer's eye, instead of a cube map taken
+  once in front of each mirror. The TV screen reflects 8 %, not 25 %.
+- **Bathroom:** the basin 50 × 38 × 11 cm (was 60 × 42 × 14); the open shelves
+  four compartments up to 1.86 m. Canvas sides wrap the image's edge.
+
+### Verified
+- Full build at 640 samples / 4096; 40 fixed views checked against the
+  photos and the plan; the hinges read back from the viewer's door states;
+  walked through the passage and onto the balcony; the barn door slid shut.
+- pytest 366 passed, 4 skipped; vitest 159; lint clean.
+
+### Not done / known limits
+- The plan draws a hinged door at the hall–living passage; the photos show
+  an open passage with the barn door, which is what is built.
+- Window heights follow the photos, not the plan's shell heights.
+- A door's baked light is that of its built pose (hinged doors open, the
+  barn door shut).
+
 ## 2026-11-06 — flat-02, a third pass: the balcony, warm light, the floor
 
 The owner asked for the balcony, everything checked 1:1 against the photos,

@@ -371,14 +371,52 @@ def add_openings(room: Room, scan: dict, openings: list[dict]) -> None:
         if o["type"] == "window" or off <= roomplan.ON_OUTLINE_M:
             if off > roomplan.ON_OUTLINE_M:
                 raise ValueError(f"The window at {o['at']} is not on the outline")
+            # Openings that only touch (a balcony door and the fixed pane
+            # beside it) both stay.
             room.openings = [x for x in room.openings if x.wallIndex != index
-                             or abs(x.offset - offset) >= (x.width + o["width"]) / 2]
+                             or abs(x.offset - offset) >= (x.width + o["width"]) / 2 - 1e-6]
             room.openings.append(Opening(
                 type=o["type"], wallIndex=index, offset=round(offset, 3), width=o["width"],
                 height=o["height"], sill=o.get("sill", 0.0 if o["type"] == "door" else None)))
         else:
             hung = {k: o[k] for k in ("hinge", "swing") if k in o}
             roomplan.place_door(scan["partitions"], at, o["width"], o["height"], **hung)
+
+
+def apply_plan(room: Room, scan: dict, plan: dict) -> None:
+    """
+    The flat as its architect's floor plan draws it, in place of the scan's
+    walls where the two disagree by more than a scan's error (flat-02's
+    living room came out 41 cm deeper than built): `outline`, the outer
+    walls' inner faces in the scan's turning sense, and its `openings` (as
+    add_openings takes them); `partitions`, inner walls from end to end on
+    their centre lines, each with its `thickness` and `doors` (centred `at`
+    a plan point, `width`, `height`, how hung); the floor `zones`. The
+    ceiling is one flat slab at the scanned height; the scan's furniture
+    stays.
+    """
+    height = round(max((w.height for w in room.walls), default=2.5), 3)
+    outline = [(float(x), float(z)) for x, z in plan["outline"]]
+    room.floorPolygon = outline
+    room.walls = [Wall(start=a, end=outline[(i + 1) % len(outline)], height=height)
+                  for i, a in enumerate(outline)]
+    room.openings = []
+    scan["ceilings"] = []
+    scan["zones"] = [(z["label"], [list(p) for p in z["polygon"]]) for z in plan.get("zones", [])]
+    scan["partitions"] = []
+    for p in plan.get("partitions", []):
+        (sx, sz), (ex, ez) = p["start"], p["end"]
+        length = math.hypot(ex - sx, ez - sz)
+        doors = []
+        for o in p.get("doors", []):
+            ax, az = o["at"]
+            along = ((ax - sx) * (ex - sx) + (az - sz) * (ez - sz)) / length
+            hung = {k: v for k, v in o.items() if k not in ("at", "width", "height")}
+            doors.append({"type": "door", "offset": round(along, 3), "width": o["width"],
+                          "height": o["height"], "bottom": 0.0, **hung})
+        scan["partitions"].append({"start": [sx, sz], "end": [ex, ez], "height": height,
+                                   "thickness": p["thickness"], "openings": doors})
+    add_openings(room, scan, plan.get("openings", []))
 
 
 def with_partitions(room: Room, partitions: list[dict]) -> Room:
@@ -577,6 +615,8 @@ def scene_spec(
                 "zones": [],
             }
         )
+    if rooms and (dressing.get("plan") or {}).get("wallT"):
+        rooms[0]["wallT"] = dressing["plan"]["wallT"]  # the outer walls' thickness, drawn
     if rooms and scan:
         rooms[0]["ceilings"] = scan.get("ceilings", [])
         rooms[0]["partitions"] = scan.get("partitions", [])

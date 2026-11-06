@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
 import {
   DEFAULT_FOV,
   type Glide,
@@ -337,7 +338,7 @@ export function SplatScene({
     spark?: SparkRenderer;
     model?: THREE.Group;
     /** The flat's doors that open and close, each turning about its own node's origin. */
-    doors?: Array<{ node: THREE.Object3D; base: THREE.Quaternion; state: DoorState }>;
+    doors?: Array<{ node: THREE.Object3D; base: THREE.Quaternion; at: THREE.Vector3; state: DoorState }>;
     daylight?: Daylight;
     sun?: SunShadow;
     exposure?: AutoExposure;
@@ -520,7 +521,11 @@ export function SplatScene({
           const doors: NonNullable<typeof sceneRef.current.doors> = [];
           group.traverse((node) => {
             if (isDoorSpec(node.userData.door)) {
-              doors.push({ node, base: node.quaternion.clone(), state: doorState(node.userData.door) });
+              const state = doorState(node.userData.door);
+              const at = node.position.clone();
+              // A sliding door starts away from its built pose: open.
+              if (state.slide) node.position.set(...state.slide).multiplyScalar(state.angle).add(at);
+              doors.push({ node, base: node.quaternion.clone(), at, state });
             }
           });
           sceneRef.current.doors = doors;
@@ -787,8 +792,14 @@ export function SplatScene({
       for (const door of sceneRef.current?.doors ?? []) {
         if (door.state.angle === door.state.target) continue;
         door.state.angle = swingStep(door.state.angle, door.state.target, dt);
-        // As a quaternion: past a quarter turn, rotation.y alone flips the other two axes.
-        door.node.quaternion.copy(door.base).multiply(SWING.setFromAxisAngle(UP, door.state.angle));
+        const slide = door.state.slide;
+        if (slide) {
+          // Along its rail, the share of the way to closed.
+          door.node.position.set(...slide).multiplyScalar(door.state.angle).add(door.at);
+        } else {
+          // As a quaternion: past a quarter turn, rotation.y alone flips the other two axes.
+          door.node.quaternion.copy(door.base).multiply(SWING.setFromAxisAngle(UP, door.state.angle));
+        }
         activeAt = now;
       }
       // Awake until the splats' order for this view is in: it is drawn a frame after it lands.
@@ -1743,16 +1754,94 @@ const REFLECTIVITY: Record<string, number> = {
   'surface-glass-shelf': 0.4,
   floor: 0.035,
   glass: 0.45,
-  'surface-screen': 0.25,
+  // A switched-off screen's dark glass: a faint sheen, not a mirror.
+  'surface-screen': 0.08,
   'surface-glass-frost': 0.12,
   'surface-frosted': 0.12,
   'surface-brass': 0.35,
   'surface-granite': 0.1,
 };
 
-/** A mirror reflects the room from just in front of it (its own probe, addReflections). */
+/** A mirror reflects the room as seen from the viewer's eye, mirrored in its plane (addMirrors). */
 const MIRROR = 'surface-mirror';
-const MIRROR_REFLECTIVITY = 0.92;
+/** Silvered glass: a little light lost, a faint green from the glass. */
+const MIRROR_TINT = new THREE.Color(0.88, 0.9, 0.89);
+/** three's ReflectorShader, the reflection tinted instead of overlay-blended. */
+const MIRROR_SHADER = {
+  name: 'MirrorShader',
+  uniforms: { color: { value: null }, tDiffuse: { value: null }, textureMatrix: { value: null } },
+  vertexShader: /* glsl */ `
+    uniform mat4 textureMatrix;
+    varying vec4 vUv;
+    #include <common>
+    #include <logdepthbuf_pars_vertex>
+    void main() {
+      vUv = textureMatrix * vec4( position, 1.0 );
+      gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+      #include <logdepthbuf_vertex>
+    }`,
+  fragmentShader: /* glsl */ `
+    uniform vec3 color;
+    uniform sampler2D tDiffuse;
+    varying vec4 vUv;
+    #include <logdepthbuf_pars_fragment>
+    void main() {
+      #include <logdepthbuf_fragment>
+      gl_FragColor = vec4( texture2DProj( tDiffuse, vUv ).rgb * color, 1.0 );
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`,
+};
+
+/**
+ * Each mirror as a planar reflector: the room drawn again from the viewer's
+ * eye mirrored in the glass, every frame the mirror is in view. A cube map
+ * taken once from in front of it showed the room from the wrong place: it
+ * did not move as one walked past, so it read as a picture, not a mirror.
+ */
+function addMirrors(model: THREE.Object3D, renderer: THREE.WebGLRenderer): void {
+  model.updateMatrixWorld(true);
+  const found: THREE.Mesh[] = [];
+  model.traverse((node) => {
+    if (node instanceof THREE.Mesh && (node.material as THREE.Material).name === MIRROR) {
+      found.push(node);
+    }
+  });
+  const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+  const toModel = model.matrixWorld.clone().invert();
+  for (const node of found) {
+    const geometry = node.geometry.clone().applyMatrix4(node.matrixWorld);
+    // A mirror is its face alone (build_flat), so its normals say where it looks.
+    const normals = geometry.getAttribute('normal');
+    const facing = new THREE.Vector3();
+    for (let i = 0; i < normals.count; i++) {
+      facing.x += normals.getX(i);
+      facing.y += normals.getY(i);
+      facing.z += normals.getZ(i);
+    }
+    if (facing.lengthSq() < 1e-8) continue;
+    geometry.computeBoundingBox();
+    const centre = geometry.boundingBox!.getCenter(new THREE.Vector3());
+    // The reflector looks along its local +z: its glass laid in that frame.
+    const frame = new THREE.Object3D();
+    frame.position.copy(centre);
+    frame.lookAt(centre.clone().add(facing.normalize()));
+    frame.updateMatrixWorld(true);
+    geometry.applyMatrix4(frame.matrixWorld.clone().invert());
+    const mirror = new Reflector(geometry, {
+      textureWidth: Math.min(size.x, 2048),
+      textureHeight: Math.min(size.y, 2048),
+      clipBias: 0.003,
+      color: MIRROR_TINT,
+      shader: MIRROR_SHADER,
+    });
+    mirror.name = node.name;
+    mirror.applyMatrix4(toModel.clone().multiply(frame.matrixWorld));
+    mirror.userData.mirror = true;
+    model.add(mirror);
+    node.visible = false;
+  }
+}
 
 /**
  * Reflections: the baked room seen from its middle, once, as a cube map on
@@ -1780,45 +1869,13 @@ function addReflections(
     'textureCube( envMap, envMapRotation * reflectVec )',
     'textureCube( envMap, envMapRotation * reflectVec, 1.0 )',
   );
-  // Each mirror its own cube, from half a metre in front of it at eye height:
-  // the flat's one probe stands in the living room, and a mirror in the hall
-  // reflecting the sofa reads as a window, not a mirror.
-  const mirrors: Array<{ node: THREE.Mesh; camera: THREE.CubeCamera }> = [];
-  model.updateMatrixWorld(true);
+  addMirrors(model, renderer);
   model.traverse((node) => {
-    if (!(node instanceof THREE.Mesh) || (node.material as THREE.Material).name !== MIRROR) return;
-    const box = new THREE.Box3().setFromObject(node);
-    const centre = box.getCenter(new THREE.Vector3());
-    // A mirror is its face alone (build_flat), so its normals say where it looks.
-    const normals = node.geometry.getAttribute('normal');
-    const facing = new THREE.Vector3();
-    for (let i = 0; i < normals.count; i++) {
-      facing.x += normals.getX(i);
-      facing.z += normals.getZ(i);
-    }
-    facing.transformDirection(node.matrixWorld).setY(0).normalize();
-    const probe = new THREE.CubeCamera(0.05, 300, new THREE.WebGLCubeRenderTarget(512, {
-      generateMipmaps: true,
-      minFilter: THREE.LinearMipmapLinearFilter,
-    }));
-    probe.position.copy(centre).addScaledVector(facing, 0.5).setY(Math.min(centre.y, 1.6));
-    mirrors.push({ node, camera: probe });
-  });
-  const reflectMirrors = () => {
-    for (const { node, camera: probe } of mirrors) {
-      node.visible = false;
-      probe.update(renderer, scene);
-      node.visible = true;
-    }
-  };
-  reflectMirrors();
-  model.traverse((node) => {
-    if (!(node instanceof THREE.Mesh)) return;
+    if (!(node instanceof THREE.Mesh) || node.userData.mirror) return;
     const material = node.material as THREE.MeshBasicMaterial;
-    const mirror = mirrors.find((m) => m.node === node);
-    const amount = mirror ? MIRROR_REFLECTIVITY : REFLECTIVITY[material.name];
+    const amount = REFLECTIVITY[material.name];
     if (amount === undefined) return;
-    material.envMap = mirror ? mirror.camera.renderTarget.texture : target.texture;
+    material.envMap = target.texture;
     material.combine = THREE.MixOperation;
     material.reflectivity = amount;
     const decode = material.onBeforeCompile;
@@ -1829,10 +1886,7 @@ function addReflections(
     material.needsUpdate = true;
   });
   // Drawn again after a lost GPU context, which takes the cube's faces with it.
-  return () => {
-    camera.update(renderer, scene);
-    reflectMirrors();
-  };
+  return () => camera.update(renderer, scene);
 }
 
 /** The published flat's glTF files are meshopt-compressed (scripts/export_site.py). */

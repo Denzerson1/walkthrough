@@ -529,6 +529,8 @@ def rebuild(
             "partitions": roomplan_mod.partitions(loaded, np.array(room.floorPolygon), floor_y),
             "zones": [(label, poly.tolist()) for label, poly in roomplan_mod.floor_zones(loaded)],
         }
+        if dressing.get("plan"):  # the architect's floor plan over the scan's walls
+            rebuild_mod.apply_plan(room, scan, dressing["plan"])
         rebuild_mod.add_walls(room, scan, dressing.get("partitions", []))
         rebuild_mod.add_openings(room, scan, dressing.get("openings", []))
         if dressing.get("widen"):

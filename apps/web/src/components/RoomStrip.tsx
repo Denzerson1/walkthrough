@@ -5,7 +5,7 @@
 
 import { useEffect, useRef } from 'react';
 import type { Manifest } from '../lib/manifest';
-import { polygonArea } from '../lib/geometry';
+import { roomArea } from '../lib/rooms';
 
 interface Props {
   manifest: Manifest;
@@ -59,7 +59,7 @@ export function RoomStrip({ manifest, activeRoomId, stagedRoomIds, onSelect, fil
       >
         {manifest.rooms.map((room) => {
           const isActive = room.id === activeRoomId;
-          const area = Math.abs(polygonArea(room.floorPolygon));
+          const area = roomArea(room);
           return (
             <button
               key={room.id}

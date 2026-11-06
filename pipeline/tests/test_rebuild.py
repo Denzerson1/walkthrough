@@ -67,19 +67,6 @@ def test_air_is_the_room_and_the_opening_slots():
     assert not fg.is_air(2.0, 2.6, 1.5, [room])  # above the ceiling
 
 
-def test_atlas_cells_never_overlap_and_fit():
-    areas = [30.0, 12.0, 12.0, 4.0, 1.0, 0.2, 0.2]
-    corners, sides = fg.atlas_cells(areas, margin=0.006)
-    boxes = [(x, y, x + s, y + s) for (x, y), s in zip(corners, sides, strict=True)]
-    for x0, y0, x1, y1 in boxes:
-        assert 0 <= x0 < x1 <= 1 and 0 <= y0 < y1 <= 1
-    for i, a in enumerate(boxes):
-        for b in boxes[i + 1 :]:
-            assert a[2] <= b[0] or b[2] <= a[0] or a[3] <= b[1] or b[3] <= a[1]
-    # Texel density roughly even: side tracks the root of area.
-    assert sides[0] / sides[1] == pytest.approx((30 / 12) ** 0.5)
-
-
 def test_window_sill_defaults_and_scan_sills():
     assert Opening(type="window", wallIndex=0, offset=1, width=1, height=1).bottom == DEFAULT_SILL_M
     assert Opening(type="door", wallIndex=0, offset=1, width=1, height=2).bottom == 0.0

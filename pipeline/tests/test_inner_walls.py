@@ -150,6 +150,50 @@ def test_inner_walls_stop_the_walk_but_for_their_doors_in_each_room():
         assert [o.type for o in part.openings if o.wallIndex == on_line[0]] == ["door"]
 
 
+def test_a_floor_plan_replaces_the_scanned_walls():
+    flat = roomplan.without(SCAN, ["Balcony"])
+    room, _, floor_y = roomplan.to_rooms(flat)
+    scan = {"partitions": roomplan.partitions(flat, np.array(room.floorPolygon), floor_y),
+            "ceilings": [[[0, 2.5, 0]]], "zones": [("Office", [])]}
+    plan = {
+        "outline": [[0, 0], [4.2, 0], [4.2, 3.1], [0, 3.1]],
+        "openings": [{"type": "window", "at": [2, 3.1], "width": 1.5, "height": 1.25,
+                      "sill": 0.95},
+                     # A balcony door and the fixed pane beside it, touching.
+                     {"type": "door", "at": [0.955, 0], "width": 1.1, "height": 2.22},
+                     {"type": "window", "at": [2.255, 0], "width": 1.5, "height": 2.22,
+                      "sill": 0.0}],
+        "partitions": [{"start": [2.1, 0], "end": [2.1, 3.1], "thickness": 0.25,
+                        "doors": [{"at": [2.1, 1.5], "width": 0.8, "height": 2.03,
+                                   "hinge": "end", "swing": -1, "leaf": False}]}],
+        "zones": [{"label": "Bathroom", "polygon": [[0, 0], [2.1, 0], [2.1, 3.1], [0, 3.1]]}],
+    }
+    rebuild.apply_plan(room, scan, plan)
+    assert room.floorPolygon == [(0, 0), (4.2, 0), (4.2, 3.1), (0, 3.1)]
+    assert len(room.walls) == 4 and room.walls[1].start == (4.2, 0)
+    assert room.walls[0].height == pytest.approx(H)
+    window, door, pane = room.openings
+    assert (window.wallIndex, window.offset, window.sill) == (2, pytest.approx(2.2), 0.95)
+    assert door.type == "door"
+    assert (door.offset, pane.offset) == (pytest.approx(0.955), pytest.approx(2.255))
+    (part,) = scan["partitions"]
+    assert part["thickness"] == 0.25 and part["height"] == pytest.approx(H)
+    (door,) = part["openings"]
+    assert door["offset"] == pytest.approx(1.5)
+    assert (door["hinge"], door["swing"], door["leaf"], door["bottom"]) == ("end", -1, False, 0.0)
+    assert scan["ceilings"] == [] and scan["zones"][0][0] == "Bathroom"
+
+
+def test_a_room_takes_the_floor_plans_net_area():
+    room, _, _ = roomplan.to_rooms(roomplan.without(SCAN, ["Balcony"]))
+    zone = {"id": "bedroom", "name": "Bedroom", "type": "bedroom", "areaM2": 5.5,
+            "polygon": [(0, 0), (2, 0), (2, 3), (0, 3)],
+            "waypoint": {"eye": [1, 1], "look": [1, 2]}}
+    assert room_split.part(room, zone).areaM2 == 5.5
+    del zone["areaM2"]
+    assert room_split.part(room, zone).areaM2 == 6.0
+
+
 def test_joining_partitions_keeps_their_doors_where_they_stood():
     # A wall whose start pokes 3 cm into a crossing one is moved onto its
     # centre line; its door must not move with it.

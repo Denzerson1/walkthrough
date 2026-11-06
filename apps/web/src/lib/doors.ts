@@ -1,11 +1,13 @@
 /**
- * Doors that open and close: the rebuilt flat's inner door leaves and the
- * shower's glass door, each its own node turning on its hinge.
+ * Doors that open and close: the rebuilt flat's inner door leaves, the
+ * shower's and the balcony's glass doors, each its own node turning on its
+ * hinge, and the living room's barn door sliding on its rail.
  *
  * build_flat.py builds each leaf in its default pose and tags its node with
  * a `door` extra: the turns (radians about +Y, three's sense) that take it
- * from there to open and to closed, and for a doorway its centre and width
- * on the plan, so a closed door can shut that doorway to walking.
+ * from there to open and to closed (for a sliding door, the share of its
+ * `slide`), and for a doorway its centre and width on the plan, so a closed
+ * door can shut that doorway to walking.
  */
 
 import type { WalkableRoom } from './geometry';
@@ -19,6 +21,11 @@ export interface DoorSpec {
   /** Turn from the built pose to fully open, and to closed. */
   open: number;
   close: number;
+  /**
+   * A sliding door's move from the built pose to closed (scene metres);
+   * `open` and `close` are then the share of it taken, 0 and 1.
+   */
+  slide?: [number, number, number];
 }
 
 export interface DoorState extends DoorSpec {
@@ -36,9 +43,13 @@ export function isDoorSpec(value: unknown): value is DoorSpec {
   return typeof v.open === 'number' && typeof v.close === 'number';
 }
 
-/** A door as built: standing in its default pose. */
+/**
+ * A door as it first stands: a hinged one as built, in its default pose; a
+ * sliding one open, as it is built shut (its light baked over the doorway).
+ */
 export function doorState(spec: DoorSpec): DoorState {
-  return { ...spec, angle: 0, target: 0 };
+  const start = spec.slide ? spec.open : 0;
+  return { ...spec, angle: start, target: start };
 }
 
 export function isClosed(door: DoorState): boolean {

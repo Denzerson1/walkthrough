@@ -126,42 +126,6 @@ def is_air(x: float, y: float, z: float, rooms: list[dict]) -> bool:
     return False
 
 
-def shelf_pack(sides: list[float], margin: float) -> list[Point] | None:
-    """Corners for squares of `sides` in the unit square, row by row; None if they overflow."""
-    order = sorted(range(len(sides)), key=lambda i: -sides[i])
-    corners: list[Point] = [(0.0, 0.0)] * len(sides)
-    x = y = row = 0.0
-    for i in order:
-        cell = sides[i] + margin
-        if x + cell > 1.0:
-            x, y, row = 0.0, y + row, 0.0
-        if y + cell > 1.0:
-            return None
-        corners[i] = (x + margin / 2, y + margin / 2)
-        x, row = x + cell, max(row, cell)
-    return corners
-
-
-def atlas_cells(areas: list[float], margin: float) -> tuple[list[Point], list[float]]:
-    """
-    Square atlas cells, one per object, sized by the root of its surface area
-    so texel density stays roughly even: the largest scale at which they all
-    still fit. Returns corners and side lengths.
-    """
-    sides = [math.sqrt(max(a, 1e-6)) for a in areas]
-    lo, hi = 0.0, 1.0 / max(sides)
-    for _ in range(40):
-        mid = (lo + hi) / 2
-        if shelf_pack([s * mid for s in sides], margin) is None:
-            hi = mid
-        else:
-            lo = mid
-    scaled = [s * lo for s in sides]
-    corners = shelf_pack(scaled, margin)
-    assert corners is not None
-    return corners, scaled
-
-
 # --------------------------------------------------------------------------
 # Outlines
 # --------------------------------------------------------------------------

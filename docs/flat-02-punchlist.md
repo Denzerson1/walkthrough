@@ -90,3 +90,31 @@ the right colours; the right floor.
   lines, pores, strips differing in lightness, honey-amber as photographed.
 - [x] 54. The house's walls round the balcony lit like its own walls, not left dark.
 - [x] 55. Rugs, mats and the balcony floor are walked on, not walked round.
+
+## Fourth pass (2026-11-06): the floor plan, doors, mirrors, no pixels
+The owner sent the architect's floor plan (TOP 4, WNF 79.92 m2): every
+dimension to it; the living room's balcony wall scuffed; the doors hung
+wrong; nothing pixelated; mirrors that work; perfect shadows.
+- [x] 56. Walls from the plan, not the scan: outer walls 43 cm, inner 25/13/32 cm, each room's
+  net size and area as drawn (living 5.115 x 5.73 m + 0.395 x 2.62, bedrooms 4.17 x 3.79 and
+  2.53 x 3.72, hall 8.29 m2, bathroom 2.72 x 2.79 with its shaft and shower wall, study
+  3.175 x 2.86, balcony 5.58 x 1.90).
+- [x] 57. Windows and doors at the plan's axes and widths: balcony door 1.10 + fixed 1.50, east
+  fixed pane 1.10 x 2.16, south window 1.80, bedroom windows 1.50 and 1.80, study 1.50.
+- [x] 58. Doors hung as drawn: small bedroom hinged east, bedroom west, both into the room;
+  bathroom and study hinged east, into the room; front door hinged north; the balcony door's
+  turn-tilt leaf at the west.
+- [x] 59. Furniture moved with its walls; the kitchen's two wall cupboards and shelves clear of
+  the south window; the sofa short of the east pane.
+- [x] 60. The living room's balcony wall without blotches: the light map packed as one atlas
+  (it was three quarters empty), 2.5-3x finer everywhere; the balcony at a third of the share.
+- [x] 61. Mirrors as planar reflections that move with the viewer.
+- [x] 62. The basin as photographed beside the shelves: 50 x 38 cm, 11 cm tall (it was 60 x 42 x 14).
+- [x] 63. The vanity's open shelves: four compartments up to 1.86 m (0117, 0120), not three to 1.56.
+- [x] 64. The fridge's tall unit is the kitchen run's first cabinet: front flush with the base
+  units, its end on the kitchen's start.
+- [x] 65. No smeared canvas edges: a canvas's image wraps round its sides.
+- [x] 66. The room strip shows the plan's net areas.
+- [x] 67. The slats behind the TV are a barn door (0073, 0074): oak slats on black felt on an oak
+  rail over the passage, standing slid open behind the TV; a click slides it shut over the
+  passage. The TV cupboard stands in front of it.
