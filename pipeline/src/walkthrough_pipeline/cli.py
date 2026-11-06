@@ -555,7 +555,8 @@ def rebuild(
             console.print(f"  floor {name}: {entry['catalog']}")
             continue
         floors[name] = rebuild_mod.photo_floor(paths, name, entry)
-        console.print(f"  floor {name}: re-laid from {entry['photo']}, {floors[name]['colour']}")
+        source = f"re-laid from {entry['photo']}" if "photo" in entry else "generated"
+        console.print(f"  floor {name}: {source}, {floors[name]['colour']}")
     spec = rebuild_mod.scene_spec(
         paths, manifest, floors, _catalog("furniture"),
         wall_colour or dressing.get("wallColour", "#eeeae3"), lightmap_size, samples,

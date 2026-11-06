@@ -366,13 +366,46 @@ cannot see; placed by hand from the capture photos):
   texture kind or null]`); a piece's `options.surfaces` maps its finish's
   surfaces onto them (`{"gloss": "kitchen-green", "stone": "oak-top"}`).
 - `floors` may name a catalog floor (`{"catalog": "oak-plank-natural"}`)
-  where no photo can be re-laid (flat-02's: a slatted wall in every shot
-  threw the plank fit off).
+  where no photo can be re-laid, or have one generated:
+  `{"photo", "parquet": 0.068, "colour"}` a 3-strip parquet of strips that
+  wide, each strip's tone drawn from the photo's (`strip_colours`: the floor
+  rectified on the A4 sheet and sampled in 4 cm squares), their median
+  moved to `colour` (under a night's lamps the sheet is blown out and cannot
+  balance them), oak's fibres, rings and pores along each strip
+  (`parquet_texture`, 1200 px/m); `{"stone": colour, "tiles": [0.6, 0.3]}`
+  large stone-look tiles, half-offset rows, grey joints (`tile_surface`).
+  flat-02's plank fit failed on the slatted wall and on the parquet itself.
 - An item's `"drop": true` leaves out what the scan took for furniture
   (a step stool, a basin counted twice). Finishes for flat-02: `curtain`
   (cloth in folds every `options.pitch` m on a rod, in `options.surface`;
   lit through, per vertex, and casting no shadow in the bake, so drawn
-  sheers do not darken the room), `wc` (wall-hung) and `washer`.
+  sheers do not darken the room), `wc` (wall-hung: a bowl lofted round at
+  the front, square to the wall, its lid up with `open`) and `washer`.
+  flat-02's own pieces (`build_flat.PIECES`, each from its photos):
+  `hall-wardrobe` (slatted oak end, coat niche with seat, drawers, rail and
+  its jackets, an open oak box among cupboards), `shoe-cabinet` (hung
+  `raised` m off a mat), `sideboard` (an oak `case`, `columns` of fronts
+  set in, one surface each in `fronts`), `dining-table`, `coffee-table`,
+  `bath-vanity` (drawers, tall cupboard, open shelves, basin: `vanity_basin`,
+  mirror), `washer-column`, `roll-shelf`, `niche-wall` (the WC's pre-wall,
+  tiled to `tiles`, its lit `niche`), `box-bed`, `folding-bed`,
+  `standing-desk` (with `monitors`), `nightstand`, `sliding-wardrobe`,
+  `slat-wall`, `floating-shelf`, `step-stool`, `towels`, `box-cushion`,
+  `barrel-chair` (a velvet tub upholstered to the floor), `mirror`
+  (`shape` "pebble" with a brass `frame`, or a rectangle) and `picture`.
+  Kitchen fronts take a `style`: `frame` (shaker), `glass` (frosted panes
+  behind `panes` bars), `handle` (black bars). A mirror is its face only;
+  the viewer gives each its own reflection from half a metre in front.
+- `pictures`: paintings, prints and the clock cut from the owner's photos
+  (`photo_picture`): the four `corners` (fractions, clockwise from top
+  left) straightened to `size` in metres at 1600 px/m, white-balanced on a
+  `wall` box beside it; `cutout` keeps what is darker than the wall as
+  alpha (the clock's metal). A `picture` piece shows one by `image`.
+- `glass-door`: a pivoting glass leaf (the shower's), hung at its `hinge`
+  end and built standing `open` degrees out. It and every inner door's
+  leaf are their own objects on their hinges with a `door` glTF extra:
+  the viewer opens and closes them on a tap (`doors.ts`), and a closed
+  door shuts its doorway to walking.
 - `hero`: the preview's view, also the walkthrough's start.
 - `widen`: a strip `by` metres deep let into the scanned plan at z = `at`,
   where the owner knows the flat is roomier than the scan: walls, slopes
@@ -382,7 +415,10 @@ cannot see; placed by hand from the capture photos):
 **Light:** Cycles bakes diffuse light (direct and bounced) into one 2048
 atlas, baked twice as fine (4096, a quarter of the samples per texel) and
 averaged down: the small parts (the sink, the shelves under the air
-conditioner) had come out speckled. Single-texel speckles go first (a 3x3
+conditioner) had come out speckled. A 4096 atlas (`--lightmap-size 4096`,
+flat-02: a flat of rooms spread one atlas thin, and its light looked
+pixelated) is baked as published, as 8192 would not fit an 8 GB card.
+Single-texel speckles go first (a 3x3
 median: the denoiser's leftovers along the joints showed as dots), then it
 is smoothed edge-preserving, widely (σ 6) where the light is dim (nooks
 behind the shelves kept blotches), and dithered to 8 bits (the hall lamp's

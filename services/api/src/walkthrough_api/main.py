@@ -42,7 +42,7 @@ def health() -> dict[str, Any]:
 
 
 @app.get("/api/projects")
-def list_projects(settings: Settings = Depends(get_settings)) -> list[dict[str, str]]:
+def list_projects(settings: Settings = Depends(get_settings)) -> list[dict[str, str | bool]]:
     return projects.list_projects(settings)
 
 
@@ -94,13 +94,15 @@ def _is_public_key(key: str) -> bool:
         return False
     if cleaned.startswith("projects/"):
         parts = cleaned.split("/")
-        # projects/<id>/<subdir>/...
-        if len(parts) < 4:
+        # projects/<id>/preview.jpg, or projects/<id>/<subdir>/...
+        if len(parts) < 3:
             return False
         try:
             projects.validate_project_id(parts[1])
         except projects.InvalidProjectId:
             return False
+        if len(parts) == 3:
+            return parts[2] == projects.PREVIEW
         return f"{parts[2]}/".startswith(PUBLIC_PROJECT_SUBDIRS)
     return True
 

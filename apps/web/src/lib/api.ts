@@ -20,6 +20,11 @@ export function fileUrl(projectId: string, relativePath: string): string {
   return apiUrl(`/files/projects/${projectId}/scene/${relativePath}`);
 }
 
+/** The still of a finished flat, beside its scene/ (projects.PREVIEW). */
+export function previewUrl(projectId: string): string {
+  return apiUrl(`/files/projects/${projectId}/preview.jpg`);
+}
+
 export async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(apiUrl(IS_STATIC ? `${path}.json` : path));
   if (!response.ok) {

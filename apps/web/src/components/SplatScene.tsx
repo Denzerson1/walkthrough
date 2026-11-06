@@ -43,6 +43,15 @@ import {
   loadDaylightKey,
   vertexLight,
 } from '../lib/daylight';
+import {
+  type DoorState,
+  doorState,
+  doorsInTheWay,
+  isDoorSpec,
+  swingStep,
+  toggled,
+  walkableWith,
+} from '../lib/doors';
 import { AutoExposure } from '../lib/exposure';
 import { type Finish, surfaceFinish } from '../lib/finishes';
 import { splitFloors } from '../lib/floorSplit';
@@ -213,6 +222,11 @@ const GLIDE_MAX_MS = 1400;
  * changes: a still view costs a phone no battery.
  */
 const IDLE_AFTER_MS = 1000;
+/** The axis doors turn about, and a scratch quaternion for their swing. */
+const UP = new THREE.Vector3(0, 1, 0);
+const SWING = new THREE.Quaternion();
+/** How far away a door can be and still be opened with a tap, in metres. */
+const DOOR_REACH = 4;
 const SETTLE_MS = 1000;
 const IDLE_FRAME_MS = 250;
 
@@ -279,6 +293,8 @@ export function SplatScene({
    * identity changes.
    */
   const roomsRef = useRef<Room[]>([]);
+  /** The rooms as walking sees them: a closed door's doorway is wall (doors.ts). */
+  const walkRoomsRef = useRef<Room[]>([]);
   /** null until the camera has been placed, so the first room snaps. */
   const activeRoomRef = useRef<string | null>(null);
   /**
@@ -320,6 +336,8 @@ export function SplatScene({
     /** Sorts the splats on a worker; a sort finishing needs a frame to show it. */
     spark?: SparkRenderer;
     model?: THREE.Group;
+    /** The flat's doors that open and close, each turning about its own node's origin. */
+    doors?: Array<{ node: THREE.Object3D; base: THREE.Quaternion; state: DoorState }>;
     daylight?: Daylight;
     sun?: SunShadow;
     exposure?: AutoExposure;
@@ -499,6 +517,13 @@ export function SplatScene({
           if (view) group.add(view);
           scene.add(group);
           sceneRef.current.model = group;
+          const doors: NonNullable<typeof sceneRef.current.doors> = [];
+          group.traverse((node) => {
+            if (isDoorSpec(node.userData.door)) {
+              doors.push({ node, base: node.quaternion.clone(), state: doorState(node.userData.door) });
+            }
+          });
+          sceneRef.current.doors = doors;
           if (lighting && first) {
             const maps = lighting.map((_, i) => (i === opening ? first.map : null));
             const skies = lighting.every((k) => k.skyUrl)
@@ -575,7 +600,7 @@ export function SplatScene({
      * so the rest of the UI follows the person around the flat.
      */
     const stepWalk = (st: typeof stateRef.current, dt: number) => {
-      const rooms = roomsRef.current;
+      const rooms = walkRoomsRef.current;
       if (st.turn !== 0) st.yaw += st.turn * TURN_SPEED * dt;
       const [strafe, forward] = st.intent;
       const yawRad = (st.yaw * Math.PI) / 180;
@@ -759,6 +784,13 @@ export function SplatScene({
         activeAt = now;
       }
       if (furniture.tick(now)) activeAt = now;
+      for (const door of sceneRef.current?.doors ?? []) {
+        if (door.state.angle === door.state.target) continue;
+        door.state.angle = swingStep(door.state.angle, door.state.target, dt);
+        // As a quaternion: past a quarter turn, rotation.y alone flips the other two axes.
+        door.node.quaternion.copy(door.base).multiply(SWING.setFromAxisAngle(UP, door.state.angle));
+        activeAt = now;
+      }
       // Awake until the splats' order for this view is in: it is drawn a frame after it lands.
       const spark = sceneRef.current?.spark;
       if (spark && (spark.sorting || spark.sortDirty)) activeAt = now;
@@ -875,7 +907,7 @@ export function SplatScene({
       const st = stateRef.current;
       const target = pointerOnFloor(e);
       if (!target) return;
-      const rooms = roomsRef.current;
+      const rooms = walkRoomsRef.current;
       if (!rooms.length) return;
 
       const from: Vec2 = [st.position[0], st.position[2]];
@@ -942,6 +974,30 @@ export function SplatScene({
       return null;
     };
 
+    /**
+     * A tap on a door within reach opens or closes it. True when it did:
+     * the tap is then not a walk. Tested against the whole flat, so a door
+     * seen through another wall's surface is not taken.
+     */
+    const toggleDoor = (e: PointerEvent): boolean => {
+      const ctx = sceneRef.current;
+      if (!ctx?.model || !ctx.doors?.length) return false;
+      setPointer(e);
+      raycaster.setFromCamera(pointer, ctx.camera);
+      raycaster.far = DOOR_REACH;
+      const hit = raycaster.intersectObject(ctx.model, true)[0];
+      raycaster.far = Infinity;
+      if (!hit) return false;
+      const door = ctx.doors.find((d) => {
+        for (let n: THREE.Object3D | null = hit.object; n; n = n.parent) if (n === d.node) return true;
+        return false;
+      });
+      if (!door) return false;
+      door.state.target = toggled(door.state);
+      walkRoomsRef.current = walkableWith(roomsRef.current, ctx.doors.map((d) => d.state));
+      return true;
+    };
+
     /** Where the pointer ray meets the floor plane, in metres. */
     const pointerOnFloor = (e: PointerEvent): Vec2 | null => {
       const ctx = sceneRef.current;
@@ -960,7 +1016,7 @@ export function SplatScene({
     const updateWalkCursor = (e: PointerEvent) => {
       const ctx = sceneRef.current;
       if (!ctx) return;
-      const rooms = roomsRef.current;
+      const rooms = walkRoomsRef.current;
       const floor = dragging || draggingUid ? null : pointerOnFloor(e);
       const ok = Boolean(floor && rooms.length && canStand(floor, rooms, BODY_RADIUS));
       ctx.walkCursor.visible = ok;
@@ -1098,7 +1154,7 @@ export function SplatScene({
         // A tap on a piece selects it; a tap on open floor clears the
         // selection and walks there.
         if (tapTarget) onSelectItemRef.current?.(tapTarget);
-        else {
+        else if (!toggleDoor(e)) {
           onSelectItemRef.current?.(null);
           walkTo(e);
         }
@@ -1205,6 +1261,8 @@ export function SplatScene({
   // ---- rooms for collision ---------------------------------------------
   useEffect(() => {
     roomsRef.current = manifest.rooms;
+    const doors = sceneRef.current?.doors ?? [];
+    walkRoomsRef.current = walkableWith(manifest.rooms, doors.map((d) => d.state));
   }, [manifest]);
 
   // ---- waypoint transitions -------------------------------------------
@@ -1246,7 +1304,14 @@ export function SplatScene({
     const from: Vec2 = [st.position[0], st.position[2]];
     const to: Vec2 = [room.waypoint.position[0], room.waypoint.position[2]];
     const leaving = roomAt(from, manifest.rooms)?.id ?? room.id;
-    const path = new Path(route(manifest.rooms, leaving, room.id, from, to));
+    const way = route(manifest.rooms, leaving, room.id, from, to);
+    const doors = sceneRef.current?.doors ?? [];
+    const shut = doorsInTheWay(doors.map((d) => d.state), way);
+    if (shut.length) {
+      for (const door of shut) door.target = door.open;
+      walkRoomsRef.current = walkableWith(manifest.rooms, doors.map((d) => d.state));
+    }
+    const path = new Path(way);
     st.transition = {
       from: { position: st.position, yaw: st.yaw, pitch: st.pitch },
       to: {
@@ -1678,7 +1743,16 @@ const REFLECTIVITY: Record<string, number> = {
   'surface-glass-shelf': 0.4,
   floor: 0.035,
   glass: 0.45,
+  'surface-screen': 0.25,
+  'surface-glass-frost': 0.12,
+  'surface-frosted': 0.12,
+  'surface-brass': 0.35,
+  'surface-granite': 0.1,
 };
+
+/** A mirror reflects the room from just in front of it (its own probe, addReflections). */
+const MIRROR = 'surface-mirror';
+const MIRROR_REFLECTIVITY = 0.92;
 
 /**
  * Reflections: the baked room seen from its middle, once, as a cube map on
@@ -1706,12 +1780,45 @@ function addReflections(
     'textureCube( envMap, envMapRotation * reflectVec )',
     'textureCube( envMap, envMapRotation * reflectVec, 1.0 )',
   );
+  // Each mirror its own cube, from half a metre in front of it at eye height:
+  // the flat's one probe stands in the living room, and a mirror in the hall
+  // reflecting the sofa reads as a window, not a mirror.
+  const mirrors: Array<{ node: THREE.Mesh; camera: THREE.CubeCamera }> = [];
+  model.updateMatrixWorld(true);
+  model.traverse((node) => {
+    if (!(node instanceof THREE.Mesh) || (node.material as THREE.Material).name !== MIRROR) return;
+    const box = new THREE.Box3().setFromObject(node);
+    const centre = box.getCenter(new THREE.Vector3());
+    // A mirror is its face alone (build_flat), so its normals say where it looks.
+    const normals = node.geometry.getAttribute('normal');
+    const facing = new THREE.Vector3();
+    for (let i = 0; i < normals.count; i++) {
+      facing.x += normals.getX(i);
+      facing.z += normals.getZ(i);
+    }
+    facing.transformDirection(node.matrixWorld).setY(0).normalize();
+    const probe = new THREE.CubeCamera(0.05, 300, new THREE.WebGLCubeRenderTarget(512, {
+      generateMipmaps: true,
+      minFilter: THREE.LinearMipmapLinearFilter,
+    }));
+    probe.position.copy(centre).addScaledVector(facing, 0.5).setY(Math.min(centre.y, 1.6));
+    mirrors.push({ node, camera: probe });
+  });
+  const reflectMirrors = () => {
+    for (const { node, camera: probe } of mirrors) {
+      node.visible = false;
+      probe.update(renderer, scene);
+      node.visible = true;
+    }
+  };
+  reflectMirrors();
   model.traverse((node) => {
     if (!(node instanceof THREE.Mesh)) return;
     const material = node.material as THREE.MeshBasicMaterial;
-    const amount = REFLECTIVITY[material.name];
+    const mirror = mirrors.find((m) => m.node === node);
+    const amount = mirror ? MIRROR_REFLECTIVITY : REFLECTIVITY[material.name];
     if (amount === undefined) return;
-    material.envMap = target.texture;
+    material.envMap = mirror ? mirror.camera.renderTarget.texture : target.texture;
     material.combine = THREE.MixOperation;
     material.reflectivity = amount;
     const decode = material.onBeforeCompile;
@@ -1722,7 +1829,10 @@ function addReflections(
     material.needsUpdate = true;
   });
   // Drawn again after a lost GPU context, which takes the cube's faces with it.
-  return () => camera.update(renderer, scene);
+  return () => {
+    camera.update(renderer, scene);
+    reflectMirrors();
+  };
 }
 
 /** The published flat's glTF files are meshopt-compressed (scripts/export_site.py). */
@@ -1776,6 +1886,8 @@ async function loadBakedModel(
       color: source.color,
       transparent: source.transparent,
       opacity: source.opacity,
+      // A shape cut out of its photo (the clock): glTF alphaMode MASK.
+      alphaTest: source.alphaTest,
     });
     // Only what was baked has the second UV set; the views outside the
     // windows are photos, shown as they are: not tone mapped either, which

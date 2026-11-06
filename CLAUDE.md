@@ -35,7 +35,7 @@ pnpm seed:assets     # downloads the real textures and meshes, and writes
                      # scripts/furniture_themes.py
 
 # the public site on GitHub Pages (static: no assistant, no editor)
-pnpm build:pages     # viewer + flat-01's files -> apps/web/dist
+pnpm build:pages     # viewer + flat-01 and flat-02 -> apps/web/dist
 pnpm publish:pages   # upload as the `site` release asset, run pages.yml
 
 # capture pipeline — runs inside WSL2 Ubuntu on the GPU; see docs/PIPELINE.md.

@@ -18,6 +18,18 @@ class TestPublicFileAllowlist:
         target.write_bytes(b"ply\n")
         assert client.get("/files/projects/demo-01/scene/scene.ply").status_code == 200
 
+    def test_serves_the_preview_still(self, client, data_root):
+        target = data_root / "projects" / "demo-01" / "preview.jpg"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"jpg")
+        assert client.get("/files/projects/demo-01/preview.jpg").status_code == 200
+
+    def test_refuses_other_files_beside_scene(self, client, data_root):
+        target = data_root / "projects" / "demo-01" / "notes.txt"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"private")
+        assert client.get("/files/projects/demo-01/notes.txt").status_code == 404
+
     def test_serves_upload_results(self, client, data_root):
         target = data_root / "uploads" / "demo-01" / "abc" / "albedo.png"
         target.parent.mkdir(parents=True, exist_ok=True)

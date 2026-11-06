@@ -111,6 +111,13 @@ def test_the_dressing_adds_walls_and_doors_and_hangs_the_scanned_ones():
     assert added[0]["offset"] == pytest.approx(1.0)
     window = room.openings[-1]
     assert window.type == "window" and window.sill == pytest.approx(0.8)
+    # Given again to the floor, it replaces itself: a balcony door the scan
+    # took for a window on a sill.
+    before = len(room.openings)
+    rebuild.add_openings(room, scan, [{"type": "window", "at": [4, 1.6], "width": 1.0,
+                                       "height": 2.2, "sill": 0.0}])
+    assert len(room.openings) == before
+    assert room.openings[-1].sill == pytest.approx(0.0)
     with pytest.raises(ValueError, match="not on the outline"):
         rebuild.add_openings(room, scan, [{"type": "window", "at": [2, 1.5], "width": 1,
                                            "height": 1}])

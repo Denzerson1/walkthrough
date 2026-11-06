@@ -79,11 +79,31 @@ SURFACES: dict[str, tuple[str, float, str | None]] = {
     "vent": ("#8d8f91", 0.5, None),
     "basket": ("#7d7f80", 0.4, None),
     "boxes": ("#bdb8b0", 0.9, None),         # felt boxes in the wardrobe
+    # flat-02's pieces (build_flat.PIECES)
+    "mat": ("#202021", 0.95, None),          # the shoes' mat
+    "glass-frost": ("#dfe3e1", 0.15, None),  # glazed kitchen doors
+    "handle": ("#151516", 0.35, None),       # black bar handles
+    "screen": ("#0b0c0e", 0.1, None),        # a TV's or a monitor's glass
+    "mirror": ("#3b3f40", 0.05, None),       # the viewer reflects the room in it
+    "paper": ("#f4f4f2", 0.8, None),
+    "box-white": ("#ececea", 0.5, None),
+    "feet": ("#a07a50", 0.5, None),
+    "frame-white": ("#f2f2f0", 0.4, None),
+    "felt": ("#19191a", 1.0, None),
+    "bamboo": ("#d2a462", 0.5, "veneer"),
+    "towel-grey": ("#4b4d50", 1.0, "boucle"),
+    "robe": ("#d9cdb8", 1.0, "boucle"),
+    "puffer": ("#1b1c1f", 0.5, None),
+    "brass": ("#b08d4f", 0.3, None),
+    "mat-white": ("#f4f2ee", 0.9, None),
 }
+
+#: A picture whose photo has not been cut out yet: a neutral canvas.
+PLACEHOLDER = "#c8c4bc"
 
 
 def surfaces(paths: ProjectPaths, photos: dict | None = None,
-             palette: dict | None = None) -> dict[str, dict]:
+             palette: dict | None = None, pictures: dict | None = None) -> dict[str, dict]:
     """
     The surfaces as build_flat.py takes them, textures written into the
     scene folder. A surface the dressing gives a photo patch for is cut from
@@ -108,11 +128,36 @@ def surfaces(paths: ProjectPaths, photos: dict | None = None,
             )
             image.save(path, quality=92)
             texture, tile = str(path), list(size)
+        elif kind == "tiles":
+            image, size = photo_texture.tile_surface(colour, seed=i)
+            image.save(path, quality=92)
+            texture, tile = str(path), list(size)
         elif kind:
             photo_texture.surface_texture(kind, colour, seed=i).save(path, quality=90)
             texture = str(path)
         out[name] = {"colour": colour, "roughness": roughness, "texture": texture, "tile": tile}
+    for name, spec in (pictures or {}).items():
+        out[name] = picture(paths, name, spec)
     return out
+
+
+def picture(paths: ProjectPaths, name: str, spec: dict) -> dict:
+    """
+    A picture on the wall cut from the owner's photo of it (the dressing's
+    `pictures`): its `corners` in the photo (fractions, clockwise from top
+    left) straightened to its `size` in metres, white-balanced on a `wall`
+    box of white wall beside it; `cutout` keeps only what is darker than the
+    wall (the clock's metal), as alpha. Without corners, a neutral canvas.
+    """
+    if not spec.get("corners"):
+        return {"colour": PLACEHOLDER, "roughness": 0.7, "texture": None, "tile": [1.0, 1.0]}
+    image = photo_texture.photo_picture(repo_root() / spec["photo"], spec["corners"],
+                                        tuple(spec["size"]), spec.get("wall"),
+                                        spec.get("cutout", False))
+    path = paths.scene / f"surface-{name}.{'png' if spec.get('cutout') else 'jpg'}"
+    image.save(path, **({} if spec.get("cutout") else {"quality": 93}))
+    return {"colour": "#ffffff", "roughness": 0.7, "texture": str(path),
+            "tile": list(spec["size"]), "cutout": bool(spec.get("cutout"))}
 
 
 def outside_view(paths: ProjectPaths, wanted: list[dict]) -> dict | None:
@@ -257,7 +302,24 @@ def catalog_floor(floor: dict) -> dict:
 
 def photo_floor(paths: ProjectPaths, name: str, entry: dict) -> dict:
     """A floor re-laid from the customer's photo of it, written into the scene folder."""
+    if "stone" in entry:  # tiles with no photo to re-lay them from: generated
+        tiles = tuple(entry.get("tiles", (0.6, 0.3)))
+        image, size = photo_texture.tile_surface(entry["stone"], tiles)
+        out = paths.scene / f"floor-{name.lower()}.jpg"
+        image.save(out, quality=92)
+        return {"id": f"stone-{name.lower()}", "albedo": str(out), "normal": None,
+                "roughness": None, "tile": list(size), "colour": entry["stone"]}
     source = repo_root() / entry["photo"]
+    if "parquet" in entry:
+        # Strip floors whose lattice a shot cannot give (flat-02): generated,
+        # in the shot's own strip tones.
+        image, size = photo_texture.parquet_texture(photo_texture.strip_colours(source),
+                                                    entry.get("colour"), strip=entry["parquet"])
+        out = paths.scene / f"floor-{name.lower()}.jpg"
+        image.save(out, quality=92)
+        return {"id": f"photo-{name.lower()}", "albedo": str(out), "normal": None,
+                "roughness": None, "tile": list(size),
+                "colour": entry.get("colour") or photo_texture.mean_albedo(source)}
     if "planks" in entry:
         image, size = photo_texture.plank_texture(source, entry["planks"])
     else:
@@ -296,7 +358,9 @@ def add_openings(room: Room, scan: dict, openings: list[dict]) -> None:
     `sill` above the floor). A door on the outline is the outline's; one
     further in hangs in the partition it stands in, with how it is hung
     (`hinge`: "start" or "end" of the wall, `swing`: 1 or -1, the side of
-    the wall it opens to).
+    the wall it opens to). One on the outline that overlaps a scanned
+    opening replaces it: the scan can take a balcony door for a window on
+    a sill (flat-02's beside the sofa).
     """
     for o in openings:
         at = np.asarray(o["at"], dtype=float)
@@ -304,6 +368,8 @@ def add_openings(room: Room, scan: dict, openings: list[dict]) -> None:
         if o["type"] == "window" or off <= roomplan.ON_OUTLINE_M:
             if off > roomplan.ON_OUTLINE_M:
                 raise ValueError(f"The window at {o['at']} is not on the outline")
+            room.openings = [x for x in room.openings if x.wallIndex != index
+                             or abs(x.offset - offset) >= (x.width + o["width"]) / 2]
             room.openings.append(Opening(
                 type=o["type"], wallIndex=index, offset=round(offset, 3), width=o["width"],
                 height=o["height"], sill=o.get("sill", 0.0 if o["type"] == "door" else None)))
@@ -580,7 +646,8 @@ def scene_spec(
         "strips": dressing.get("strips", []),
         "outside": outside_view(paths, wanted),
         "site": surroundings,
-        "surfaces": surfaces(paths, dressing.get("surfaces"), dressing.get("palette")),
+        "surfaces": surfaces(paths, dressing.get("surfaces"), dressing.get("palette"),
+                             dressing.get("pictures")),
         "sun": light,
         "suns": suns,
         "sun_path": path,

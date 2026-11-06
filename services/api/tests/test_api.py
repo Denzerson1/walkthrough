@@ -34,6 +34,15 @@ class TestManifest:
         rows = client.get("/api/projects").json()
         assert any(r["id"] == "demo-01" for r in rows)
 
+    def test_listing_reports_the_preview_still(self, client, seeded_project, data_root):
+        def preview() -> bool:
+            rows = client.get("/api/projects").json()
+            return next(r for r in rows if r["id"] == seeded_project)["preview"]
+
+        assert preview() is False
+        (data_root / "projects" / seeded_project / "preview.jpg").write_bytes(b"jpg")
+        assert preview() is True
+
     def test_saving_requires_the_editor_session(self, client, seeded_project):
         manifest = client.get(f"/api/projects/{seeded_project}/manifest").json()
         resp = client.put(f"/api/projects/{seeded_project}/manifest", json=manifest)

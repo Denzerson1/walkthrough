@@ -296,6 +296,100 @@ def tile_texture(path: Path, tile: tuple[float, float], offset: float, joint: fl
     return image, (tile[0], period * tile[1])
 
 
+def strip_colours(path: Path, count: int = 400, seed: int = 0) -> np.ndarray:
+    """
+    The colours of a strip floor's strips in a photo of it with an A4 sheet:
+    the floor rectified (albedo) and white-balanced on the sheet channel by
+    channel, sampled in 4 cm squares, what is not floor (a shoe, a rug, the
+    sheet's shadow) dropped as far from the floor's own colours. Linear RGB.
+    """
+    lin, grown, _ = albedo(path)
+    rgb = (linear_to_srgb(np.clip(lin, 0, 1)) * 255).astype(np.uint8)
+    mask, _ = find_paper(rgb.astype(np.float32) / 255)
+    white = np.median(lin[cv2.erode(mask.astype(np.uint8), np.ones((15, 15))) > 0], axis=0)
+    lin = lin * (white.mean() / np.maximum(white, 1e-6))
+    step = round(0.04 / WORK_M_PER_PX)
+    rng = np.random.default_rng(seed)
+    ys, xs = np.nonzero(~grown)
+    picks = rng.choice(len(ys), size=min(len(ys), count * 4), replace=False)
+    samples = []
+    for i in picks:
+        y, x = ys[i], xs[i]
+        cell = grown[y : y + step, x : x + step]
+        if cell.shape != (step, step) or cell.any():
+            continue
+        samples.append(np.median(lin[y : y + step, x : x + step].reshape(-1, 3), axis=0))
+    samples = np.array(samples)
+    log = np.log(np.maximum(samples, 1e-4))
+    far = np.linalg.norm(log - np.median(log, axis=0), axis=1)
+    return samples[far < np.percentile(far, 80)][:count]
+
+
+def parquet_texture(colours: np.ndarray, colour: str | None = None, strip: float = 0.068,
+                    strips: int = 3, length: float = 2.2, boards: int = 3, px_per_m: int = 1200,
+                    seed: int = 0) -> tuple[Image.Image, tuple[float, float]]:
+    """
+    A seamless 3-strip parquet (the flat's oak, flat-02): boards of `strips`
+    strips `strip` wide, each strip row of a board cut into lengths of 30 to
+    65 cm, the boards' ends staggered by a third, each strip its own tone
+    drawn from `colours` (strip_colours) with oak's grain along it: fibres,
+    growth rings and pores. `colour` (sRGB hex) moves the tones' median to
+    it: under a night's lamps the sheet is blown out and cannot balance them.
+    Strips run along x. Returns the image and its size in metres (along, across).
+    """
+    rng = np.random.default_rng(seed)
+    out_l, strip_px = round(length * px_per_m), round(strip * px_per_m)
+    rows = boards * strips
+    tex = np.zeros((rows * strip_px, out_l, 3), np.float32)
+    median = np.median(colours, axis=0)
+    if colour is not None:
+        hexcode = colour.lstrip("#")
+        target = srgb_to_linear(np.array([int(hexcode[i : i + 2], 16) / 255 for i in (0, 2, 4)]))
+        colours = colours * (target / median)
+        median = target
+    for b in range(boards):
+        offset = round(b * out_l / boards)
+        for r in range(strips):
+            y0 = (b * strips + r) * strip_px
+            x = 0
+            cuts = []
+            while x < out_l:
+                piece = round(rng.uniform(0.3, 0.65) * px_per_m)
+                if out_l - x - piece < 0.25 * px_per_m:
+                    piece = out_l - x
+                cuts.append((x, piece))
+                x += piece
+            for x0, piece in cuts:
+                tone = colours[rng.integers(len(colours))]
+                tone = median * (tone / median) ** 0.35
+                n = max(strip_px, piece)
+                # Drawn square, then squeezed across to the strip's width:
+                # cells (across, along) long along the strip, thin across it.
+                fibres = (0.5 * _tiling_noise(rng, (70, 7), n)
+                          + 0.3 * _tiling_noise(rng, (24, 3), n)
+                          + 0.2 * _tiling_noise(rng, (6, 2), n))
+                warp = _tiling_noise(rng, (2, 3), n)
+                across = np.arange(n, dtype=np.float32)[:, None] / n
+                rings = 0.5 + 0.5 * np.sin(2 * np.pi * (across * rng.uniform(3, 8)
+                                                        + 0.25 * warp + rng.random()))
+                pores = (_tiling_noise(rng, (160, 24), n) > 0.8).astype(np.float32)
+                grain = 0.5 * fibres + 0.35 * rings ** 3 - 0.2 * pores
+                grain = cv2.resize(grain, (piece, strip_px), interpolation=cv2.INTER_AREA)
+                flecks = (rng.random((strip_px, piece)) > 0.9993).astype(np.float32)
+                flecks = cv2.GaussianBlur(flecks, (0, 0), 1.2) * 6
+                shade = 1 + 0.38 * (grain - grain.mean()) - 0.12 * flecks
+                block = tone[None, None, :] * shade[..., None]
+                xs = (np.arange(piece) + x0 + offset) % out_l
+                tex[y0 : y0 + strip_px, xs] = block
+                # the end joint: a dark hairline with a soft shadow
+                tex[y0 : y0 + strip_px, xs[:2]] *= 0.55
+                tex[y0 : y0 + strip_px, xs[2:4]] *= 0.85
+            tex[y0 : y0 + 1] *= 0.6 if r else 0.45  # long joints, the board's deeper
+            tex[y0 + 1 : y0 + 2] *= 0.85
+    image = Image.fromarray((linear_to_srgb(np.clip(tex, 0, 1)) * 255).astype(np.uint8))
+    return image, (length, rows * strip)
+
+
 def mean_albedo(path: Path) -> str:
     """A photo's floor colour as #rrggbb, white-balanced on the paper."""
     lin, paper, _ = albedo(path)
@@ -389,13 +483,85 @@ def _tiling_noise(rng, cells: tuple[int, int], px: int) -> np.ndarray:
     return big[oy : oy + px, ox : ox + px]
 
 
+def _paisley(colour: str, px: int, rng) -> Image.Image:
+    """
+    flat-02's duvet (0109, 0140): paisleys, small flowers, leaves and vines in
+    `colour` and a paler tint of it on white, one metre, seamless. Cut from
+    the photo it came out as grey granite (its creases and shade baked in,
+    its print too fine); drawn, it is a print. Drawn at twice the size and
+    scaled down, so the lines stay smooth; every shape is drawn again a tile
+    over, so what crosses an edge comes in at the other.
+    """
+    from PIL import ImageDraw
+
+    big = 2 * px
+    ink = tuple(int(colour.lstrip("#")[i : i + 2], 16) for i in (0, 2, 4))
+    ground = (242, 242, 244)
+    pale = tuple(round(0.45 * c + 0.55 * g) for c, g in zip(ink, ground, strict=True))
+    image = Image.new("RGB", (big, big), ground)
+    draw = ImageDraw.Draw(image)
+    t = np.linspace(0, 2 * np.pi, 96, endpoint=False)
+    # A teardrop, its tip at y = -1 and its round end at y = 1.
+    tear = np.stack([0.75 * np.sin(t) * np.sin(t / 2) ** 2.5, -np.cos(t)], axis=1)
+
+    def place(points, centre, size, angle):
+        c, s = np.cos(angle), np.sin(angle)
+        p = points * size / 2
+        return np.stack([c * p[:, 0] - s * p[:, 1], s * p[:, 0] + c * p[:, 1]], axis=1) + centre
+
+    def shape(points, fill=None, outline=None, width=0):
+        for dx in (-big, 0, big):
+            for dy in (-big, 0, big):
+                draw.polygon([(x + dx, y + dy) for x, y in points], fill=fill,
+                             outline=outline, width=width)
+
+    def dot(centre, r, fill):
+        for dx in (-big, 0, big):
+            for dy in (-big, 0, big):
+                x, y = centre[0] + dx, centre[1] + dy
+                draw.ellipse((x - r, y - r, x + r, y + r), fill=fill)
+
+    line = max(2, big // 400)
+    for _ in range(40):  # vines
+        start = rng.random(2) * big
+        heading, bend = rng.uniform(0, 2 * np.pi), rng.uniform(-2.5, 2.5)
+        steps = np.linspace(0, 1, 30)[:, None]
+        angle = heading + bend * steps
+        pts = start + np.cumsum(np.hstack([np.cos(angle), np.sin(angle)]) * big * 0.012, axis=0)
+        for dx in (-big, 0, big):
+            for dy in (-big, 0, big):
+                draw.line([(x + dx, y + dy) for x, y in pts], fill=pale, width=line)
+    for _ in range(24):  # paisleys, 12 to 20 cm long
+        centre, size = rng.random(2) * big, big * rng.uniform(0.12, 0.2)
+        angle, curl = rng.uniform(0, 2 * np.pi), rng.choice([-1.0, 1.0]) * 0.7
+        a = curl * np.clip(-tear[:, 1], 0, None) ** 2
+        curled = np.stack([np.cos(a) * tear[:, 0] - np.sin(a) * tear[:, 1],
+                           np.sin(a) * tear[:, 0] + np.cos(a) * tear[:, 1]], axis=1)
+        for k, (scale, fill) in enumerate(((1.0, pale), (0.8, ground), (0.6, pale), (0.36, ink))):
+            shape(place(curled * scale + [0, 1 - scale], centre, size, angle), fill=fill,
+                  outline=ink, width=line + (2 if k == 0 else 0))
+        for x, y in place(curled * 1.12 + [0, -0.12], centre, size, angle)[::5]:
+            dot((x, y), line * 1.6, ink)
+    for _ in range(80):  # flowers
+        centre, r = rng.random(2) * big, big * rng.uniform(0.006, 0.012)
+        for k in range(6):
+            a = k * np.pi / 3
+            dot(centre + 1.7 * r * np.array([np.cos(a), np.sin(a)]), r, ink if k % 2 else pale)
+        dot(centre, r * 0.8, ink)
+    for _ in range(130):  # leaves
+        shape(place(tear, rng.random(2) * big, big * rng.uniform(0.025, 0.045),
+                    rng.uniform(0, 2 * np.pi)), fill=ink if rng.random() < 0.5 else pale)
+    return image.resize((px, px), Image.LANCZOS)
+
+
 def surface_texture(kind: str, colour: str, px: int = 1024, seed: int = 0) -> Image.Image:
     """
     A seamless texture for one metre of a surface, around its colour:
     `veneer` (oak: long fibres and growth bands along x), `stone` (a
     concrete-look worktop: a fine sandy grain over faint clouds, the odd
-    pore), `boucle` (nubbly fabric) or
-    `linen` (bedding: soft creases over a fine weave).
+    pore), `boucle` (nubbly fabric), `rug` (a distressed streaky pile),
+    `linen` (bedding: soft creases over a fine weave) or `paisley` (a
+    printed duvet, `colour` its ink on white).
     Plain colour read as plastic on big oak and fabric surfaces; this is
     the grain a camera sees at walking distance, not a scan of the piece.
     """
@@ -422,14 +588,24 @@ def surface_texture(kind: str, colour: str, px: int = 1024, seed: int = 0) -> Im
         value = 0.7 * _tiling_noise(rng, (300, 300), px) + 0.3 * _tiling_noise(rng, (40, 40), px)
         spread = 0.18
     elif kind == "linen":
-        # Crumpled cloth: a height field of ridges (folds), lit from one
-        # side, so each fold is light on one flank and shaded on the other.
-        height = sum(w * (1 - np.abs(2 * _tiling_noise(rng, (c, c), px) - 1))
-                     for w, c in ((1.0, 6), (0.5, 13), (0.25, 27)))
-        slope = (np.roll(height, -2, axis=1) - np.roll(height, 2, axis=1)
-                 + np.roll(height, -2, axis=0) - np.roll(height, 2, axis=0))
-        value = slope + 0.15 * slope.std() * _tiling_noise(rng, (400, 400), px)
-        spread = 0.06
+        # Made bedding at walking distance: a fine weave and a few soft broad
+        # creases over it. Ridged folds over the whole cloth (the first take)
+        # read as wind-blown sand on flat-02's mattresses.
+        weave = _tiling_noise(rng, (512, 512), px)
+        creases = 1 - np.abs(2 * _tiling_noise(rng, (3, 5), px) - 1)
+        value = weave / weave.std() + 0.8 * creases / creases.std()
+        spread = 0.035
+    elif kind == "rug":
+        # A distressed modern rug (0084, 0091): dark and pale streaks along
+        # its length, thicker in cloudy patches, the pile's fibre over all.
+        # Cut from the photo, the patch caught the floor and a chair's foot.
+        streaks = _tiling_noise(rng, (260, 6), px) - 0.5
+        patches = _tiling_noise(rng, (5, 4), px)
+        fibre = _tiling_noise(rng, (500, 500), px) - 0.5
+        value = 1.4 * streaks * (0.3 + patches) + 0.5 * (patches - 0.5) + 0.25 * fibre
+        spread = 0.32
+    elif kind == "paisley":
+        return _paisley(colour, px, rng)
     else:
         raise ValueError(f"Unknown surface texture {kind!r}")
     value = (value - value.mean()) / max(float(value.std()), 1e-6)
@@ -444,6 +620,76 @@ def surface_texture(kind: str, colour: str, px: int = 1024, seed: int = 0) -> Im
 # --------------------------------------------------------------------------
 
 BAY_M, STOREY_M = 3.2, 3.7  # one window bay, one floor of a Gründerzeit house
+
+
+def photo_picture(path: Path, corners: list, size_m: tuple[float, float],
+                  wall: tuple[float, float, float, float] | None = None, cutout: bool = False,
+                  px_per_m: int = 1600) -> Image.Image:
+    """
+    A painting, print or the clock cut from a photo of the room: the four
+    `corners` (fractions of the photo, clockwise from top left) mapped to a
+    rectangle `size_m` across and down at `px_per_m`, white-balanced channel
+    by channel on the `wall` box (white wall in the same light, 85%).
+    `cutout`: an RGBA image whose alpha keeps what is darker than the wall.
+    """
+    image = ImageOps.exif_transpose(Image.open(path)).convert("RGB")
+    rgb = np.asarray(image, np.float32) / 255
+    h, w = rgb.shape[:2]
+    src = np.array([[x * w, y * h] for x, y in corners], np.float32)
+    out_w, out_h = round(size_m[0] * px_per_m), round(size_m[1] * px_per_m)
+    dst = np.array([[0, 0], [out_w, 0], [out_w, out_h], [0, out_h]], np.float32)
+    flat = cv2.warpPerspective(rgb, cv2.getPerspectiveTransform(src, dst), (out_w, out_h),
+                               flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+    lin = srgb_to_linear(np.clip(flat, 0, 1))
+    white = None
+    if wall is not None:
+        x0, y0, x1, y1 = wall
+        patch = srgb_to_linear(rgb[round(y0 * h) : round(y1 * h), round(x0 * w) : round(x1 * w)])
+        white = np.median(patch.reshape(-1, 3), axis=0)
+        lin = lin * (0.85 / np.maximum(white, 1e-6))
+    out = linear_to_srgb(np.clip(lin, 0, 1))
+    if not cutout:
+        return Image.fromarray((out * 255).astype(np.uint8))
+    lum = lin.mean(axis=2)
+    alpha = np.clip((0.55 - lum) / 0.2, 0, 1)
+    alpha = cv2.GaussianBlur(alpha, (0, 0), 1.0)
+    rgba = np.dstack([out, alpha])
+    return Image.fromarray((rgba * 255).astype(np.uint8), "RGBA")
+
+
+def tile_surface(colour: str, tile: tuple[float, float] = (0.6, 0.3), joint: float = 0.0025,
+                 px_per_m: int = 1024, seed: int = 0) -> tuple[Image.Image, tuple[float, float]]:
+    """
+    Large stone-look tiles (flat-02's bathroom, 0131, 0138): `tile` (long,
+    short) metres in rows offset by half a tile, each a shade of its own, of
+    the concrete-look `stone` grain round `colour`, grey joints between them.
+    Seamless over a square of whole tiles; returns it and its size in metres.
+    """
+    rng = np.random.default_rng(seed)
+    long_m, short_m = tile
+    rows = 2 * max(1, round(long_m / short_m))
+    size = rows * short_m
+    px = round(size * px_per_m)
+    stone = np.asarray(surface_texture("stone", colour, px=px, seed=seed), np.float32) / 255
+    lin = srgb_to_linear(stone)
+    # The photos' stone clouds softly, lighter and darker over a hand's width.
+    clouds = 0.6 * _tiling_noise(rng, (7, 7), px) + 0.4 * _tiling_noise(rng, (19, 19), px)
+    lin *= (1 + 0.14 * (clouds - clouds.mean()))[..., None]
+    long_px, short_px = long_m * px_per_m, short_m * px_per_m
+    width = max(2, round(joint * px_per_m))
+    for r in range(rows):
+        y0, y1 = round(r * short_px), round((r + 1) * short_px)
+        shift = (r % 2) * long_px / 2
+        starts = [round(shift + k * long_px) % px for k in range(round(size / long_m) + 1)]
+        for x in starts:
+            # Each tile its own shade, very slightly.
+            tone = 1 + rng.normal(0, 0.025)
+            span = (np.arange(round(long_px)) + x) % px
+            lin[y0:y1, span] *= tone
+            lin[y0:y1, span[:width]] *= 0.72
+        lin[y0 : y0 + width] *= 0.72
+    image = Image.fromarray((linear_to_srgb(np.clip(lin, 0, 1)) * 255).astype(np.uint8))
+    return image, (size, size)
 
 
 def facade_texture(colour: str, px_per_m: int = 160, seed: int = 0) -> Image.Image:

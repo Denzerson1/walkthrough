@@ -11,6 +11,10 @@ from .config import Settings
 
 PROJECT_ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$")
 
+#: A still of the flat beside scene/: the landing page's picture and a shared
+#: link's preview card.
+PREVIEW = "preview.jpg"
+
 
 class ProjectNotFound(Exception):
     pass
@@ -46,11 +50,11 @@ def save_manifest(settings: Settings, project_id: str, manifest: Manifest) -> No
     manifest.write(manifest_path(settings, project_id))
 
 
-def list_projects(settings: Settings) -> list[dict[str, str]]:
+def list_projects(settings: Settings) -> list[dict[str, str | bool]]:
     root = settings.data_root / "projects"
     if not root.is_dir():
         return []
-    out: list[dict[str, str]] = []
+    out: list[dict[str, str | bool]] = []
     for child in sorted(root.iterdir()):
         if not child.is_dir():
             continue
@@ -66,5 +70,10 @@ def list_projects(settings: Settings) -> list[dict[str, str]]:
         except Exception:
             # A half-written project should not break the whole listing.
             continue
-        out.append({"id": manifest.id, "name": manifest.name, "rooms": str(len(manifest.rooms))})
+        out.append({
+            "id": manifest.id,
+            "name": manifest.name,
+            "rooms": str(len(manifest.rooms)),
+            "preview": (child / PREVIEW).is_file(),
+        })
     return out

@@ -7,6 +7,87 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-11-06 — flat-02, a second pass for realism
+
+The owner asked for everything very realistic, the dining plant's pot shorter
+and the plant taller, and the paintings over the sofa placed as in the photo.
+Items 40–48 of `docs/flat-02-punchlist.md`.
+
+- **New pieces** (`build_flat.py`): a drawn yucca (low red pot, three canes,
+  192 arching leaves, lit per vertex), external blinds, felt place mats; the
+  basin rebuilt with a bowl in front of a rear deck, the mixer on the deck
+  and a drain, its hollow in enough rings for the per-vertex light to shade
+  it; beds rounded more (3.5 cm) so duvets and pillows read soft.
+- **Textures** (`photo_texture.py`, tested): `linen` is a fine weave with a
+  few broad creases (the ridged folds read as sand on the mattresses); new
+  `paisley` (the duvet, drawn: the photo crop read as granite) and `rug`
+  (the dining rug: the photo crop had the floor and a chair foot in it).
+- **Plan** (`rebuild.py`, tested): a dressing opening that overlaps a scanned
+  one replaces it. The scan had the balcony door beside the sofa as a window
+  on a sill; it is a door to the floor now, its blinds down outside, no
+  curtain (0084, 0092, 0093).
+- **Dressing:** the sofa's arm ends short of that door's frame; the two
+  paintings over it larger and higher, the lake's right edge just short of
+  the arm (0092); the small bedroom's pillows blue (0054).
+- **Pages:** `pnpm build:pages` exports flat-02 beside flat-01.
+
+### Verified
+- Full build at 1024 samples / 4096 (55.8 min), checked in 31 screenshots
+  from fixed views against the photos, no regressions in the 26 earlier
+  views; all 48 punch-list items ticked.
+- The new pieces smoke-tested and rendered in Blender before the build.
+- pytest 364 passed, 4 skipped; vitest 158; lint clean.
+
+### Not done / known limits
+- Mirrors still reflect a cube probe without parallax correction.
+- The paintings' size is judged from one photo; the scan's east wall comes
+  out longer than the photo suggests, so their spacing is a compromise.
+
+## 2026-11-05 — flat-02 after the owner's review
+
+The owner walked flat-02 and listed what was off; the list, checked item by
+item against the 89 photos, is `docs/flat-02-punchlist.md` (39 items).
+
+- **Viewer** (`doors.ts`, tested in `doors.test.ts`; `SplatScene.tsx`): the
+  walk starts at the entry looking down the hall. Doors open and close on a
+  tap (open by default, a 0.7 s eased swing about the hinge); a closed door
+  is wall to the walk, and the room strip's glide opens doors in its way.
+  The shower's glass door starts half open. Each mirror gets its own
+  reflection probe in front of it.
+- **Pipeline** (`build_flat.py`, `rebuild.py`, `photo_texture.py`, tested in
+  `test_photo_texture.py`): door leaves exported with their hinge as origin
+  and a `door` extra; a generated 3-strip oak parquet (the photos' strip
+  tones, 1200 px/m) and large-format stone tiles; pictures cut from the
+  photos by four measured corners, white-balanced on the wall beside them,
+  1600 px/m, the clock and the metal flowers cut out of the wall; shaker and
+  glazed kitchen fronts; new pieces (the hall wardrobe with its slatted oak
+  edge, seat and coat rail, wall-hung shoe cabinet, TV sideboard, pedestal
+  dining table, wall-hung WC with its lid up, vanity, washer column, beds,
+  desk with monitors, mirrors in brass pebble frames, towels); frosted glass
+  lets light through. Colour maps of large models at 2048. Light map 4096,
+  1024 samples.
+- **Bake fixes:** reflective caustics off (the brass frames' and mirrors'
+  bounce onto the wall came out as a ring of bright blotches); walls' and
+  ceilings' light smoothed more (sigma 6) for the mottle left on the
+  hall's bounce-lit walls.
+
+### Verified
+- Four full builds at 1024 samples / 4096 (about 57 min each), each checked
+  in 23–26 screenshots from fixed views against the photos; 38 of 39
+  punch-list items ticked (the yucca is the one left).
+- In the browser: the start at the entry; the bathroom, study and bedroom
+  doors close and reopen on a click; the shower door goes half open → closed
+  → open.
+- vitest 158, pytest all green, lint clean.
+
+### Not done / known limits
+- The plant by the dining table is the closest free model (a spiky plant in a
+  tall white pot); the real one is a yucca in a red pot.
+- Mirrors reflect a cube probe without parallax correction, so a reflection
+  near the mirror looks a little too large.
+- The header's room name is updated by walking; the screenshot script moves
+  the camera directly, so its shots all say "Hall".
+
 ## 2026-11-04 — flat-02: a flat of rooms
 
 A second flat, from the owner's Polycam scan (`3.11.2026.glb`) and 89 HEIC

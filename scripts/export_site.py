@@ -145,6 +145,9 @@ def main(project_ids: list[str]) -> None:
         for name in sorted(scene_files(manifest)):
             copy(data / "projects" / pid / "scene" / name,
                  DIST / "files" / "projects" / pid / "scene" / name)
+        if (data / "projects" / pid / projects.PREVIEW).is_file():
+            copy(data / "projects" / pid / projects.PREVIEW,
+                 DIST / "files" / "projects" / pid / projects.PREVIEW)
         copy(index, DIST / "p" / pid / "index.html")
 
     # The API's default page size, so the lists match what the viewer gets there.
