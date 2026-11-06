@@ -325,6 +325,56 @@ def strip_colours(path: Path, count: int = 400, seed: int = 0) -> np.ndarray:
     return samples[far < np.percentile(far, 80)][:count]
 
 
+def _oak_grain(rng, length_px: int, width_px: int, px_per_m: int) -> np.ndarray:
+    """
+    One oak strip's shading (about 1), along x: where the saw cut the growth
+    rings. Most strips are plain-sawn, the board's face tangent to the rings,
+    so they show as nested arches (cathedrals) drawn out along it; the rest
+    rift-sawn, fine lines straight along it with the odd silver fleck of a
+    ray. Each ring's latewood a dark band, pores in it, fibres over all. The
+    straight lines alone (the first take) read as laminate (0064, 0091).
+    """
+    u = np.arange(length_px, dtype=np.float32)[None, :] / px_per_m
+    v = np.arange(width_px, dtype=np.float32)[:, None] / px_per_m
+    width, length = width_px / px_per_m, length_px / px_per_m
+    wobble = (_tiling_noise(rng, (2, 4), max(width_px, length_px))
+              [:width_px, :length_px] - 0.5) * 0.0012
+    spacing = rng.uniform(0.0022, 0.0042)
+    plain = rng.random() < 0.65
+    if plain:
+        # Ring radius on the face: a cylinder of radius R, the face cut at a
+        # slant along it, so each ring crosses it in an arch.
+        radius = rng.uniform(0.04, 0.14)
+        centre = rng.uniform(-0.3, 1.3) * width
+        slant = rng.uniform(0.01, 0.03) * rng.choice([-1.0, 1.0])
+        r = (v - centre) ** 2 / (2 * radius) + slant * (u - rng.uniform(0, length)) + wobble
+    else:
+        r = v * rng.uniform(0.9, 1.4) + 0.004 * u + wobble
+    phase = r / spacing
+    frac = phase - np.floor(phase)
+    latewood = np.exp(-(((frac - 0.82) / 0.07) ** 2))
+    # Fibres: fine streaks along the strip, a little tone drifting along it.
+    fibres = cv2.resize(_tiling_noise(rng, (80, 6), 256), (length_px, width_px),
+                        interpolation=cv2.INTER_LINEAR)
+    drift = cv2.resize(_tiling_noise(rng, (2, 3), 64), (length_px, width_px),
+                       interpolation=cv2.INTER_LINEAR)
+    pores = (rng.random((width_px, length_px)) > 0.985).astype(np.float32)
+    pores = cv2.GaussianBlur(pores, (0, 0), sigmaX=1.6, sigmaY=0.4) * 2.5 * (0.3 + latewood)
+    shade = (1 - 0.2 * latewood + 0.08 * (fibres - 0.5) + 0.1 * (drift - 0.5)
+             - 0.12 * np.clip(pores, 0, 1))
+    if not plain:
+        rays = (rng.random((width_px, length_px)) > 0.9992).astype(np.float32)
+        rays = cv2.GaussianBlur(rays, (0, 0), sigmaX=6.0, sigmaY=0.8) * 12
+        shade += 0.08 * np.clip(rays, 0, 1)
+    knot = rng.random() < 0.06
+    if knot:
+        ky, kx = rng.uniform(0.2, 0.8) * width_px, rng.uniform(0.1, 0.9) * length_px
+        yy, xx = np.mgrid[0:width_px, 0:length_px]
+        d = np.hypot((yy - ky) / 1.0, (xx - kx) / 1.8) / (0.004 * px_per_m)
+        shade *= 1 - 0.45 * np.exp(-(d ** 2))
+    return shade.astype(np.float32)
+
+
 def parquet_texture(colours: np.ndarray, colour: str | None = None, strip: float = 0.068,
                     strips: int = 3, length: float = 2.2, boards: int = 3, px_per_m: int = 1200,
                     seed: int = 0) -> tuple[Image.Image, tuple[float, float]]:
@@ -360,24 +410,12 @@ def parquet_texture(colours: np.ndarray, colour: str | None = None, strip: float
                 cuts.append((x, piece))
                 x += piece
             for x0, piece in cuts:
-                tone = colours[rng.integers(len(colours))]
-                tone = median * (tone / median) ** 0.35
-                n = max(strip_px, piece)
-                # Drawn square, then squeezed across to the strip's width:
-                # cells (across, along) long along the strip, thin across it.
-                fibres = (0.5 * _tiling_noise(rng, (70, 7), n)
-                          + 0.3 * _tiling_noise(rng, (24, 3), n)
-                          + 0.2 * _tiling_noise(rng, (6, 2), n))
-                warp = _tiling_noise(rng, (2, 3), n)
-                across = np.arange(n, dtype=np.float32)[:, None] / n
-                rings = 0.5 + 0.5 * np.sin(2 * np.pi * (across * rng.uniform(3, 8)
-                                                        + 0.25 * warp + rng.random()))
-                pores = (_tiling_noise(rng, (160, 24), n) > 0.8).astype(np.float32)
-                grain = 0.5 * fibres + 0.35 * rings ** 3 - 0.2 * pores
-                grain = cv2.resize(grain, (piece, strip_px), interpolation=cv2.INTER_AREA)
-                flecks = (rng.random((strip_px, piece)) > 0.9993).astype(np.float32)
-                flecks = cv2.GaussianBlur(flecks, (0, 0), 1.2) * 6
-                shade = 1 + 0.38 * (grain - grain.mean()) - 0.12 * flecks
+                # Its own lightness, the hue barely moved: a sample in shadow
+                # came out grey, and oak strips differ in light, not in hue.
+                ratio = colours[rng.integers(len(colours))] / median
+                light = float(ratio.mean())
+                tone = median * light ** 0.8 * (ratio / light) ** 0.25
+                shade = _oak_grain(rng, piece, strip_px, px_per_m)
                 block = tone[None, None, :] * shade[..., None]
                 xs = (np.arange(piece) + x0 + offset) % out_l
                 tex[y0 : y0 + strip_px, xs] = block

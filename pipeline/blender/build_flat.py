@@ -270,7 +270,12 @@ def build_room(b: Builder, room: dict, skylights: list[dict]) -> list[dict]:
         openings = sorted(wall["openings"], key=lambda o: o["offset"])
         spans = opening_spans(wall, h)
         for o, (lo, hi, bottom, top) in zip(openings, spans, strict=True):
-            if o["type"] == "door":
+            if o["type"] == "door" and o.get("glazed"):
+                # A balcony door: its frame in the wall, a threshold, and the
+                # glazed leaf a piece of its own (glass-door) that opens.
+                window(b, wall, lo, hi, bottom, top, glass=False)
+                wall_box(b, "trim", wall, lo, hi, -SLAB_T, 0.003, 0, WALL_T)
+            elif o["type"] == "door":
                 door(b, wall, lo, hi, top, o.get("frame", True), o.get("latch", "end"))
             else:
                 window(b, wall, lo, hi, bottom, top)
@@ -875,14 +880,16 @@ def leaf_objects(leaves: list[dict], mats: dict[str, bpy.types.Material]) -> lis
     return objects
 
 
-def window(b: Builder, wall: dict, lo: float, hi: float, bottom: float, top: float) -> None:
+def window(b: Builder, wall: dict, lo: float, hi: float, bottom: float, top: float,
+           glass: bool = True) -> None:
     v0, v1 = WALL_T / 2 - FRAME_D / 2, WALL_T / 2 + FRAME_D / 2
     wall_box(b, "trim", wall, lo, lo + FRAME_W, bottom, top, v0, v1)
     wall_box(b, "trim", wall, hi - FRAME_W, hi, bottom, top, v0, v1)
     wall_box(b, "trim", wall, lo, hi, bottom, bottom + FRAME_W, v0, v1)
     wall_box(b, "trim", wall, lo, hi, top - FRAME_W, top, v0, v1)
-    wall_box(b, "glass", wall, lo + FRAME_W, hi - FRAME_W, bottom + FRAME_W, top - FRAME_W,
-             WALL_T / 2 - 0.004, WALL_T / 2 + 0.004)
+    if glass:
+        wall_box(b, "glass", wall, lo + FRAME_W, hi - FRAME_W, bottom + FRAME_W, top - FRAME_W,
+                 WALL_T / 2 - 0.004, WALL_T / 2 + 0.004)
     # An interior sill board, the detail that makes a window read as built.
     if bottom > 0.1:
         wall_box(b, "trim", wall, lo - 0.03, hi + 0.03, bottom - 0.03, bottom, -0.04, WALL_T / 2)
@@ -978,7 +985,7 @@ FRONT_T, GAP, GRIP = 0.019, 0.003, 0.03  # front thickness, gap between fronts, 
 SOFTNESS = {"bed": (0.025, 3), "air-con": (0.09, 10), "tv": (0.003, 1),
             "bed-frame": (0.004, 1), "washer": (0.012, 2),
             "box-bed": (0.035, 4), "towels": (0.012, 2), "folding-bed": (0.018, 3),
-            "box-cushion": (0.07, 5)}
+            "box-cushion": (0.07, 5), "lounge-chair": (0.02, 3)}
 
 Part = tuple[str, tuple[float, float, float, float, float, float]]
 
@@ -1896,6 +1903,80 @@ def placemat(bm: bmesh.types.BMesh, w: float, h: float, d: float, slot) -> None:
         face.material_index = slot("felt")
 
 
+def railing(w: float, h: float, d: float, opts: dict) -> list[Part]:
+    """
+    The balcony's balustrade: frosted glass panes between anthracite posts
+    about every 1.5 m, a flat top rail over them. Its front (y0) faces the
+    balcony.
+    """
+    x0, x1, y0, y1 = -w / 2, w / 2, -d / 2, d / 2
+    post, rail = 0.05, 0.05
+    bays = max(1, round(w / 1.5))
+    parts: list[Part] = [("anthracite", (x0, x1, y0, y1, h - rail, h))]
+    for i in range(bays + 1):
+        xa = x0 + i * (w - post) / bays
+        parts.append(("anthracite", (xa, xa + post, y0 + 0.005, y1 - 0.005, 0, h - rail)))
+    for i in range(bays):
+        xa = x0 + post + i * (w - post) / bays
+        parts.append(("glass-frost", (xa + 0.01, xa + (w - post) / bays - post - 0.01,
+                                      -0.005, 0.005, 0.08, h - rail - 0.04)))
+    return parts
+
+
+def garden_table(w: float, h: float, d: float, opts: dict) -> list[Part]:
+    """A balcony table, as the scan has it: a slatted acacia top on an anthracite frame."""
+    x0, x1, y0, y1 = -w / 2, w / 2, -d / 2, d / 2
+    leg, t = 0.04, 0.025
+    parts: list[Part] = []
+    for xa in (x0 + 0.03, x1 - 0.03 - leg):
+        for ya in (y0 + 0.03, y1 - 0.03 - leg):
+            parts.append(("anthracite", (xa, xa + leg, ya, ya + leg, 0, h - t)))
+    parts += [("anthracite", (x0 + 0.03, x1 - 0.03, y0 + 0.03, y0 + 0.05, h - t - 0.06, h - t)),
+              ("anthracite", (x0 + 0.03, x1 - 0.03, y1 - 0.05, y1 - 0.03, h - t - 0.06, h - t))]
+    count = 7
+    for i in range(count):
+        ya = y0 + i * d / count
+        parts.append(("acacia", (x0, x1, ya + 0.004, ya + d / count - 0.004, h - t, h)))
+    return parts
+
+
+def garden_chair(w: float, h: float, d: float, opts: dict) -> list[Part]:
+    """A balcony chair: anthracite frame, acacia slats in its seat and back (front y0)."""
+    x0, x1, y0, y1 = -w / 2, w / 2, -d / 2, d / 2
+    leg, seat = 0.03, 0.45
+    parts: list[Part] = []
+    for xa in (x0 + 0.04, x1 - 0.04 - leg):
+        parts += [("anthracite", (xa, xa + leg, y0 + 0.04, y0 + 0.04 + leg, 0, seat)),
+                  ("anthracite", (xa, xa + leg, y1 - 0.06, y1 - 0.06 + leg, 0, h)),
+                  ("anthracite", (xa, xa + leg, y0 + 0.04, y1 - 0.06, seat - 0.03, seat))]
+    for i in range(5):
+        ya = y0 + 0.04 + i * (d - 0.12) / 5
+        parts.append(("acacia", (x0 + 0.05, x1 - 0.05, ya + 0.004, ya + (d - 0.12) / 5 - 0.004,
+                                 seat, seat + 0.02)))
+    for i in range(3):
+        za = seat + 0.12 + i * 0.1
+        parts.append(("acacia", (x0 + 0.05, x1 - 0.05, y1 - 0.06, y1 - 0.04, za, za + 0.075)))
+    return parts
+
+
+def lounge_chair(w: float, h: float, d: float, opts: dict) -> list[Part]:
+    """A low balcony armchair: an anthracite frame, grey seat and back cushions (front y0)."""
+    x0, x1, y0, y1 = -w / 2, w / 2, -d / 2, d / 2
+    arm, base = 0.07, 0.18
+    return [("anthracite", (x0, x0 + arm, y0, y1, 0.0, 0.58)),
+            ("anthracite", (x1 - arm, x1, y0, y1, 0.0, 0.58)),
+            ("anthracite", (x0 + arm, x1 - arm, y1 - 0.08, y1, 0.0, h - 0.1)),
+            ("anthracite", (x0 + arm, x1 - arm, y0, y1 - 0.08, base - 0.05, base)),
+            ("cushion-grey", (x0 + arm, x1 - arm, y0 + 0.02, y1 - 0.08, base, base + 0.16)),
+            ("cushion-grey", (x0 + arm + 0.01, x1 - arm - 0.01, y1 - 0.24, y1 - 0.08,
+                              base + 0.16, h))]
+
+
+def backdrop(w: float, h: float, d: float, opts: dict) -> list[Part]:
+    """What is across the street, seen from the balcony: a row of house fronts or the ground."""
+    return [(opts.get("surface", "facade"), (-w / 2, w / 2, -d / 2, d / 2, 0, h))]
+
+
 def yucca(bm: bmesh.types.BMesh, w: float, h: float, d: float, slot) -> None:
     """
     The yucca beside the dining table (0084, 0092, 0093): a low red pot,
@@ -1965,7 +2046,9 @@ PIECES = {
     "box-bed": box_bed, "folding-bed": folding_bed, "standing-desk": standing_desk,
     "nightstand": nightstand, "sliding-wardrobe": sliding_wardrobe, "slat-wall": slat_wall,
     "floating-shelf": floating_shelf, "step-stool": step_stool, "towels": towels,
-    "picture": picture, "box-cushion": box_cushion, "blinds": blinds,
+    "picture": picture, "box-cushion": box_cushion, "blinds": blinds, "railing": railing,
+    "garden-table": garden_table, "garden-chair": garden_chair, "lounge-chair": lounge_chair,
+    "backdrop": backdrop,
 }
 
 
@@ -2496,7 +2579,7 @@ def hang_clothes(item: dict, piece: bpy.types.Object, surfaces: dict) -> bpy.typ
 
 #: Frosted glass lets a little light through: the shower's door and the
 #: kitchen's glazed doors, by surface name (alpha).
-TRANSLUCENT_GLASS = {"frosted": 0.55, "glass-frost": 0.75}
+TRANSLUCENT_GLASS = {"frosted": 0.55, "glass-frost": 0.75, "door-glass": 0.12}
 
 
 def surface_material(name: str, surface: dict) -> bpy.types.Material:
@@ -2629,8 +2712,9 @@ def finished(item: dict, surfaces: dict) -> bpy.types.Object:
         mesh.set_sharp_from_angle(angle=math.radians(40))
         VERTEX_LIT.add(obj.name)
         TRANSLUCENT.add(obj.name)
-    if item["finish"] == "yucca":
-        VERTEX_LIT.add(obj.name)  # leaves too thin for the light map
+    if item["finish"] in ("yucca", "backdrop"):
+        # Leaves too thin for the light map; house fronts too big for it.
+        VERTEX_LIT.add(obj.name)
     if item["finish"] in ("barrel-chair", "wc"):
         mesh.shade_smooth()
         mesh.set_sharp_from_angle(angle=math.radians(50))
@@ -2824,6 +2908,19 @@ def glass_leaf(bm: bmesh.types.BMesh, w: float, h: float, slot, opts: dict) -> N
         for face in {f for v in cube["verts"] for f in v.link_faces}:
             face.material_index = slot(surface)
 
+    if opts.get("frame"):
+        # A balcony door's leaf (0100-0102): a white frame round clear glass,
+        # a lever handle at its free edge on the room side.
+        f, t, frame = 0.07, 0.035, opts["frame"]
+        box(opts.get("surface", "door-glass"), f, reach - f, -0.004, 0.004, 0.1, h - f)
+        box(frame, 0.0, f, -t, t, 0.0, h)
+        box(frame, reach - f, reach, -t, t, 0.0, h)
+        box(frame, f, reach - f, -t, t, 0.0, 0.1)
+        box(frame, f, reach - f, -t, t, h - f, h)
+        box("steel", reach - 0.05, reach - 0.03, -t - 0.012, -t, 1.0, 1.08)
+        box("steel", reach - 0.19, reach - 0.04, -t - 0.06, -t - 0.045, 1.03, 1.05)
+        box("steel", reach - 0.05, reach - 0.035, -t - 0.06, -t - 0.012, 1.03, 1.05)
+        return
     box(opts.get("surface", "frosted"), 0.006, reach, -0.004, 0.004, 0.02, h)
     for z in (0.25, h - 0.3):
         box("steel", 0.0, 0.05, -0.012, 0.012, z, z + 0.07)
@@ -2850,7 +2947,12 @@ def hang_glass_door(obj: bpy.types.Object, item: dict) -> None:
     hinge = Matrix.Translation((-sign * w / 2, 0.0, 0.0))
     obj.matrix_world = obj.matrix_world @ hinge @ Matrix.Rotation(stand, 4, "Z")
     full = math.radians(90) * -sign
-    obj["door"] = {"open": round(full - stand, 5), "close": round(-stand, 5)}
+    tag = {"open": round(full - stand, 5), "close": round(-stand, 5)}
+    if opts.get("doorway"):
+        # It shuts a doorway (the balcony's): closed, the walk stops there.
+        x, _, z = item["center"]
+        tag |= {"at": [round(x, 4), round(z, 4)], "width": round(w, 4)}
+    obj["door"] = tag
 
 
 def picture_uvs(bm: bmesh.types.BMesh, faces, span: tuple[float, float, float, float]) -> None:
@@ -3279,8 +3381,11 @@ def ceiling_lights(spec: dict) -> list[bpy.types.Object]:
     for i, lamp in enumerate(spec.get("lights") or []):
         x, y, z = lamp["at"]
         size = lamp.get("size", 0.25)
+        # Round or square, as each room's lamp is photographed (flat-02: round
+        # flush lamps in the living room and bedrooms, square panels in the hall).
+        round_ = lamp.get("shape") == "round"
         area = bpy.data.lights.new(f"lamp-light-{i}", "AREA")
-        area.shape, area.size = "SQUARE", size
+        area.shape, area.size = ("DISK" if round_ else "SQUARE"), size
         area.energy = lamp.get("power", 15.0)
         area.color = lamp.get("colour", (1.0, 0.86, 0.72))
         obj = bpy.data.objects.new(area.name, area)
@@ -3288,8 +3393,10 @@ def ceiling_lights(spec: dict) -> list[bpy.types.Object]:
         obj.location = P(x, y - 0.012, z)  # an area light shines down its -Z: down
         bm = bmesh.new()
         h = size / 2
-        verts = [bm.verts.new(P(x + dx, y - 0.008, z + dz))
-                 for dx, dz in ((-h, -h), (h, -h), (h, h), (-h, h))]
+        corners = ([(h * math.cos(a), h * math.sin(a))
+                    for a in (2 * math.pi * k / 48 for k in range(48))] if round_
+                   else [(-h, -h), (h, -h), (h, h), (-h, h)])
+        verts = [bm.verts.new(P(x + dx, y - 0.008, z + dz)) for dx, dz in corners]
         face = bm.faces.new(verts)
         face.normal_update()
         if face.normal.dot(P(0, -1, 0)) < 0:
@@ -3502,10 +3609,16 @@ def obstacles(pieces: list[bpy.types.Object]) -> list[dict]:
     What a person walks into: each piece standing on the floor, as the
     convex outline of its parts below chest height (so a bar top's overhang
     counts, a wall cupboard above the worktop does not). The viewer keeps
-    the walk out of them.
+    the walk out of them. Not what lies on the floor (rugs, mats, a
+    balcony's floor), which is walked on, nor a doorway's leaf: it swings,
+    and closed it shuts its doorway instead (doors.ts).
     """
     out = []
     for obj in pieces:
+        if "at" in (obj.get("door") or {}):
+            continue
+        if max((obj.matrix_world @ v.co).z for v in obj.data.vertices) < 0.05:
+            continue
         low = []
         for v in obj.data.vertices:
             w = obj.matrix_world @ v.co  # Blender (x, -z, y)
@@ -3851,8 +3964,10 @@ EXPOSE_TO, CLIP = 0.25, 16.0
 #: balance: the shade's colour is made neutral (walls white, as in the
 #: photos), sun patches stay warmer than it. 1 would neutralise it fully.
 WHITE_BALANCE = 0.6
-#: Then a slight warm cast over it all, like a camera set a little below
-#: daylight: the owner found the neutral room a touch cool.
+#: Then a warm cast over it all, like a camera set below daylight: the owner
+#: found the neutral room a touch cool, and asked again for warm light, as
+#: the photos have it (flat-02's lamps are warm white). Held to where the
+#: photos' white walls still read white beside the lamps, not beige.
 WARMTH = (1.08, 1.0, 0.86)
 #: The light map holds (light / scale) ** (1 / LIGHTMAP_GAMMA): steeper than
 #: sRGB, so dim light (a hall lit only by bounce) gets enough of the 256
@@ -4213,10 +4328,12 @@ def main() -> None:
         if label != "main":
             mats[f"floorzone-{label}"] = floor_material(f"floorzone-{label}", floor)
     shell = b.finish(mats)
+    air = spec["rooms"] + [{"polygon": o["polygon"], "height": o["height"], "walls": []}
+                           for o in spec.get("outdoors", [])]
     for obj in shell:
         # The roof window's shaft is not room air, so its lining would count as unseen.
         if obj.name not in ("glass", "skylight"):
-            mark_unseen(obj, spec["rooms"])
+            mark_unseen(obj, air)
         elif obj.name == "skylight":
             mark_lining(obj, spec["skylights"], LINING_T)
     for obj in shell:

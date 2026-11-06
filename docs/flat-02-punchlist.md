@@ -74,3 +74,19 @@ they sat too far left.
 - [x] 46. Basin: a real bowl in front of a rear deck, the mixer on the deck, a chrome drain (0119, 0120).
 - [x] 47. Dining rug: a grey distressed rug (the photo crop had the floor and a chair foot in it).
 - [x] 48. Grey felt place mats at the four places (0091, 0093).
+
+## Third pass (2026-11-06): balcony, warm light, the floor
+The owner: add the balcony; check everything 1:1; realistic, warm lighting in
+the right colours; the right floor.
+- [x] 49. The balcony (the scan's loggia, 6 x 2.5 m): tiled floor, its walls and ceiling, a frosted
+  glass balustrade, the scan's table, two chairs and lounge chair; house fronts across the street.
+- [x] 50. The balcony door (0100-0102) a glazed leaf that opens and closes; open, the balcony is
+  walked onto like a room.
+- [x] 51. Every room's ceiling lamp as photographed, warm white (~3000 K): round in the living room,
+  dining area, bedrooms and bathroom, square panels in the hall, kitchen and study.
+- [x] 52. A warm colour balance over the whole flat, as the photos' light: warm, but white walls
+  still white beside the lamps (0092), not beige.
+- [x] 53. The parquet as the photos' oak (0064, 0091, 0140): cathedral and straight grain, latewood
+  lines, pores, strips differing in lightness, honey-amber as photographed.
+- [x] 54. The house's walls round the balcony lit like its own walls, not left dark.
+- [x] 55. Rugs, mats and the balcony floor are walked on, not walked round.

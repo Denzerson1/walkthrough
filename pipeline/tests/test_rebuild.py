@@ -336,3 +336,13 @@ def test_widen_moves_all_past_the_strip_and_keeps_openings_in_place():
     assert scan["ceilings"] == [[[0.0, 2.5, 1.0], [4.0, 2.5, 2.5]]]
     assert scan["partitions"][0]["end"] == [1.0, 2.5] and scan["partitions"][0]["height"] == 2.5
     assert scan["zones"] == [("Other", [[0.0, 0.0], [1.0, 2.5], [0.0, 2.5]])]
+
+
+def test_a_palette_facade_is_a_house_front_tiled_by_bay_and_storey(tmp_path):
+    from walkthrough_pipeline import photo_texture, rebuild
+
+    paths = ProjectPaths(tmp_path / "p")
+    paths.scene.mkdir(parents=True)
+    out = rebuild.surfaces(paths, palette={"facade": ["#e3d8c2", 0.9, "facade"]})
+    assert Path(out["facade"]["texture"]).is_file()
+    assert out["facade"]["tile"] == [photo_texture.BAY_M, photo_texture.STOREY_M]

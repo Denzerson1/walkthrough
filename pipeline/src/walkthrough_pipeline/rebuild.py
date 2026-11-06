@@ -132,6 +132,9 @@ def surfaces(paths: ProjectPaths, photos: dict | None = None,
             image, size = photo_texture.tile_surface(colour, seed=i)
             image.save(path, quality=92)
             texture, tile = str(path), list(size)
+        elif kind == "facade":  # one bay of one floor of a house front, tiling
+            photo_texture.facade_texture(colour, seed=i).save(path, quality=88)
+            texture, tile = str(path), [photo_texture.BAY_M, photo_texture.STOREY_M]
         elif kind:
             photo_texture.surface_texture(kind, colour, seed=i).save(path, quality=90)
             texture = str(path)
@@ -645,6 +648,8 @@ def scene_spec(
         "lights": dressing.get("lights", []),
         "strips": dressing.get("strips", []),
         "outside": outside_view(paths, wanted),
+        # Open air outside the outline (a balcony): the walls facing it are baked.
+        "outdoors": dressing.get("outdoors", []),
         "site": surroundings,
         "surfaces": surfaces(paths, dressing.get("surfaces"), dressing.get("palette"),
                              dressing.get("pictures")),

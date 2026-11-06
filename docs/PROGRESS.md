@@ -7,6 +7,41 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-11-06 — flat-02, a third pass: the balcony, warm light, the floor
+
+The owner asked for the balcony, everything checked 1:1 against the photos,
+realistic warm light in the right colours and the right floor. Items 49–55
+of `docs/flat-02-punchlist.md`.
+
+- **Balcony** (dressing, new `build_flat.py` parts): the scan's loggia with a
+  tiled floor, rendered walls and soffit, a frosted glass balustrade on
+  anthracite posts, an acacia table with two chairs and a lounge chair; house
+  fronts and the street beyond (new `facade` palette kind in `rebuild.py`,
+  tested). No photo shows it by day, so its finishes are a common new build's.
+- **Balcony door:** a glazed white-framed leaf that opens and closes; open,
+  the balcony is a room walked onto. The house's walls facing it are baked
+  (the dressing's `outdoors`, so they are no longer flagged unseen and dark).
+- **Walking:** what lies on the floor (rugs, mats, the balcony floor) and a
+  doorway's swinging leaf are no longer obstacles. Before, the rugs could
+  not be walked onto.
+- **Light:** every room's ceiling lamp as photographed, warm white, round or
+  square; the overall warm cast held back (`WARMTH` 1.08/1.0/0.86) so white
+  walls read white beside the lamps, as in 0092, not beige.
+- **Floor:** oak grain drawn per strip (cathedral and rift, latewood, pores,
+  knots), strips varying in lightness only; colour honey-amber as measured
+  from 0092 and 0140.
+
+### Verified
+- Full build at 1024 samples / 4096 (57.4 min); 36 fixed views screenshotted
+  and checked against the photos, including four on the balcony.
+- In the browser: walked from the living room through the balcony door onto
+  the balcony and back; the balustrade and the balcony table stop the walk.
+- pytest 365 passed, 4 skipped; vitest 158; lint clean.
+
+### Not done / known limits
+- The balcony and the view from it are not photographed; both are generic.
+- The house fronts across the street are a flat painted backdrop.
+
 ## 2026-11-06 — flat-02, a second pass for realism
 
 The owner asked for everything very realistic, the dining plant's pot shorter
