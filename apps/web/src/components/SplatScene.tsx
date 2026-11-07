@@ -30,6 +30,7 @@ import {
   angleDelta,
   canStand,
   moveWithCollision,
+  nearestStandable,
   roomAt,
 } from '../lib/geometry';
 import type { Manifest, Room, SunSample, Vec2 } from '../lib/manifest';
@@ -180,35 +181,30 @@ const TURN_SPEED = 95;
 const EYE_HEIGHT = 1.6;
 
 /** Key -> [strafe, forward], both in -1..1 and in camera space. */
+// Keys by where they are on the keyboard (KeyboardEvent.code), not by the
+// character they type: by character, a W pressed before Shift came up as
+// "W" and "w" stayed held for good, and other layouts moved the keys.
 const WALK_KEYS = new Map<string, Vec2>([
-  ['w', [0, 1]],
-  ['W', [0, 1]],
+  ['KeyW', [0, 1]],
   ['ArrowUp', [0, 1]],
-  ['s', [0, -1]],
-  ['S', [0, -1]],
+  ['KeyS', [0, -1]],
   ['ArrowDown', [0, -1]],
-  ['a', [-1, 0]],
-  ['A', [-1, 0]],
+  ['KeyA', [-1, 0]],
   ['ArrowLeft', [-1, 0]],
-  ['d', [1, 0]],
-  ['D', [1, 0]],
+  ['KeyD', [1, 0]],
   ['ArrowRight', [1, 0]],
 ]);
 
 /** Key -> pitch step in degrees. Negative looks down. */
 const PITCH_KEYS = new Map<string, number>([
-  ['r', 4],
-  ['R', 4],
-  ['f', -4],
-  ['F', -4],
+  ['KeyR', 4],
+  ['KeyF', -4],
 ]);
 
 /** Key -> turn direction, positive being to the left. */
 const TURN_KEYS = new Map<string, number>([
-  ['q', 1],
-  ['Q', 1],
-  ['e', -1],
-  ['E', -1],
+  ['KeyQ', 1],
+  ['KeyE', -1],
 ]);
 
 /** How fast a glide covers ground, and the bounds on how long one may take. */
@@ -455,6 +451,7 @@ export function SplatScene({
           return sceneRef.current;
         },
         state: stateRef.current,
+        THREE,
         still: () => stillRef?.current?.(),
         wake: () => wakeRef.current(),
       };
@@ -637,7 +634,12 @@ export function SplatScene({
         return;
       }
 
-      const from: Vec2 = [st.position[0], st.position[2]];
+      let from: Vec2 = [st.position[0], st.position[2]];
+      // Standing where one may not (a door shut on its doorway): every step
+      // would be refused, so step out to the nearest place one may stand.
+      if (rooms.length && !canStand(from, rooms, BODY_RADIUS)) {
+        from = nearestStandable(from, rooms, BODY_RADIUS) ?? from;
+      }
       const step: Vec2 = [st.velocity[0] * dt, st.velocity[1] * dt];
       const to = rooms.length
         ? moveWithCollision(from, step, rooms, BODY_RADIUS)
@@ -748,6 +750,11 @@ export function SplatScene({
       lastFrame = now;
 
       if (st.transition) {
+        // Q/E turn during a glide too: the gaze is then the viewer's.
+        if (st.turn !== 0) {
+          st.transition.lookFree = true;
+          st.yaw += st.turn * TURN_SPEED * dt;
+        }
         const elapsed = now - st.transition.startedAt;
         const pose = glidePose(st.transition, elapsed / st.transition.durationMs);
         st.position = pose.position;
@@ -1006,6 +1013,21 @@ export function SplatScene({
       if (!door) return false;
       door.state.target = toggled(door.state);
       walkRoomsRef.current = walkableWith(roomsRef.current, ctx.doors.map((d) => d.state));
+      // Shut while standing in its doorway: step back out of the wall, on the
+      // side one stood on, instead of standing in it with the frame cut away.
+      const st = stateRef.current;
+      const here: Vec2 = [st.position[0], st.position[2]];
+      const out = nearestStandable(here, walkRoomsRef.current, BODY_RADIUS);
+      if (out && out !== here) {
+        st.velocity = [0, 0];
+        st.transition = {
+          from: { position: st.position, yaw: st.yaw },
+          to: { position: [out[0], EYE_HEIGHT, out[1]], yaw: st.yaw },
+          startedAt: performance.now(),
+          durationMs: 300,
+          lookFree: true,
+        };
+      }
       return true;
     };
 
@@ -1201,13 +1223,13 @@ export function SplatScene({
       pinchDistance = 0;
     };
     const fromUi = (e: KeyboardEvent) => {
-      // Let the room strip, panels and form fields have their keys first.
+      // Text being typed keeps its keys, and the room strip its arrows. A
+      // button that merely kept the focus after a click (the room strip, the
+      // design panel) does not: walking stopped dead after every click on one.
       const target = e.target as HTMLElement | null;
-      return Boolean(
-        target &&
-          target !== document.body &&
-          target.closest('button, input, select, textarea, [role="tablist"], [role="dialog"]'),
-      );
+      if (!target || target === document.body) return false;
+      if (target.isContentEditable || target.closest('input, select, textarea')) return true;
+      return e.key.startsWith('Arrow') && Boolean(target.closest('[role="tablist"]'));
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -1218,13 +1240,15 @@ export function SplatScene({
       // Pitch is a discrete nudge rather than a held rate, so that one press
       // is one repeatable amount. Looking around is normally a drag; this is
       // the keyboard-only and automated path.
-      else if (PITCH_KEYS.has(e.key)) {
-        st.pitch = clampPitch(st.pitch + (PITCH_KEYS.get(e.key) as number));
+      else if (PITCH_KEYS.has(e.code)) {
+        st.pitch = clampPitch(st.pitch + (PITCH_KEYS.get(e.code) as number));
         st.looked = true;
-      } else if (WALK_KEYS.has(e.key) || TURN_KEYS.has(e.key)) {
-        st.keys.add(e.key);
-        // Walking overrides a glide that is still in flight.
-        if (WALK_KEYS.has(e.key)) st.transition = null;
+      } else if (WALK_KEYS.has(e.code) || TURN_KEYS.has(e.code)) {
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        st.keys.add(e.code);
+        // Walking overrides a glide that is still in flight; turning takes
+        // over its gaze (tick).
+        if (WALK_KEYS.has(e.code)) st.transition = null;
         updateIntent();
       } else return;
       e.preventDefault();
@@ -1232,7 +1256,7 @@ export function SplatScene({
 
     const onKeyUp = (e: KeyboardEvent) => {
       const st = stateRef.current;
-      if (!st.keys.delete(e.key)) return;
+      if (!st.keys.delete(e.code)) return;
       updateIntent();
     };
 
@@ -1738,10 +1762,11 @@ function loadFloorMaps(
 
 /**
  * The metered brightness (log-average linear luminance) of a view that
- * needs no exposure change: the living room as the bake exposed it, which
- * matches the owner's photos. Darker views open up, brighter stop down.
+ * needs no exposure change. Darker views open up, brighter stop down. At
+ * 0.33 the flat was exposed high-key and read pale beside the owner's
+ * evening photos; under a photographic mid-grey it keeps the lamps' mood.
  */
-const METER_KEY = 0.33;
+const METER_KEY = 0.15;
 
 /** How much each surface reflects of the room around it (by material name). */
 const REFLECTIVITY: Record<string, number> = {
@@ -1765,7 +1790,8 @@ const REFLECTIVITY: Record<string, number> = {
 /** A mirror reflects the room as seen from the viewer's eye, mirrored in its plane (addMirrors). */
 const MIRROR = 'surface-mirror';
 /** Silvered glass: a little light lost, a faint green from the glass. */
-const MIRROR_TINT = new THREE.Color(0.88, 0.9, 0.89);
+/** A mirror's silvering: a touch darker than what it shows, and no colour of its own. */
+const MIRROR_TINT = new THREE.Color(0.9, 0.9, 0.9);
 /** three's ReflectorShader, the reflection tinted instead of overlay-blended. */
 const MIRROR_SHADER = {
   name: 'MirrorShader',
@@ -1808,6 +1834,13 @@ function addMirrors(model: THREE.Object3D, renderer: THREE.WebGLRenderer): void 
     }
   });
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+  // Each mirror draws the room into a buffer of its own. At the screen's
+  // size, half-float and 4x multisampled, that is ~100 MB a mirror on a
+  // phone: the first two got theirs and the bathroom's and the study's came
+  // out black. A phone's are a quarter of that, without multisampling.
+  const phone = navigator.maxTouchPoints > 0 && Math.min(window.innerWidth, window.innerHeight) < 600;
+  const cap = phone ? 1024 : 2048;
+  const scale = Math.min(1, cap / Math.max(size.x, size.y));
   const toModel = model.matrixWorld.clone().invert();
   for (const node of found) {
     const geometry = node.geometry.clone().applyMatrix4(node.matrixWorld);
@@ -1829,9 +1862,12 @@ function addMirrors(model: THREE.Object3D, renderer: THREE.WebGLRenderer): void 
     frame.updateMatrixWorld(true);
     geometry.applyMatrix4(frame.matrixWorld.clone().invert());
     const mirror = new Reflector(geometry, {
-      textureWidth: Math.min(size.x, 2048),
-      textureHeight: Math.min(size.y, 2048),
-      clipBias: 0.003,
+      textureWidth: Math.round(size.x * scale),
+      textureHeight: Math.round(size.y * scale),
+      multisample: phone ? 0 : 4,
+      // Only a hair: at 3 mm the wall a few millimetres behind the glass
+      // was drawn into the reflection, seen at the mirror's edges.
+      clipBias: 0.0004,
       color: MIRROR_TINT,
       shader: MIRROR_SHADER,
     });
@@ -1965,8 +2001,9 @@ async function loadBakedModel(
     }
     if (lit) decodeVertexLight(material);
     if (!baked && !lit && source.name !== "glass") material.toneMapped = false;
-    // A ceiling light that is on: as bright as a lit panel, whatever the exposure.
-    if (source.name === "lamp") material.color.setRGB(1.6, 1.55, 1.45);
+    // A ceiling light that is on: a lit panel, whatever the exposure, in the
+    // lamps' warm white (it was a glaring blue-white).
+    if (source.name === "lamp") material.color.setRGB(1.12, 1.0, 0.8);
     if (source.name === "sky") material.fog = false;
     // The neighbourhood carries its sunlight and shadows in its vertices.
     material.vertexColors = Boolean(node.geometry.getAttribute("color"));

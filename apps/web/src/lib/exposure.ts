@@ -17,7 +17,7 @@ const H = 18;
 export const ADAPT = 0.6;
 
 /** How far it opens up at most: the hall, lit only by bounce, stays a darker room. */
-export const MAX_EXPOSURE = 2.2;
+export const MAX_EXPOSURE = 1.6;
 
 /**
  * The exposure for a view whose log-average linear luminance is `mean`,

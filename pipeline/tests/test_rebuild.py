@@ -121,6 +121,26 @@ def test_spec_carries_rooms_openings_items_and_outputs(tmp_path):
     assert spec["out"]["glb"].endswith("flat.glb")
 
 
+def test_upright_windows_get_a_sun_for_every_time_of_day(tmp_path):
+    room, items, _ = roomplan.to_rooms(roomplan.load_json(_captured_room()), room_id="room")
+    manifest = Manifest(id="p", name="p", rooms=[room], items=items)
+    paths = ProjectPaths(tmp_path / "p")
+    paths.ensure()
+    floor = {"id": "oak", "tileSizeM": [0.6, 0.6], "maps": {}, "baseColor": "#c49a63"}
+    dressing = {"location": {"latitude": 48.21, "longitude": 16.37, "utcOffset": 2},
+                "sun": {"date": "2026-09-23", "time": "20:30",
+                        "times": ["09:00", "12:30", "20:30"]},
+                "windowsFace": 180, "windowsDir": [0, -1]}
+    spec = scene_spec(paths, manifest, {"main": floor}, [], "#eeeae3", 1024, 64,
+                      dressing=dressing)
+    assert spec["sun"]["time"] == "20:30" and spec["sun"]["energy"] == 0  # after sunset
+    assert [s["time"] for s in spec["suns"]] == ["09:00", "12:30", "20:30"]
+    noon = spec["suns"][1]
+    # The windows face south (-z): at noon the sun is up in front of them.
+    assert noon["energy"] > 0 and noon["direction"][1] > 0.5 and noon["direction"][2] < 0
+    assert spec["sun_path"] == []  # baked into each time's light, not drawn live
+
+
 def test_a_model_named_in_the_dressing_draws_the_piece(tmp_path):
     room, items, _ = roomplan.to_rooms(roomplan.load_json(_captured_room()), room_id="room")
     manifest = Manifest(id="p", name="p", rooms=[room], items=items)

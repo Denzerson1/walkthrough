@@ -6,6 +6,7 @@ import {
   distanceAlongWall,
   inDoorway,
   moveWithCollision,
+  nearestStandable,
   roomAt,
   type WalkableRoom,
 } from '../src/lib/geometry';
@@ -260,5 +261,26 @@ describe('furniture', () => {
   it('slides along a piece instead of walking into it', () => {
     const end = moveWithCollision([1.5, 1.5], [0.5, 0.2], [room]);
     expect(end[0]).toBeLessThan(2 - BODY_RADIUS + 1e-9);
+  });
+});
+
+describe('nearestStandable', () => {
+  it('is the point itself where one may stand', () => {
+    expect(nearestStandable([2, 1.5], flat)).toEqual([2, 1.5]);
+  });
+
+  it('steps out of a doorway whose door has shut, on the nearer side', () => {
+    // The door shut: neither room has the opening any more.
+    const shut = flat.map((r) => ({ ...r, openings: [] }));
+    const out = nearestStandable([3.9, 1.5], shut) as Vec2;
+    expect(canStand(out, shut)).toBe(true);
+    expect(out[0]).toBeLessThan(4 - BODY_RADIUS + 1e-6);
+    expect(Math.hypot(out[0] - 3.9, out[1] - 1.5)).toBeLessThan(0.2);
+    const other = nearestStandable([4.1, 1.5], shut) as Vec2;
+    expect(other[0]).toBeGreaterThan(4 + BODY_RADIUS - 1e-6);
+  });
+
+  it('is null when nothing within reach may be stood on', () => {
+    expect(nearestStandable([99, 99], flat)).toBeNull();
   });
 });

@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -150,8 +151,16 @@ def picture(paths: ProjectPaths, name: str, spec: dict) -> dict:
     `pictures`): its `corners` in the photo (fractions, clockwise from top
     left) straightened to its `size` in metres, white-balanced on a `wall`
     box of white wall beside it; `cutout` keeps only what is darker than the
-    wall (the clock's metal), as alpha. Without corners, a neutral canvas.
+    wall (the clock's metal), as alpha. Or an `image` of its own (relative
+    to the project's folder). Without either, a neutral canvas.
     """
+    if spec.get("image"):
+        # A picture of its own (artwork made for the flat), not cut from a photo.
+        source = paths.root / spec["image"]
+        path = paths.scene / f"surface-{name}{source.suffix}"
+        shutil.copyfile(source, path)
+        return {"colour": "#ffffff", "roughness": 0.7, "texture": str(path),
+                "tile": list(spec["size"]), "cutout": bool(spec.get("cutout"))}
     if not spec.get("corners"):
         return {"colour": PLACEHOLDER, "roughness": 0.7, "texture": None, "tile": [1.0, 1.0]}
     image = photo_texture.photo_picture(repo_root() / spec["photo"], spec["corners"],
@@ -680,6 +689,15 @@ def scene_spec(
         suns = [sun(dressing, facing_dir, true_bearing, t) for t in times]
         path = sun_path(dressing, facing_dir, true_bearing)
         windows_face = {"dir": list(facing_dir), "bearing": true_bearing}
+    elif dressing.get("windowsDir") and dressing.get("sun"):
+        # Upright windows, no roof window to take the sun's way from: the
+        # dressing names the scene direction its windows' side faces
+        # (`windowsDir`) and that side's compass bearing (`windowsFace`).
+        # Each time's sun is baked into its light map, not drawn live.
+        facing_dir = tuple(dressing["windowsDir"])
+        light = sun(dressing, facing_dir)
+        suns = [sun(dressing, facing_dir, None, t) for t in dressing["sun"].get("times", [])]
+        windows_face = {"dir": list(facing_dir), "bearing": None}
     return {
         "rooms": rooms,
         "items": items,

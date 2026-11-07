@@ -7,6 +7,57 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-11-07 — flat-02, every detail against the photos; the time of day
+
+The owner went through the live flat and listed what was still wrong (items
+68–104 of `docs/flat-02-punchlist.md`), then looked again at the renders.
+
+- **Viewer (tested):** a door shut on someone standing in its doorway steps
+  them out of the wall (`nearestStandable`, `walking.test.ts`); a step from
+  where one may not stand steps out first, so the walk is never stuck. Keys
+  are read by position (`KeyboardEvent.code`): a W let go after Shift no
+  longer stayed held. A button that kept the focus after a click no longer
+  swallows WASD. Q/E turn during a glide. Mirrors: their buffers a quarter
+  the size and without multisampling on a phone (the bathroom's and
+  study's came out black: out of memory), no tint, clipped at the glass.
+  Exposure lower (key 0.15, was 0.33; at most 1.6x, was 2.2x); lamp discs
+  warm, not blue-white.
+- **Geometry:** a wall piece shorter than its corner's mitre is a wedge (the
+  13 cm by the front door was a twisted box, its diagonal a black strip).
+  The coats hang side on, inside the niche. The sink's worktop edge is one
+  face; the splashback reaches the corner.
+- **Pieces, as photographed:** the hall dresser (two drawers over two doors);
+  the kitchen re-laid (fridge 72, dishwasher 60, sink 80, drawers, a narrow
+  pull-out each side of the oven, a plain corner door then four narrow glass
+  doors in dim frosted grey, an 86 cm hob with its extractor, fine even oak,
+  a light switch by the fridge); the bathroom's vanity flush, its shelves
+  lower and open to the basin, the WC's pre-wall straight to the shaft, tiles
+  to the ceiling where photographed; beds with draped duvets and plump
+  pillows (`bedding`), the small bedroom's plain white desk in the corner,
+  its bed's head on the west wall; tub chairs
+  rebuilt as seats; a new clock; no cushions on the sofa; bigger bedside
+  chests.
+- **Models:** the two office chairs are IKEA's own 3D models (MARKUS,
+  JÄRVFJÄLLET), fetched from ikea.com's product viewer at their measured
+  size. **IKEA's models are not licensed for reuse; the owner asked for them
+  and said the use is not commercial. They ship inside flat.glb on Pages.**
+- **Pictures and rugs:** artwork made for the flat in its colours replaces
+  every picture cut from the photos (`pictures.image`); rugs plain.
+- **Time of day:** upright windows get a sun now (`scene_spec`, tested): the
+  dressing names the windows' scene direction and compass bearing. flat-02
+  bakes 08:30, 12:30, 16:30, 18:45 and 20:30 (Vienna, equinox; the plan has
+  no north arrow, so the balcony side was taken as south) and opens at
+  20:30, lamps only, as photographed. The other times bake at half samples.
+- **After the full bake** every room was screenshotted against the photos
+  again (items 105–109): the small bedroom's wardrobe now two gloss doors
+  over three rows of drawers (`wardrobe` `drawers`), MARKUS's black lifted so
+  it shows its form, the study's curtains end at the sill above the guest bed
+  (they cut into it), its duvet the photographed dark green floral; the
+  duvet prints are seamless tiles.
+- **Verified:** pytest and vitest pass, lint clean; a quick build and a full
+  bake checked in screenshots room by room, then the second full bake with
+  items 105–109 checked the same way before deploying.
+
 ## 2026-11-06 — flat-02 from its floor plan; doors, mirrors, no pixels
 
 The owner sent the architect's floor plan (TOP 4, WNF 79.92 m²) and asked

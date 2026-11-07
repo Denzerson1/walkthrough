@@ -225,6 +225,15 @@ def wall_prism(b: Builder, key: str, wall: dict, u0: float, u1: float, y0: float
         return P(ax + dx * u + nx * v, y, az + dz * u + nz * v)
 
     o0, o1 = u0 + reach0, u1 + reach1
+    if o1 < o0:
+        # A piece shorter than its inside corner's mitre (the 13 cm between
+        # the front door and the hall's corner): a wedge up to the corner's
+        # diagonal. As a box its outer face crossed over, and the twisted
+        # piece showed its diagonal into the hall as a black strip.
+        if reach0 > 0:
+            o0 = o1
+        else:
+            o1 = o0
     corners = [at(u0, v0, y0), at(u1, v0, y0), at(o1, v1, y0), at(o0, v1, y0)]
     corners += [at(u0, v0, top0), at(u1, v0, top1), at(o1, v1, top1), at(o0, v1, top0)]
     b.box(key, corners)
@@ -1082,7 +1091,7 @@ def front_style(surface: str, box: tuple, style: dict, column: int) -> list[Part
         parts.append((surface, box))
     if style.get("handle"):
         face = y0 - (PROUD if style.get("frame") else 0.0)
-        if z1 - z0 < 0.35:  # a drawer: across its top
+        if z1 - z0 < 0.35 or style.get("handleTop"):  # a drawer, a dishwasher: across its top
             xm, zm = (x0 + x1) / 2, z1 - 0.045
             parts.append(("handle", (xm - 0.08, xm + 0.08, face - 0.02, face - 0.008,
                                      zm - 0.006, zm + 0.006)))
@@ -1132,9 +1141,12 @@ def sink(x0: float, x1: float, y0: float, y1: float, h: float, lo: float,
     # Inside the flange's rounded corners, so the cut never shows past them.
     hx0, hx1, hy0, hy1 = hx0 + 0.03, hx1 - 0.03, hy0 + 0.03, hy1 - 0.03
     top = h - 0.04
-    return [("stone", (x0, hx0, y0 - 0.02, y1, top, h)),
-            ("stone", (hx1, x1, y0 - 0.02, y1, top, h)),
-            ("stone", (hx0, hx1, y0 - 0.02, hy0, top, h)),
+    # The strip in front of the sink the worktop's whole width, so its front
+    # edge is one face as its neighbours' are: in three pieces, the short
+    # middle one under the sink baked dark (0080 has the worktop's edge even).
+    return [("stone", (x0, x1, y0 - 0.02, hy0, top, h)),
+            ("stone", (x0, hx0, hy0, y1, top, h)),
+            ("stone", (hx1, x1, hy0, y1, top, h)),
             ("stone", (hx0, hx1, hy1, y1, top, h))]
 
 
@@ -1316,7 +1328,12 @@ def finish_parts(finish: str, w: float, h: float, d: float, opts: dict) -> list[
                 ("steel", (x0 + 0.09, x0 + 0.105, y0 - 0.03, y0, zt - 0.13, zt - 0.112)),
                 ("steel", (x1 - 0.105, x1 - 0.09, y0 - 0.03, y0, zt - 0.13, zt - 0.112))]
     if finish == "hob":
-        return [("black", (x0, x1, y0, y1, 0, h))]
+        # Induction with its extractor (0080): black glass framed in steel,
+        # the extractor's slot down its middle, its controls along the front.
+        return [("steel", (x0, x1, y0, y1, 0, h)),
+                ("granite", (x0 + 0.004, x1 - 0.004, y0 + 0.004, y1 - 0.004, h, h + 0.001)),
+                ("black", (x0 + 0.05, x1 - 0.05, -0.022, 0.022, h + 0.001, h + 0.002)),
+                ("vent", (-0.12, 0.12, y0 + 0.025, y0 + 0.05, h + 0.001, h + 0.0015))]
     if finish == "kitchen-tall" and opts.get("style"):
         # Framed doors and black bars (0075): a tall door over a short one.
         return [plinth, ("white", (x0, x1, y0 + FRONT_T, y1, 0.1, h)),
@@ -1330,12 +1347,24 @@ def finish_parts(finish: str, w: float, h: float, d: float, opts: dict) -> list[
                 ("gloss", (x0 + GAP / 2, x1 - GAP / 2, y0, y0 + FRONT_T, 1.958, h - 0.002))]
     if finish == "kitchen-wall":
         rows, columns = opts.get("rows", 1), opts.get("columns", 1)
+        # A count of equal doors, or their widths left to right (0: a share of the rest).
+        columns = [[0, 1]] * columns if isinstance(columns, int) else [[c, 1] for c in columns]
         parts = [("white", (x0, x1, y0 + FRONT_T, y1, 0, h))]
         height = h / rows
         style = {**opts.get("style", {}), "handleLow": True} if opts.get("style") else None
         for r in range(rows):
             parts += fronts(x0, x1, r * height + GAP / 2, (r + 1) * height - GAP / 2, y0,
-                            [[0, 1]] * columns, grips=False, style=style)
+                            columns, grips=False, style=style)
+        return parts
+    if finish == "switch":
+        # A light switch (0075, 0076): a white frame, its rockers a hair proud,
+        # one over the other.
+        rock = (h - 0.02) / max(1, opts.get("gangs", 2))
+        parts = [("white", (x0, x1, y0 + 0.004, y1, 0, h))]
+        for k in range(opts.get("gangs", 2)):
+            z = 0.01 + k * rock
+            parts.append(("white", (x0 + 0.012, x1 - 0.012, y0, y0 + 0.004,
+                                    z + 0.004, z + rock - 0.004)))
         return parts
     if finish == "shelves":
         parts = []
@@ -1349,6 +1378,15 @@ def finish_parts(finish: str, w: float, h: float, d: float, opts: dict) -> list[
         return parts
     if finish == "panel":
         return [(opts.get("surface", "oak-warm"), (x0, x1, y0, y1, 0, h))]
+    if finish == "desk":
+        # A plain desk (0056): a white top on four slim legs, nothing under it.
+        top, leg, legs = 0.025, 0.04, opts.get("legs", "white-matt")
+        parts = [(opts.get("top", "white-matt"), (x0, x1, y0, y1, h - top, h)),
+                 (legs, (x0 + 0.03, x1 - 0.03, y1 - 0.05, y1 - 0.03, h - top - 0.08, h - top))]
+        for xa in (x0 + 0.03, x1 - 0.03 - leg):
+            for ya in (y0 + 0.03, y1 - 0.03 - leg):
+                parts.append((legs, (xa, xa + leg, ya, ya + leg, 0, h - top)))
+        return parts
     if finish == "air-con":
         # A split unit as photographed: flat front and top, the front
         # curving round into the underside, and the outlet underneath
@@ -1379,10 +1417,16 @@ def finish_parts(finish: str, w: float, h: float, d: float, opts: dict) -> list[
         # Doors left to right as `columns` (see `fronts`), else `doors` equal
         # ones. Bar handles beside each meeting edge, or where `handles` puts
         # them: fractions across the front from its left. A corner unit's
-        # door hidden behind the other wing gets none.
+        # door hidden behind the other wing gets none. `drawers` rows of
+        # drawers under the doors, up to `drawerTop` (the small bedroom's, 0055).
         columns = opts.get("columns") or [[0, 1]] * opts.get("doors", 2)
-        parts = [("oak", (x0, x1, y0 + FRONT_T, y1, 0, h)),
-                 *fronts(x0, x1, 0.06, h - 0.004, y0, columns, surface="oak", grips=False)]
+        doors_from = 0.06
+        parts = [("oak", (x0, x1, y0 + FRONT_T, y1, 0, h))]
+        if opts.get("drawers"):
+            doors_from = opts.get("drawerTop", 0.8)
+            parts += fronts(x0, x1, 0.06, doors_from - GAP, y0,
+                            [[c[0], opts["drawers"]] for c in columns], surface="oak", grips=False)
+        parts += fronts(x0, x1, doors_from, h - 0.004, y0, columns, surface="oak", grips=False)
         widths = column_widths(x0, x1, columns)
         edges = [x0 + sum(widths[: i + 1]) for i in range(len(widths) - 1)]
         spots = ([x0 + f * w for f in opts["handles"]] if "handles" in opts
@@ -1523,16 +1567,14 @@ def hall_wardrobe(w: float, h: float, d: float, opts: dict) -> list[Part]:
 def shoe_cabinet(w: float, h: float, d: float, opts: dict) -> list[Part]:
     """
     The entry's shoe cabinet (0059, 0107): hung on the wall with the shoes'
-    mat under it, two plain doors, an oak top, a long black bar on its end.
+    mat under it, two plain doors, an oak top. (The owner had the black bar
+    on its end taken off.)
     """
     x0, x1, y0, y1 = -w / 2, w / 2, -d / 2, d / 2
     low, top = opts.get("raised", 0.25), h - 0.022
     return [("white", (x0, x1, y0 + FRONT_T, y1, low, top)),
             *fronts(x0, x1, low + 0.002, top - 0.003, y0, [[0, 1], [0, 1]], grips=False),
             ("oak-warm", (x0 - 0.004, x1 + 0.004, y0 - 0.012, y1, top, h)),
-            ("black", (x0 - 0.026, x0 - 0.01, y0 + 0.03, y0 + 0.052, low + 0.06, top - 0.1)),
-            ("black", (x0 - 0.01, x0, y0 + 0.035, y0 + 0.047, low + 0.1, low + 0.12)),
-            ("black", (x0 - 0.01, x0, y0 + 0.035, y0 + 0.047, top - 0.16, top - 0.14)),
             ("mat", (x0 + 0.03, x1 + 0.08, y0 - 0.08, y1 - 0.01, 0.0, 0.006))]
 
 
@@ -1540,13 +1582,21 @@ def sideboard(w: float, h: float, d: float, opts: dict) -> list[Part]:
     """
     An oak case with its fronts set in between its sides: the TV's (0073:
     olive, pink and cream doors, `fronts`, one surface a column) and the
-    hall's by the study (0063). `case` names the case's surface.
+    hall's by the study (0063: two drawers the full width over two doors,
+    `drawers` of `drawerHeight`). `case` names the case's surface.
     """
     x0, x1, y0, y1 = -w / 2, w / 2, -d / 2, d / 2
     t, base, case = 0.019, opts.get("plinth", 0.0), opts.get("case", "oak-warm")
     columns = opts.get("columns") or [[0, 1]] * 3
     colours = opts.get("fronts") or ["gloss"] * len(columns)
-    parts = [(case, (x0, x0 + t, y0, y1, 0, h)), (case, (x1 - t, x1, y0, y1, 0, h)),
+    top = h - t - GAP
+    parts = []
+    if opts.get("drawers"):
+        split = h - t - opts["drawers"] * opts.get("drawerHeight", 0.17)
+        parts += fronts(x0 + t, x1 - t, split + GAP / 2, top, y0 + 0.002,
+                        [[0, opts["drawers"]]], surface=colours[0], grips=False)
+        top = split - GAP / 2
+    parts += [(case, (x0, x0 + t, y0, y1, 0, h)), (case, (x1 - t, x1, y0, y1, 0, h)),
              (case, (x0 + t, x1 - t, y0, y1, h - t, h)),
              (case, (x0 + t, x1 - t, y0 + 0.004, y1, base, base + t)),
              (case, (x0 + t, x1 - t, y1 - 0.008, y1, base + t, h - t))]
@@ -1555,7 +1605,7 @@ def sideboard(w: float, h: float, d: float, opts: dict) -> list[Part]:
     x = x0 + t
     for column, width, surface in zip(columns, column_widths(x0 + t, x1 - t, columns), colours,
                                       strict=True):
-        parts += fronts(x, x + width, base + t + GAP, h - t - GAP, y0 + 0.002, [column],
+        parts += fronts(x, x + width, base + t + GAP, top, y0 + 0.002, [column],
                         surface=surface, grips=False)
         x += width
     return parts
@@ -1596,18 +1646,20 @@ def bath_vanity(w: float, h: float, d: float, opts: dict) -> list[Part]:
     clear of the floor under an oak top its whole length; on it from the
     left a tall sage cupboard, an oak upright to the ceiling, a narrow column
     of open oak shelves under a sage door, an oak crown along the top; the
-    basin (vanity_basin) and a frameless mirror over it to the right.
+    basin (vanity_basin) and a frameless mirror over it to the right. All of
+    it flush in front, as photographed (0134, 0136): set back, the basin's
+    top stood out in front of the shelves. The shelves stop a hand over the
+    tiles and are open at the side to the basin, as well as in front.
     """
     x0, x1, y0, y1 = -w / 2, w / 2, -d / 2, d / 2
     low, top = 0.14, 0.86
     tall, upright, shelf_w = opts.get("tall", 0.6), 0.05, opts.get("shelves", 0.27)
-    yu = y1 - opts.get("upperDepth", 0.34)
+    yu = y1 - opts.get("upperDepth", d)
     crown = h - 0.05
     a, b, c = x0 + tall, x0 + tall + upright, x0 + tall + upright + shelf_w
     t = 0.018
-    # Four open compartments, about a hand and a half each, up to the
-    # mirror's top third (0117, 0120).
-    roof = 1.86
+    # Three open compartments up to about the mirror's middle (0117, 0136).
+    roof = opts.get("roof", 1.55)
     parts: list[Part] = [
         ("white", (x0, x1, y0 + FRONT_T, y1, low, top - 0.03)),
         *fronts(x0, x1, low + GAP, top - 0.03 - GAP, y0, [[c - x0, 2], [0, 2]], grips=False),
@@ -1616,11 +1668,12 @@ def bath_vanity(w: float, h: float, d: float, opts: dict) -> list[Part]:
         *fronts(x0, a, top + GAP, crown - GAP, yu, [[0, 1]], grips=False),
         ("oak-warm", (a, b, yu, y1, top, h)),
         ("oak-warm", (b, c, y1 - 0.01, y1, top, roof)),
-        *[("oak-warm", (b, c, yu + 0.01, y1 - 0.01, z, z + t)) for z in (1.10, 1.34, 1.60)],
+        *[("oak-warm", (b, c, yu + 0.01, y1 - 0.01, z, z + t))
+          for z in (top + (roof - top) / 3, top + 2 * (roof - top) / 3)],
         ("oak-warm", (b, c, yu, y1, roof, roof + t)),
         ("white", (b, c, yu + FRONT_T, y1, roof + t, crown)),
         *fronts(b, c, roof + t + GAP, crown - GAP, yu, [[0, 1]], grips=False),
-        ("oak-warm", (c, c + t, yu, y1, top, h)),
+        ("oak-warm", (c, c + t, yu, y1, roof, h)),
         ("oak-warm", (x0, a, yu - 0.01, y1, crown, h)),
         ("oak-warm", (b, c, yu - 0.01, y1, crown, h))]
     mx = (c + t + x1) / 2
@@ -1697,8 +1750,8 @@ def niche_wall(w: float, h: float, d: float, opts: dict) -> list[Part]:
 def box_bed(w: float, h: float, d: float, opts: dict) -> list[Part]:
     """
     A box-spring bed (0109, 0140): its fabric base on low oak feet, the
-    mattress on it, the duvet over it down its sides and foot, two pillows,
-    and an upholstered headboard `h` high at the back (`head`: 0 for none).
+    mattress on it and an upholstered headboard `h` high at the back
+    (`head`: 0 for none). Its duvet and pillows are soft shapes (bedding).
     """
     x0, x1, y0, y1 = -w / 2, w / 2, -d / 2, d / 2
     head = opts.get("head", 0.08)
@@ -1710,14 +1763,7 @@ def box_bed(w: float, h: float, d: float, opts: dict) -> list[Part]:
         for ya in (y0 + 0.06, yb - 0.1):
             parts.append(("feet", (xa, xa + 0.04, ya, ya + 0.04, 0, feet)))
     parts += [("upholstery", (x0, x1, y0, yb, feet, base)),
-              ("mattress", (x0 + 0.01, x1 - 0.01, y0 + 0.01, yb - 0.01, base, deck)),
-              ("duvet", (x0 - 0.025, x1 + 0.025, y0 - 0.03, yb - 0.42, deck, deck + 0.08)),
-              ("duvet", (x0 - 0.035, x0 - 0.005, y0 - 0.03, yb - 0.42, base + 0.04, deck)),
-              ("duvet", (x1 + 0.005, x1 + 0.035, y0 - 0.03, yb - 0.42, base + 0.04, deck)),
-              ("duvet", (x0 - 0.005, x1 + 0.005, y0 - 0.04, y0 - 0.01, base + 0.04, deck))]
-    pw = (x1 - x0 - 0.12) / 2
-    for xa in (x0 + 0.04, x0 + 0.08 + pw):
-        parts.append(("pillow", (xa, xa + pw, yb - 0.42, yb - 0.04, deck, deck + 0.13)))
+              ("mattress", (x0 + 0.01, x1 - 0.01, y0 + 0.01, yb - 0.01, base, deck))]
     if head:
         parts.append(("upholstery", (x0 - 0.02, x1 + 0.02, yb, y1, feet, h)))
     return parts
@@ -1737,8 +1783,7 @@ def folding_bed(w: float, h: float, d: float, opts: dict) -> list[Part]:
     for i in range(12):  # the slats
         xa = x0 + 0.06 + i * (w - 0.15) / 11
         parts.append(("black", (xa, xa + 0.02, y0 + rail, y1 - rail, top - 0.012, top)))
-    parts += [("mattress", (x0 + 0.01, x1 - 0.01, y0 + 0.01, y1 - 0.01, top, h - 0.01)),
-              ("pillow", (x1 - 0.48, x1 - 0.06, y0 + 0.1, y1 - 0.1, h - 0.01, h + 0.1))]
+    parts.append(("mattress", (x0 + 0.01, x1 - 0.01, y0 + 0.01, y1 - 0.01, top, h - 0.01)))
     return parts
 
 
@@ -2398,9 +2443,11 @@ CLOTHES = {
                       ("leather", 0.58, 8, 0.76)],
     "coat-niche": [("coat-camel", 0.98, -24, 0.2), ("coat-navy", 1.02, -10, 0.5),
                    ("denim", 0.6, 12, 0.8)],
-    # The hall's niche (0061, 0062): long black puffers and a navy coat.
-    "hall-wardrobe": [("puffer", 1.05, -18, 0.15), ("puffer", 1.0, -6, 0.45),
-                      ("coat-navy", 0.95, 8, 0.78)],
+    # The hall's niche (0061, 0062): long black puffers and a navy coat on
+    # hangers on its rail, so side on: facing out, a coat is 50 cm across
+    # and the niche 62, and they came through its slats and its cupboard.
+    "hall-wardrobe": [("puffer", 1.05, 84, 0.08), ("puffer", 1.0, 95, 0.36),
+                      ("coat-navy", 0.95, 88, 0.64), ("puffer", 0.9, 93, 0.92)],
 }
 #: Zipped rather than buttoned: their placket is a steel zip.
 ZIPPED = {"leather"}
@@ -2556,6 +2603,171 @@ def garment(bm: bmesh.types.BMesh, x: float, ym: float, rail: float, length: flo
             face.material_index = steel
 
 
+def superquadric(bm: bmesh.types.BMesh, centre, radii, round_side: float, round_top: float,
+                 n: int = 32, m: int = 16) -> list:
+    """A closed superquadric: `round_side` < 1 squares it off in plan, `round_top` its profile."""
+    def pw(c: float, e: float) -> float:
+        return math.copysign(abs(c) ** e, c)
+
+    cx, cy, cz = centre
+    rx, ry, rz = radii
+    rows = []
+    for j in range(1, m):
+        v = -math.pi / 2 + math.pi * j / m
+        ring = pw(math.cos(v), round_top)
+        rows.append([bm.verts.new((cx + rx * ring * pw(math.cos(u), round_side),
+                                   cy + ry * ring * pw(math.sin(u), round_side),
+                                   cz + rz * pw(math.sin(v), round_top)))
+                     for u in (2 * math.pi * i / n for i in range(n))])
+    low, high = bm.verts.new((cx, cy, cz - rz)), bm.verts.new((cx, cy, cz + rz))
+    faces = []
+    for a, b in zip(rows, rows[1:], strict=False):
+        for i in range(n):
+            faces.append(bm.faces.new((a[i], a[(i + 1) % n], b[(i + 1) % n], b[i])))
+    for i in range(n):
+        faces.append(bm.faces.new((rows[0][(i + 1) % n], rows[0][i], low)))
+        faces.append(bm.faces.new((rows[-1][i], rows[-1][(i + 1) % n], high)))
+    # Facing out: the top's normal points up.
+    probe = faces[-1]
+    probe.normal_update()
+    if probe.normal.z < 0:
+        bmesh.ops.reverse_faces(bm, faces=faces)
+    return faces
+
+
+def drape(t: float, half: float, r: float) -> tuple[float, float]:
+    """
+    A sheet laid over an edge `half` from the middle, rounding over it with
+    radius `r` and then hanging: where its flat coordinate `t` ends up
+    across, and how far it has dropped.
+    """
+    excess = abs(t) - half
+    if excess <= 0:
+        return t, 0.0
+    arc = math.pi / 2 * r
+    if excess < arc:
+        angle = excess / r
+        return math.copysign(half + r * math.sin(angle), t), r * (1 - math.cos(angle))
+    return math.copysign(half + r, t), r + excess - arc
+
+
+def bedding(item: dict, piece: bpy.types.Object, surfaces: dict) -> bpy.types.Object | None:
+    """
+    A bed's duvet and pillows (0054, 0067, 0109, 0140) as soft shapes, their
+    own object lit per vertex, placed as the bed is. The duvet is a sheet
+    laid over the mattress: puffed up in its middle, soft folds across it,
+    rounding over the mattress's edges and hanging down its sides and foot,
+    its top turned down; the pillows plump and squared off. As boxes they
+    read as a render, not a bed.
+    """
+    finish = item.get("finish")
+    if finish not in ("box-bed", "folding-bed"):
+        return None
+    import random
+
+    opts = item.get("options") or {}
+    w, h, d = item["size"]
+    rng = random.Random(len(item["id"]))
+    if finish == "box-bed":
+        # Width along x, the head at +y.
+        head = opts.get("head", 0.08)
+        base, mattress = opts.get("base", 0.36), opts.get("mattress", 0.2)
+        width, foot, top_end = w, -d / 2, d / 2 - head
+        deck, hang_to = base + mattress, base + 0.04
+
+        def place(a: float, b: float, z: float) -> tuple[float, float, float]:
+            return (a, b, z)
+    else:
+        # The folding bed lies along x, its head at +x.
+        width, foot, top_end = d, -w / 2, w / 2
+        deck, hang_to = h - 0.01, h - 0.13
+
+        def place(a: float, b: float, z: float) -> tuple[float, float, float]:
+            return (b, -a, z)
+
+    half, r = width / 2 - 0.01, 0.045
+    pillow_d = 0.42 if finish == "box-bed" else 0.45
+    end = top_end - pillow_d - 0.02  # the duvet's top edge, turned down, below the pillows
+    if finish == "folding-bed":
+        end = foot + 0.62 * (top_end - foot)  # pushed down the bed, as photographed (0067)
+    hang = max(0.05, deck - hang_to - r)
+    side = half + math.pi / 2 * r + hang
+    foot_hang = math.pi / 2 * r + hang
+    remap = opts.get("surfaces", {})
+    duvet_name, pillow_name = remap.get("duvet", "duvet"), remap.get("pillow", "pillow")
+    tile = surfaces[duvet_name].get("tile", (1.0, 1.0))
+    wave = 0.012 if finish == "box-bed" else 0.03
+    phase = [rng.uniform(0, 6.3) for _ in range(4)]
+
+    bm = bmesh.new()
+    uv = bm.loops.layers.uv.new("UVMap")
+    nu, nv = 56, 64
+    grid, flat = {}, {}
+    q0, q1 = foot - foot_hang, end
+    for j in range(nv + 1):
+        q = q0 + (q1 - q0) * j / nv
+        for i in range(nu + 1):
+            p = -side + 2 * side * i / nu
+            a, drop_a = drape(p, half, r)
+            if q < foot:
+                b, drop_b = drape(q - foot, 0.0, r)
+                b += foot
+            else:
+                b, drop_b = q, 0.0
+            # Puffed up in the middle, thinning to its edges; a turned-down top.
+            inside = min(half - abs(p), q - foot, end - q) if drop_a == 0 and drop_b == 0 else 0.0
+            puff = 0.012 + 0.05 * min(max(inside / 0.25, 0.0), 1.0) ** 0.6
+            cuff = 0.02 * min(max(1 - (end - q) / 0.28, 0.0), 1.0)
+            gap = end - q
+            roll = (0.0 if gap > 0.035
+                    else 0.035 - math.sqrt(max(0.0, 0.035 ** 2 - (0.035 - gap) ** 2)))
+            fold = wave * (math.sin(7.5 * p + phase[0]) * math.sin(3.1 * q + phase[1])
+                           + 0.5 * math.sin(13 * p + 5 * q + phase[2]))
+            z = deck + puff + cuff - roll + fold * (1.0 if inside > 0 else 0.4) - drop_a - drop_b
+            # What hangs sways a little in and out.
+            sway = 0.008 * math.sin(9 * q + phase[3]) * min(drop_a / 0.1, 1.0)
+            a += math.copysign(sway, a)
+            grid[i, j] = bm.verts.new(place(a, b, z))
+            flat[i, j] = (p / tile[0], q / tile[1])
+    faces = []
+    for j in range(nv):
+        for i in range(nu):
+            quad = [(i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1)]
+            face = bm.faces.new([grid[k] for k in quad])
+            for loop, k in zip(face.loops, quad, strict=True):
+                loop[uv].uv = flat[k]
+            faces.append(face)
+    middle = faces[len(faces) // 2 + nu // 2]
+    middle.normal_update()
+    if middle.normal.z < 0:
+        bmesh.ops.reverse_faces(bm, faces=faces)
+    bmesh.ops.solidify(bm, geom=faces, thickness=0.018)
+    duvet_faces = set(bm.faces)
+    # The pillows: plump, squared off in plan, resting on the mattress.
+    count = 2 if width > 1.2 else 1
+    pw = (width - 0.1) / 2 - 0.02 if count == 2 else min(0.62, width - 0.16)
+    for k in range(count):
+        ca = (-width / 2 + 0.05 + pw / 2 + k * (pw + 0.04)) if count == 2 else 0.0
+        cb = top_end - pillow_d / 2 - 0.03
+        radii = (pw / 2, pillow_d / 2, 0.075)
+        if finish == "folding-bed":
+            radii = (pillow_d / 2, pw / 2, 0.075)
+        superquadric(bm, place(ca, cb, deck + 0.055), radii, 0.32, 0.7)
+    for f in bm.faces:
+        f.material_index = 0 if f in duvet_faces else 1
+    mesh = bpy.data.meshes.new(f"{item['id']}-bedding")
+    bm.to_mesh(mesh)
+    bm.free()
+    for name in (duvet_name, pillow_name):
+        mesh.materials.append(surface_material(name, surfaces[name]))
+    mesh.shade_smooth()
+    obj = bpy.data.objects.new(mesh.name, mesh)
+    bpy.context.collection.objects.link(obj)
+    obj.matrix_world = piece.matrix_world.copy()
+    VERTEX_LIT.add(obj.name)
+    return obj
+
+
 def hang_clothes(item: dict, piece: bpy.types.Object, surfaces: dict) -> bpy.types.Object | None:
     """
     The clothes on an open wardrobe's or the coat niche's rail, as their own
@@ -2607,9 +2819,11 @@ def hang_clothes(item: dict, piece: bpy.types.Object, surfaces: dict) -> bpy.typ
     return obj
 
 
-#: Frosted glass lets a little light through: the shower's door and the
-#: kitchen's glazed doors, by surface name (alpha).
-TRANSLUCENT_GLASS = {"frosted": 0.55, "glass-frost": 0.75, "door-glass": 0.12}
+#: Glass that lets a little light through: the shower's frosted door and the
+#: balcony door's pane, by surface name (alpha). The kitchen's glazed doors
+#: are lit from inside (0078): opaque, their frosting white, not the dark
+#: carcass behind it showing through blue-green.
+TRANSLUCENT_GLASS = {"frosted": 0.55, "door-glass": 0.12}
 
 
 def surface_material(name: str, surface: dict) -> bpy.types.Material:
@@ -2668,6 +2882,8 @@ def finished(item: dict, surfaces: dict) -> bpy.types.Object:
         barrel_chair(bm, w, h, d, slot, opts.get("surface", "velvet"))
     elif item["finish"] == "mirror":
         mirror(bm, w, h, d, slot, opts)
+    elif item["finish"] == "clock":
+        wall_clock(bm, w, h, d, slot, opts)
     elif item["finish"] == "glass-door":
         glass_leaf(bm, w, h, slot, opts)
     elif item["finish"] == "wc":
@@ -2780,44 +2996,108 @@ def finished(item: dict, surfaces: dict) -> bpy.types.Object:
 def barrel_chair(bm: bmesh.types.BMesh, w: float, h: float, d: float, slot,
                  surface: str) -> None:
     """
-    The living room's tub chair (0095-0098): a velvet barrel upholstered to
-    the floor, its back curving round into arms that fall towards the front,
-    a deep round seat cushion inside it.
+    The tub chairs (living room 0095-0098, study 0069, 0139): a seat to sit
+    in, as photographed. A deep cushion at sitting height (44 cm) on an
+    upholstered base, its front square with rounded corners, reaching the
+    chair's front; round the back of it a padded wall, 75 cm at the back,
+    falling to 60 cm arms whose thick ends round off beside the seat; every
+    edge a soft roll, upholstered to the floor.
     """
-    radius, shell, seat, n = min(w, d) / 2, 0.11, 0.43, 48
-    arm = 0.62 * h
-    a0, a1 = -math.pi / 2 + math.radians(48), 3 * math.pi / 2 - math.radians(48)
+    radius, wall, n = min(w, d) / 2, 0.1, 72
+    base_top, seat_top, arm = 0.3, 0.44, 0.6
+    inner = radius - wall
+    front = -radius + 0.03  # the seat's front edge
+    a0, a1 = math.radians(-24), math.radians(204)
+    mat = slot(surface)
+    made: list = []
 
     def top(a: float) -> float:
-        return arm + (h - arm) * (0.5 + 0.5 * math.sin(a)) ** 1.5
+        return arm + (h - arm) * max(0.0, math.sin(a)) ** 1.6
 
-    outer, inner = [], []
+    def section(a: float, lower: float) -> list[tuple[float, float]]:
+        """(radius, height) round the wall's section: up outside, over its roll, down inside."""
+        z_top = top(a) - lower
+        roll = wall / 2
+        mid = radius - roll
+        pts = [(radius - 0.012, 0.0), (radius + 0.006, 0.3 * z_top), (radius + 0.004, z_top - roll)]
+        pts += [(mid + roll * math.cos(math.pi * k / 8),
+                 z_top - roll + roll * math.sin(math.pi * k / 8)) for k in range(1, 8)]
+        pts += [(radius - wall + 0.004, z_top - roll), (radius - wall, seat_top + 0.06),
+                (radius - wall + 0.006, seat_top - 0.01)]
+        return pts
+
+    def ring(a: float, pts: list[tuple[float, float]]) -> list:
+        c, s_ = math.cos(a), math.sin(a)
+        return [bm.verts.new((r * c, r * s_, z)) for r, z in pts]
+
+    def bridge(ra: list, rb: list) -> None:
+        m = len(ra)  # the section closed under itself: a tube
+        for k in range(m):
+            made.append(bm.faces.new((ra[k], ra[(k + 1) % m], rb[(k + 1) % m], rb[k])))
+
+    rings = []
     for i in range(n + 1):
         a = a0 + (a1 - a0) * i / n
-        c, s_ = math.cos(a), math.sin(a)
-        z = top(a)
-        outer.append((bm.verts.new((radius * c, radius * s_, 0.0)),
-                      bm.verts.new((radius * c, radius * s_, z))))
-        ri = radius - shell
-        inner.append((bm.verts.new((ri * c, ri * s_, seat)), bm.verts.new((ri * c, ri * s_, z))))
-    faces = []
-    for i in range(n):
-        (ob0, ot0), (ob1, ot1) = outer[i], outer[i + 1]
-        (ib0, it0), (ib1, it1) = inner[i], inner[i + 1]
-        faces += [bm.faces.new((ob0, ob1, ot1, ot0)), bm.faces.new((ot0, ot1, it1, it0)),
-                  bm.faces.new((it0, it1, ib1, ib0))]
-    for (ob, ot), (ib, it) in ((outer[0], inner[0]), (outer[-1], inner[-1])):
-        faces.append(bm.faces.new((ob, ot, it, ib)))
-    base = bmesh.ops.create_cone(bm, cap_ends=True, segments=n, radius1=radius - 0.012,
-                                 radius2=radius - 0.012, depth=seat)
-    bmesh.ops.translate(bm, verts=base["verts"], vec=(0, 0, seat / 2))
-    cushion = bmesh.ops.create_cone(bm, cap_ends=True, segments=n,
-                                    radius1=radius - shell - 0.004,
-                                    radius2=radius - shell - 0.02, depth=0.09)
-    bmesh.ops.translate(bm, verts=cushion["verts"], vec=(0, -0.01, seat + 0.045))
-    for face in bm.faces:
-        face.material_index = slot(surface)
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+        # The arms slope down a little more over their last stretch.
+        edge = min(i, n - i) / 8
+        lower = 0.0 if edge >= 1 else 0.06 * (1 - edge) ** 2
+        rings.append((a, section(a, lower)))
+    loops = [ring(a, pts) for a, pts in rings]
+    for la, lb in zip(loops, loops[1:], strict=False):
+        bridge(la, lb)
+    # Each arm's end rounded off: the section shrinks to its middle over a
+    # few steps past the end, like the end of a bolster.
+    for (a, pts), loop, way in ((rings[0], loops[0], -1), (rings[-1], loops[-1], 1)):
+        cr = sum(p[0] for p in pts) / len(pts)
+        cz = sum(p[1] for p in pts) / len(pts)
+        prev = loop
+        for k in range(1, 5):
+            f = math.cos(math.pi / 2 * k / 5)
+            step = a + way * (wall / radius) * 0.45 * math.sin(math.pi / 2 * k / 5)
+            nxt = ring(step, [(cr + (r - cr) * f, cz + (z - cz) * f) for r, z in pts])
+            bridge(prev, nxt) if way > 0 else bridge(nxt, prev)
+            prev = nxt
+        end = a + way * (wall / radius) * 0.45
+        tip = bm.verts.new((cr * math.cos(end), cr * math.sin(end), cz))
+        m = len(prev)
+        for k in range(m):
+            j = (k + 1) % m
+            tri = (prev[k], prev[j], tip) if way > 0 else (prev[j], prev[k], tip)
+            made.append(bm.faces.new(tri))
+
+    def seat_outline(grow: float) -> list[tuple[float, float]]:
+        """Round at the back inside the wall; square with soft corners in front."""
+        pts = []
+        reach = inner + grow
+        depth = -(front + 0.02) + grow
+        for k in range(64):
+            a = 2 * math.pi * k / 64
+            c, s_ = math.cos(a), math.sin(a)
+            if s_ >= 0:
+                pts.append((reach * c, reach * s_))
+            else:
+                pts.append((reach * math.copysign(abs(c) ** 0.3, c),
+                            -depth * abs(s_) ** 0.3))
+        return pts
+
+    def slab(z_rings: list[tuple[float, float]], dome: float) -> None:
+        """A soft block through outlines grown by `g` at heights `z`, domed on top."""
+        loops = [[bm.verts.new((x, y, z)) for x, y in seat_outline(g)] for z, g in z_rings]
+        for la, lb in zip(loops, loops[1:], strict=False):
+            for k in range(64):
+                made.append(bm.faces.new((la[k], la[(k + 1) % 64], lb[(k + 1) % 64], lb[k])))
+        made.append(bm.faces.new(list(reversed(loops[0]))))
+        centre = bm.verts.new((0.0, front * 0.2, z_rings[-1][0] + dome))
+        for k in range(64):
+            made.append(bm.faces.new((loops[-1][k], loops[-1][(k + 1) % 64], centre)))
+
+    # The base, upholstered round its front, and the cushion on it.
+    slab([(0.0, -0.015), (base_top - 0.01, -0.015), (base_top, -0.025)], 0.0)
+    slab([(base_top, -0.03), (base_top + 0.025, -0.005), (seat_top - 0.03, -0.005),
+          (seat_top, -0.035)], 0.015)
+    for face in made:
+        face.material_index = mat
+    bmesh.ops.recalc_face_normals(bm, faces=made)
 
 
 def d_shape(half_w: float, back: float, front: float, n: int = 48) -> list[tuple[float, float]]:
@@ -2882,6 +3162,69 @@ def wall_wc(bm: bmesh.types.BMesh, w: float, h: float, d: float, slot, opts: dic
     for face in bm.faces:
         face.material_index = slot("basin")
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+
+
+def wall_clock(bm: bmesh.types.BMesh, w: float, h: float, d: float, slot, opts: dict) -> None:
+    """
+    A round wall clock (the owner had the photographed one changed): an oak
+    rim standing off the wall, a cream face set into it, twelve bar markers
+    and black hands at ten past ten.
+    """
+    r, n = min(w, h) / 2, 96
+    y0, y1, cz = -d / 2, d / 2, h / 2
+    lip, inset = 0.022, 0.012
+    rim, face = slot(opts.get("rim", "oak-warm")), slot(opts.get("face", "clock-face"))
+    ink = slot("black")
+
+    def ring(rad: float, y: float) -> list:
+        return [bm.verts.new((rad * math.sin(2 * math.pi * k / n), y,
+                              cz + rad * math.cos(2 * math.pi * k / n))) for k in range(n)]
+
+    back, front = ring(r, y1), ring(r, y0)
+    lip_front, lip_back = ring(r - lip, y0), ring(r - lip, y0 + inset)
+    centre = bm.verts.new((0.0, y0 + inset, cz))
+    made = []
+    for k in range(n):
+        j = (k + 1) % n
+        for quad, mat in (((back[k], back[j], front[j], front[k]), rim),
+                          ((front[k], front[j], lip_front[j], lip_front[k]), rim),
+                          ((lip_front[k], lip_front[j], lip_back[j], lip_back[k]), rim)):
+            made.append(bm.faces.new(quad))
+            made[-1].material_index = mat
+        made.append(bm.faces.new((lip_back[k], lip_back[j], centre)))
+        made[-1].material_index = face
+    # Wound consistently: the face looks out of the wall (-y).
+    probe = made[3]
+    probe.normal_update()
+    if probe.normal.y > 0:
+        bmesh.ops.reverse_faces(bm, faces=made)
+
+    def bar(length: float, width: float, out: float, angle: float, y: float, depth: float) -> None:
+        """A box from `out` to `out + length` along `angle` (clockwise from 12)."""
+        cube = bmesh.ops.create_cube(bm, size=1.0)
+        bmesh.ops.scale(bm, verts=cube["verts"], vec=(width, depth, length))
+        bmesh.ops.translate(bm, verts=cube["verts"], vec=(0.0, y, out + length / 2))
+        bmesh.ops.rotate(bm, verts=cube["verts"], cent=(0.0, 0.0, 0.0),
+                         matrix=Matrix.Rotation(angle, 3, "Y"))
+        bmesh.ops.translate(bm, verts=cube["verts"], vec=(0.0, 0.0, cz))
+        for f in {f for v in cube["verts"] for f in v.link_faces}:
+            f.material_index = ink
+
+    face_y = y0 + inset
+    for k in range(12):
+        long = k % 3 == 0
+        length = 0.045 if long else 0.028
+        bar(length, 0.012 if long else 0.007, r - lip - 0.02 - length, 2 * math.pi * k / 12,
+            face_y - 0.002, 0.003)
+    bar(0.52 * r, 0.014, -0.03, 2 * math.pi * (10 + 10 / 60) / 12, face_y - 0.006, 0.004)  # hours
+    bar(0.78 * r, 0.009, -0.04, 2 * math.pi * 10 / 60, face_y - 0.011, 0.004)  # minutes
+    cap = bmesh.ops.create_cone(bm, cap_ends=True, segments=24, radius1=0.012, radius2=0.012,
+                                depth=0.006)
+    bmesh.ops.rotate(bm, verts=cap["verts"], cent=(0, 0, 0),
+                     matrix=Matrix.Rotation(math.pi / 2, 3, "X"))
+    bmesh.ops.translate(bm, verts=cap["verts"], vec=(0.0, face_y - 0.015, cz))
+    for f in {f for v in cap["verts"] for f in v.link_faces}:
+        f.material_index = ink
 
 
 def mirror(bm: bmesh.types.BMesh, w: float, h: float, d: float, slot, opts: dict) -> None:
@@ -4524,7 +4867,8 @@ def main() -> None:
     clothes = [c for item, piece in zip(spec["items"], pieces, strict=True)
                if (c := hang_clothes(item, piece, spec["surfaces"])
                    or build_sink(item, piece, spec["surfaces"])
-                   or vanity_basin(item, piece, spec["surfaces"]))]
+                   or vanity_basin(item, piece, spec["surfaces"])
+                   or bedding(item, piece, spec["surfaces"]))]
     vertex_lit = [o for o in pieces + clothes if o.name in VERTEX_LIT]
     for obj in vertex_lit:
         # Exported as a glTF extra: the viewer lights it from its vertices,
@@ -4561,6 +4905,10 @@ def main() -> None:
         if entry:
             set_sun(entry)
         set_strips(strips, entry)
+        # The first (the default) at full quality; the other times, lit by
+        # day and so less noisy, at half: five full bakes took hours.
+        bpy.context.scene.cycles.samples = spec["samples"] if entry is times[0] else max(
+            16, spec["samples"] // 2)
         label = entry["time"].replace(":", "") if entry else "default"
         path = out["lightmap"].replace(".jpg", f"-{label}.jpg")
         scale, auto, balance = bake(lit, spec["lightmap_size"], path, Path(out["meta"]).parent,

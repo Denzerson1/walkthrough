@@ -118,3 +118,68 @@ wrong; nothing pixelated; mirrors that work; perfect shadows.
 - [x] 67. The slats behind the TV are a barn door (0073, 0074): oak slats on black felt on an oak
   rail over the passage, standing slid open behind the TV; a click slides it shut over the
   passage. The TV cupboard stands in front of it.
+
+## Fifth pass (2026-11-07): every detail against the photos
+The owner's review of the live flat: doors wrong when closed, glitches, too bright and pale,
+furniture not as photographed; then a second look at the renders the same day.
+- [x] 68. A door shut while standing in its doorway steps the viewer back out of the wall (it stood
+  inside the wall, the frame cut away); every leaf closes into its frame.
+- [x] 69. The black shape hanging in the hall was a coat through the wardrobe's slats: gone.
+- [x] 70. The hall dresser (0063): two drawers the full width over two doors.
+- [x] 71. No black strip by the front door: a wall piece shorter than its corner's mitre is a
+  wedge now, not a twisted box.
+- [x] 72. The sink: the worktop's front edge one face under the sink; the splashback reaches the
+  corner (no white patch).
+- [x] 73. Light as in the photos: the evening set (lamps only) by default, exposed lower (no longer
+  high-key), the lamps' discs warm.
+- [x] 74. The coats hang side on, on hangers on the niche's rail, inside it.
+- [x] 75. Pictures: calm abstract artwork in the flat's colours, none cut from the photos.
+- [x] 76. Rugs and mats plain: cream and warm grey.
+- [x] 77. The WC's tiled pre-wall runs straight to the shaft; no wall stepping in and out.
+- [x] 78. The roll shelf against the washer column's side, in front of the pre-wall.
+- [x] 79. Tiled to the ceiling round the shower, the south wall and the shaft.
+- [x] 80. The vanity flush in front: the basin's top no longer stands out before the shelves.
+- [x] 81. Its open shelves lower (to 1.55 m), open at the side to the basin as well as in front.
+- [x] 82. Mirrors' buffers a quarter the size on a phone (the bathroom's and study's ran out of
+  memory: black).
+- [x] 83. No tiles on the wall by the bathroom's door.
+- [x] 84. No black bar on the shoe cabinet.
+- [x] 85. (82)
+- [x] 86. The study's guest bed against the window wall, its duvet and pillow soft shapes.
+- [x] 87. The small bedroom's bed: head on the west wall, along the window; a draped striped
+  duvet, plump blue pillows.
+- [x] 88. The small bedroom's desk and cupboard into the corner by the door's wall; a plain white
+  desk, nothing under it.
+- [x] 89. The chairs: IKEA's own models at their size, MARKUS (small bedroom), JARVFJALLET with
+  its headrest (study).
+- [x] 90. Mirrors without a tint; the wall behind no longer drawn at their edges.
+- [x] 91. The hall's walls: the dark hall no longer opens up as far (exposure up to 1.6x, was
+  2.2x), so its light map's grain is not blown up; close up they rendered smooth here.
+- [x] 92. The bedside chests 45 x 45 x 63 cm.
+- [x] 93. A new clock: oak rim, cream face, black hands.
+- [x] 94. The hob as scanned, 86 x 60 cm, its extractor's slot down the middle (0080).
+- [x] 95. The fridge's unit 72 cm; the dishwasher beside it 60 (it was 88).
+- [x] 96. A narrow pull-out left of the oven, another right of it (0079).
+- [x] 97. The wall cupboards (0077, 0078): a plain door in the corner, then four narrow glass
+  doors; the glass a dim grey frosting, not light blue.
+- [x] 98. Keys by where they are on the keyboard (none stuck held), working after a click on a
+  button, Q/E turning during a glide too.
+- [x] 99. No cushions on the sofa.
+- [x] 100. The tub chairs: a real seat (44 cm), thick rounded arms, a padded back.
+- [x] 101. A light switch on the corner's face beside the fridge.
+- [x] 102. The cabinet strips softer; the lamps warm.
+- [x] 103. Real models where the maker has them (IKEA's office chairs); the rest built to the
+  photos: beds and their bedding, the tub chairs, the clock.
+- [x] 104. The time of day for flat-02: 08:30, 12:30, 16:30, 18:45, 20:30 (Vienna, the balcony
+  side taken as south: no north arrow on the plan), opening at 20:30.
+
+## Check after the full bake (2026-11-07)
+Every room screenshotted against the photos; what was not clean:
+- [x] 105. The small bedroom's wardrobe white high gloss: two tall doors over three rows of
+  drawers, no handles (0055); it was two full-height doors.
+- [x] 106. MARKUS read as a black silhouette: its fabric lifted to a black that shows its form.
+- [x] 107. The study's curtains end at the sill above the guest bed (0139); they hung to the floor
+  and cut into its mattress.
+- [x] 108. The study's guest duvet a dark green floral print, yellow, pink and cream flowers
+  (0139); it was white with dark leaves.
+- [x] 109. The striped duvet's print tiles without a seam.

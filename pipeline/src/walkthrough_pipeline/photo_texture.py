@@ -595,7 +595,8 @@ def _paisley(colour: str, px: int, rng) -> Image.Image:
 def surface_texture(kind: str, colour: str, px: int = 1024, seed: int = 0) -> Image.Image:
     """
     A seamless texture for one metre of a surface, around its colour:
-    `veneer` (oak: long fibres and growth bands along x), `stone` (a
+    `veneer` (oak: long fibres and growth bands along x; `oak-fine` the
+    same, even and faint, for a worktop), `stone` (a
     concrete-look worktop: a fine sandy grain over faint clouds, the odd
     pore), `boucle` (nubbly fabric), `rug` (a distressed streaky pile),
     `linen` (bedding: soft creases over a fine weave) or `paisley` (a
@@ -604,15 +605,19 @@ def surface_texture(kind: str, colour: str, px: int = 1024, seed: int = 0) -> Im
     the grain a camera sees at walking distance, not a scan of the piece.
     """
     rng = np.random.default_rng(seed)
-    if kind == "veneer":
+    if kind in ("veneer", "oak-fine"):
         fibres = (0.5 * _tiling_noise(rng, (256, 4), px) + 0.3 * _tiling_noise(rng, (96, 8), px)
                   + 0.2 * _tiling_noise(rng, (24, 16), px))
         warp = _tiling_noise(rng, (4, 2), px)
         y = np.arange(px, dtype=np.float32)[:, None] / px
         bands = 0.5 + 0.5 * np.sin(2 * np.pi * (y * 9 + 0.35 * warp))
         pores = (_tiling_noise(rng, (512, 32), px) > 0.82).astype(np.float32)
-        value = 0.65 * fibres + 0.35 * bands - 0.12 * pores
-        spread = 0.14
+        if kind == "oak-fine":
+            # A kitchen worktop's oak (0079): an even, fine grain, its growth
+            # bands faint. As veneer it read as orange streaks.
+            value, spread = 0.82 * fibres + 0.12 * bands - 0.06 * pores, 0.07
+        else:
+            value, spread = 0.65 * fibres + 0.35 * bands - 0.12 * pores, 0.14
     elif kind == "stone":
         # Soft mottling alone read as a blur up close (the owner's island):
         # the grain is what makes it read as stone.

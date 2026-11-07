@@ -421,6 +421,32 @@ export function moveWithCollision(
   return from;
 }
 
+/**
+ * The standable point nearest `p`, searched in rings 5 cm apart out to
+ * `reach` metres: `p` itself when one may stand there, null when nowhere
+ * within reach is. A door shut on someone standing in its doorway leaves
+ * them inside a wall; this is where they step out to, on whichever side they
+ * were nearer, rather than being stuck there with every step refused.
+ */
+export function nearestStandable(
+  p: Vec2,
+  rooms: WalkableRoom[],
+  radius = BODY_RADIUS,
+  reach = 1.2,
+): Vec2 | null {
+  if (canStand(p, rooms, radius)) return p;
+  for (let k = 1; k * 0.05 <= reach + 1e-9; k++) {
+    const r = k * 0.05;
+    const n = Math.max(8, Math.ceil((2 * Math.PI * r) / 0.05));
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * 2 * Math.PI;
+      const q: Vec2 = [p[0] + r * Math.cos(a), p[1] + r * Math.sin(a)];
+      if (canStand(q, rooms, radius)) return q;
+    }
+  }
+  return null;
+}
+
 /** The room whose floor polygon contains `p`, if any. */
 export function roomAt<T extends { floorPolygon: Vec2[] }>(p: Vec2, rooms: T[]): T | undefined {
   return rooms.find((r) => r.floorPolygon.length >= 3 && pointInPolygon(p, r.floorPolygon));
