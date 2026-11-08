@@ -29,7 +29,7 @@ from .colmap import (
     read_points3d_bin,
 )
 from .floor import simplify_polygon
-from .manifest import Manifest, Room, Wall, Waypoint
+from .manifest import Manifest, Obstacle, Room, Wall, Waypoint
 from .paths import ProjectPaths
 from .provenance import atomic_write_text, replace_dir
 from .register import (
@@ -348,6 +348,12 @@ def align_scene(
         manifest.items = []
 
     _stand_where_filmed(manifest.rooms[0], cameras, transform)
+    if scan_file is None and metric:
+        lidar = _lidar_points(paths)
+        if lidar is not None:
+            room = manifest.rooms[0]
+            room.obstacles = lidar_obstacles(_transform_points(lidar, transform), room)
+            floor_report["obstacles"] = len(room.obstacles)
 
     manifest.transform = transform.tolist()
     manifest.floor = {"plane": [0.0, 1.0, 0.0, 0.0]}
@@ -437,6 +443,62 @@ def _room_from_floor(floor_xz: np.ndarray, measured: bool = False) -> Room:
         walls=[Wall(start=corners[i], end=corners[(i + 1) % len(corners)])
                for i in range(len(corners))],
     )
+
+
+#: What a person cannot walk through: LiDAR surfaces between these heights.
+#: Below, rugs, shoes and skirting; above, shelves a person walks under.
+OBSTACLE_BAND_M = (0.3, 1.8)
+
+
+def lidar_obstacles(points: np.ndarray, room: Room, cell: float = 0.1,
+                    min_points: int = 6) -> list[Obstacle]:
+    """
+    Furniture standing in a room without a scan, as footprints the walk keeps
+    out of (Room.obstacles, `canStand`): 10 cm cells with LiDAR surface
+    between knee and head height, away from the walls (the walls block on
+    their own), merged into outlines. Without them the camera walked into
+    the first real room's wardrobe. The cell the camera starts in is never
+    blocked: the person stood there.
+    """
+    poly = np.array(room.floorPolygon, dtype=np.float64)
+    band = points[(points[:, 1] > OBSTACLE_BAND_M[0]) & (points[:, 1] < OBSTACLE_BAND_M[1])]
+    xz = band[:, [0, 2]]
+    xz = xz[points_in_polygon(xz, poly)]
+    if len(xz) == 0:
+        return []
+    # A margin round the room: erosion treats the image's border as solid.
+    lo = poly.min(axis=0) - 4 * cell
+    size = np.ceil((poly.max(axis=0) + 4 * cell - lo) / cell).astype(int)
+    idx = np.floor((xz - lo) / cell).astype(int)
+    counts = np.zeros((size[1], size[0]), np.int32)
+    np.add.at(counts, (idx[:, 1], idx[:, 0]), 1)
+    blocked = (counts >= min_points).astype(np.uint8)
+    # Not the walls: a band along the outline is theirs.
+    outline = np.round((poly - lo) / cell).astype(np.int32)
+    inner = np.zeros_like(blocked)
+    cv2.fillPoly(inner, [outline], 1)
+    inner = cv2.erode(inner, np.ones((5, 5), np.uint8))  # 0.2 m in from the walls
+    blocked &= inner
+    # Close small gaps (an even-sized opening would shift it all a cell;
+    # specks go by area below).
+    blocked = cv2.morphologyEx(blocked, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+    sx, sz = np.floor((np.array(room.waypoint.position)[[0, 2]] - lo) / cell).astype(int)
+    blocked[max(sz - 3, 0): sz + 4, max(sx - 3, 0): sx + 4] = 0
+    contours, _ = cv2.findContours(blocked, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    out = []
+    for contour in contours:
+        if cv2.contourArea(contour) < 3:  # under 0.03 m²: a speck
+            continue
+        c = cv2.approxPolyDP(contour, 0.6, True).reshape(-1, 2).astype(np.float64)
+        if len(c) < 3:
+            continue
+        # Boundary cells' centres back to metres (half a cell inside the
+        # surface; the walk keeps a body's radius from it besides).
+        footprint = (c + 0.5) * cell + lo
+        out.append(Obstacle(id=f"lidar-{len(out)}",
+                            footprint=[(round(float(x), 3), round(float(z), 3))
+                                       for x, z in footprint]))
+    return out
 
 
 def _stand_where_filmed(room: Room, cameras: list[Camera], transform: np.ndarray) -> None:

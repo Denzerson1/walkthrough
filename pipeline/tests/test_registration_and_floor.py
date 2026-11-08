@@ -310,3 +310,28 @@ def test_a_rug_is_reported_and_a_thick_floor_is_not(tmp_path):
                             [cloud.sh_rest, rug.sh_rest]))
     write_ply(merged, rug_path)
     assert any("rug" in w for w in export_scene(paths).warnings)
+
+
+def test_furniture_in_lidar_becomes_an_obstacle_and_the_walls_do_not():
+    """The camera walked into room3's wardrobe: a room without a scan had no obstacles."""
+    from walkthrough_pipeline.manifest import Room, Wall, Waypoint
+    from walkthrough_pipeline.scene import lidar_obstacles
+
+    rng = np.random.default_rng(15)
+    corners = [(0.0, 0.0), (4.0, 0.0), (4.0, 3.0), (0.0, 3.0)]
+    room = Room(id="r", name="R", waypoint=Waypoint(position=(1.0, 1.6, 1.5)),
+                floorPolygon=corners,
+                walls=[Wall(start=corners[i], end=corners[(i + 1) % 4]) for i in range(4)])
+    walls = np.vstack([np.column_stack([rng.uniform(0, 4, 4000), rng.uniform(0, 2.6, 4000),
+                                        np.full(4000, z)]) for z in (0.01, 2.99)])
+    wardrobe = np.column_stack([rng.uniform(2.8, 3.4, 6000), rng.uniform(0, 2.0, 6000),
+                                rng.uniform(0.6, 1.4, 6000)])
+    shoes = np.column_stack([rng.uniform(1.0, 1.4, 500), rng.uniform(0, 0.15, 500),
+                             rng.uniform(2.0, 2.3, 500)])
+    obstacles = lidar_obstacles(np.vstack([walls, wardrobe, shoes]), room)
+    assert len(obstacles) == 1
+    fp = np.array(obstacles[0].footprint)
+    assert fp[:, 0].min() == pytest.approx(2.8, abs=0.15)
+    assert fp[:, 0].max() == pytest.approx(3.4, abs=0.15)
+    assert fp[:, 1].min() == pytest.approx(0.6, abs=0.15)
+    assert fp[:, 1].max() == pytest.approx(1.4, abs=0.15)
