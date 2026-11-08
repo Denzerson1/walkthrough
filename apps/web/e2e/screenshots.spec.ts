@@ -218,6 +218,9 @@ test('swapping the floor visibly changes the room', async ({ page }, testInfo) =
 
   await page.getByTestId('design-menu-toggle').click();
   await page.getByTestId('design-tab-floor').click();
+  // Every room: a floor laid in one room now leaves the others' captured
+  // floors, and the clip can show the next room's floor through a doorway.
+  await page.locator('[data-scope="all"]').click();
   await page.locator('[data-floor-id="walnut-dark-plank"]').click();
   await page.getByTestId('design-menu-toggle').click();
 
