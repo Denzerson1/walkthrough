@@ -332,3 +332,61 @@ def test_the_viewer_starts_facing_what_was_filmed(capture):
     # lib/camera.ts: yaw 0 looks down -Z, direction (-sin yaw, -cos yaw).
     look = np.array([-np.sin(np.radians(wp.yaw)), -np.cos(np.radians(wp.yaw))])
     np.testing.assert_allclose(look, [1.0, 0.0], atol=0.1)
+
+
+def _mask_box(center, size, yaw=0.0):
+    from walkthrough_pipeline.manifest import ItemBox
+
+    return ItemBox(center=center, size=size, yaw=yaw)
+
+
+def test_privacy_masks_reach_every_published_file(capture):
+    """A mask stored in the manifest but not applied hides nothing (audit item 9)."""
+    from walkthrough_pipeline.manifest import PrivacyMask
+    from walkthrough_pipeline.splat import read_spz
+
+    paths, room, _ = capture
+    align_scene(paths, "proj")
+    draft = Manifest.load(aligned_dir(paths) / "manifest.json")
+    published = draft.model_copy(deep=True)
+    hidden = _mask_box((2.0, 1.2, 3.0), (1.0, 0.8, 0.6), yaw=30.0)
+    published.privacyMasks = [PrivacyMask(id="photo", mode="delete", box=hidden)]
+    published.write(paths.manifest)  # the editor's mask, on the published manifest
+    report = export_scene(paths)
+    assert report.privacy[0]["splats"] > 0
+
+    from walkthrough_pipeline.scene import _box_local
+
+    manifest = Manifest.load(paths.manifest)
+    for name in ("scene.spz", "scene_nofloor.spz", *manifest.assets.floors.values()):
+        cloud = read_spz(paths.scene / name)
+        local = _box_local(cloud.positions, hidden)
+        assert not np.all(np.abs(local) <= np.array(hidden.size) / 2, axis=1).any(), name
+    assert manifest.privacyMasks[0].id == "photo"  # the editor's decision survives export
+
+
+def test_a_blurred_region_keeps_its_shape_and_loses_its_detail():
+    from walkthrough_pipeline.manifest import PrivacyMask
+    from walkthrough_pipeline.scene import PRIVACY_BLUR_CELL_M, apply_privacy_masks
+
+    rng = np.random.default_rng(0)
+    n = 20_000
+    cloud = SplatCloud(
+        positions=rng.uniform(-1, 1, (n, 3)).astype(np.float32),
+        colours=rng.uniform(0, 1, (n, 3)).astype(np.float32),  # detail: every splat its own
+        opacities=np.full(n, 0.9, np.float32),
+        scales=np.full((n, 3), 0.01, np.float32),
+        rotations=np.tile([1.0, 0, 0, 0], (n, 1)).astype(np.float32),
+        sh_rest=rng.normal(0, 0.3, (n, 3, 3)).astype(np.float32),
+    )
+    box = _mask_box((0.0, 0.0, 0.0), (0.8, 0.8, 0.8))
+    out, report = apply_privacy_masks(cloud, [PrivacyMask(id="b", mode="blur", box=box)])
+    inside = np.all(np.abs(cloud.positions) <= 0.4, axis=1)
+    assert len(out) == n and report[0]["splats"] == int(inside.sum())
+    np.testing.assert_array_equal(out.positions, cloud.positions)  # the shape stays
+    assert np.abs(out.sh_rest[inside]).max() == 0.0  # no view-dependent detail
+    cells = np.floor(cloud.positions[inside] / PRIVACY_BLUR_CELL_M).astype(int)
+    _, group = np.unique(cells, axis=0, return_inverse=True)
+    for g in range(5):  # one colour per cell
+        assert np.ptp(out.colours[inside][group.ravel() == g], axis=0).max() < 1e-6
+    np.testing.assert_array_equal(out.colours[~inside], cloud.colours[~inside])
