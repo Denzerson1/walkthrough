@@ -10,6 +10,7 @@
 import type { SparkRenderer, SplatMesh } from '@sparkjsdev/spark';
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { syncFloorSplats } from '../lib/floorSplats';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import {
@@ -87,8 +88,14 @@ interface Props {
   model?: BakedModel;
   /** Time of day for a rebuilt flat baked at several, in minutes after midnight. */
   daylight?: number;
-  /** Floor splats as a separate mesh, when the pipeline has split the scene. */
-  floorUrl?: string;
+  /**
+   * Floor splats as separate meshes, when the pipeline has split the scene:
+   * room id -> file, so one room's floor can be replaced while the others
+   * keep theirs. Older exports have one file for every room, keyed `*`.
+   */
+  floorUrls?: Record<string, string>;
+  /** Room id -> how light fell on its floor (see Manifest assets.floorShading). */
+  floorShadingUrls?: Record<string, string>;
   activeRoomId: string | null;
   viewer: ViewerState;
   floorCatalog: CatalogItem[];
@@ -237,7 +244,8 @@ export function SplatScene({
   sceneUrl,
   model,
   daylight,
-  floorUrl,
+  floorUrls,
+  floorShadingUrls,
   activeRoomId,
   viewer,
   floorCatalog,
@@ -313,6 +321,9 @@ export function SplatScene({
     onMoveItemRef.current = onMoveItem;
     onPoseRef.current = onPose;
   }, [onRoomChange, onSelectItem, onMoveItem, onPose]);
+  // The floor files as one value, so the scene reloads when they change and
+  // not on every render's new object.
+  const floorKey = JSON.stringify(floorUrls ?? {});
   const sceneRef = useRef<{
     scene: THREE.Scene;
     camera: THREE.PerspectiveCamera;
@@ -329,7 +340,8 @@ export function SplatScene({
     /** Draw the reflections again (after a lost context). */
     reflect?: () => void;
     splat?: SplatMesh;
-    floorSplat?: SplatMesh;
+    /** Room id (or `*` for every room) -> its floor splats. */
+    floorSplats?: Map<string, SplatMesh>;
     /** Sorts the splats on a worker; a sort finishing needs a frame to show it. */
     spark?: SparkRenderer;
     model?: THREE.Group;
@@ -464,10 +476,12 @@ export function SplatScene({
     // Spark examples use is for raw 3DGS exports in the Y-down convention,
     // which never reach here.
     //
-    // When the pipeline has split the scene we load the body and the floor as
-    // two meshes, so the floor can be hidden for a replacement. Otherwise we
-    // load the single combined scene and floor replacement is unavailable.
-    let pending = model ? 1 : floorUrl ? 2 : 1;
+    // When the pipeline has split the scene we load the body and each room's
+    // floor as separate meshes, so a floor can be hidden for a replacement.
+    // Otherwise we load the single combined scene and floor replacement is
+    // unavailable.
+    const floorEntries = Object.entries(floorUrls ?? {});
+    let pending = model ? 1 : 1 + floorEntries.length;
     // Frame times are judged from a moment after the scene is in, past the
     // first frames' uploads and shader compiles.
     let judgeFrom = Infinity;
@@ -576,12 +590,14 @@ export function SplatScene({
           scene.add(splat);
           sceneRef.current.splat = splat;
 
-          if (floorUrl) {
-            const floorSplat = new SplatMesh({ url: floorUrl, onLoad: settle });
+          const floorSplats = new Map<string, SplatMesh>();
+          for (const [roomId, url] of floorEntries) {
+            const floorSplat = new SplatMesh({ url, onLoad: settle });
             floorSplat.quaternion.identity();
             scene.add(floorSplat);
-            sceneRef.current.floorSplat = floorSplat;
+            floorSplats.set(roomId, floorSplat);
           }
+          sceneRef.current.floorSplats = floorSplats;
           setContentReady(true);
         })
         .catch(() => onError('Could not load this apartment.'));
@@ -847,7 +863,9 @@ export function SplatScene({
       walkCursor.geometry.dispose();
       (walkCursor.material as THREE.Material).dispose();
       sceneRef.current?.splat?.dispose?.();
-      sceneRef.current?.floorSplat?.dispose?.();
+      for (const floorSplat of sceneRef.current?.floorSplats?.values() ?? []) {
+        floorSplat.dispose?.();
+      }
       if (sceneRef.current?.model) disposeChildren(sceneRef.current.model);
       sceneRef.current?.exposure?.dispose();
       sceneRef.current?.sun?.dispose();
@@ -865,7 +883,7 @@ export function SplatScene({
     };
     // sceneUrl identifies the scene; the callbacks are stable in practice.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sceneUrl, floorUrl, model?.url]);
+  }, [sceneUrl, floorKey, model?.url]);
 
   // ---- pointer, wheel and keyboard interaction -------------------------
   useEffect(() => {
@@ -1419,15 +1437,15 @@ export function SplatScene({
 
   // ---- replacement floors ----------------------------------------------
   //
-  // The brief's M3 rule is "hide floor.spz and render the room's floor
-  // polygon as a mesh". floor.spz covers the whole flat, so as soon as ANY
-  // room has a replacement the original floor splats come off everywhere and
-  // every room is drawn as a mesh: the replacement material where one was
-  // chosen, and the room's recorded original floor colour everywhere else.
+  // The brief's M3 rule is "hide the floor splats and render the room's
+  // floor polygon as a mesh". With a floor file per room (the pipeline's
+  // export since 2026-11) only the replaced room's splats come off; every
+  // other room keeps its captured floor. A replacement is drawn with the
+  // room's floor shading map, so the original light falloff and shadows stay.
   //
-  // That fallback is an approximation — a flat colour times the shading map,
-  // rather than the real floor's texture. Hiding only one room's splats needs
-  // per-splat masking, which is noted in docs/ROADMAP.md.
+  // Older exports have one floor file for the whole flat ("*"): any
+  // replacement hides it everywhere, and untouched rooms fall back to their
+  // recorded original floor colour.
   useEffect(() => {
     const ctx = sceneRef.current;
     if (!ctx) return;
@@ -1450,26 +1468,18 @@ export function SplatScene({
       return;
     }
 
+    syncFloorSplats(ctx.scene, ctx.floorSplats, viewer.floors, showingOriginal);
+    const wholeFlat = ctx.floorSplats?.has('*') ?? false;
     const anyReplaced = Object.keys(viewer.floors).length > 0;
-    const hideFloorSplats = anyReplaced;
-
-    // Add/remove rather than toggling .visible: SparkRenderer collects splat
-    // meshes itself, so taking it out of the scene graph is the reliable way
-    // to stop it drawing.
-    if (ctx.floorSplat) {
-      if (hideFloorSplats) ctx.scene.remove(ctx.floorSplat);
-      else if (ctx.floorSplat.parent !== ctx.scene) ctx.scene.add(ctx.floorSplat);
-    }
-    if (!hideFloorSplats) return;
-
     for (const room of manifest.rooms) {
       if (room.floorPolygon.length < 3) continue;
       const floorId = viewer.floors[room.id];
+      if (!floorId && !(wholeFlat && anyReplaced)) continue;
       const floor = floorId ? floorCatalog.find((f) => f.id === floorId) : undefined;
-      group.add(buildFloorMesh(room, floor));
+      group.add(buildFloorMesh(room, floor, floorShadingUrls?.[room.id]));
     }
-    // showingOriginal only matters for a rebuilt flat (above).
-  }, [viewer.floors, manifest, floorCatalog, showingOriginal, contentReady]);
+    // showingOriginal only matters for a rebuilt flat (above) and the splats.
+  }, [viewer.floors, manifest, floorCatalog, showingOriginal, contentReady, floorShadingUrls]);
 
   // "Hold to compare" must not hitch: toggle visibility rather than
   // disposing and rebuilding every floor and furniture mesh twice per press.
@@ -1479,11 +1489,7 @@ export function SplatScene({
     ctx.wake();
     ctx.floorGroup.visible = !showingOriginal;
     ctx.furnitureGroup.visible = !showingOriginal;
-    if (ctx.floorSplat) {
-      const show = showingOriginal || Object.keys(viewer.floors).length === 0;
-      if (show && ctx.floorSplat.parent !== ctx.scene) ctx.scene.add(ctx.floorSplat);
-      else if (!show) ctx.scene.remove(ctx.floorSplat);
-    }
+    syncFloorSplats(ctx.scene, ctx.floorSplats, viewer.floors, showingOriginal);
   }, [showingOriginal, viewer.floors]);
 
   // ---- placed furniture -------------------------------------------------
@@ -1644,6 +1650,7 @@ function disposeChildren(group: THREE.Group): void {
         standard.map?.dispose();
         standard.normalMap?.dispose();
         standard.roughnessMap?.dispose();
+        (material.userData.shading as THREE.Texture | undefined)?.dispose();
         material.dispose();
       }
     });
@@ -1654,7 +1661,11 @@ function disposeChildren(group: THREE.Group): void {
  * A replacement floor is the room polygon triangulated on the y=0 plane with
  * UVs in metres, so a tile of tileSizeM repeats at its true physical size.
  */
-function buildFloorMesh(room: Room, floor: CatalogItem | undefined): THREE.Mesh {
+function buildFloorMesh(
+  room: Room,
+  floor: CatalogItem | undefined,
+  shadingUrl?: string,
+): THREE.Mesh {
   // ShapeGeometry lays the shape in the XY plane with its normal along +Z, so
   // it has to be rotated onto the floor. rotateX(-90) is the one that leaves
   // the normal pointing UP: rotateX(+90) sends it to (0,-1,0), which
@@ -1696,7 +1707,70 @@ function buildFloorMesh(room: Room, floor: CatalogItem | undefined): THREE.Mesh 
   mesh.userData.owned = true;
   material.userData.owned = true;
   if (floor) loadFloorMaps(material, floor, mesh);
+  if (shadingUrl) applyFloorShading(material, room, shadingUrl, mesh);
   return mesh;
+}
+
+/**
+ * Multiply a replacement floor by how light fell on the captured one: the
+ * pipeline's shading map (an 8-bit PNG over the floor polygon's bounding
+ * box, row 0 at min z; value / 127.5 is the factor, 1.0 at the median). It
+ * keeps the window's falloff and the shadows under furniture that a flat
+ * new floor would lose.
+ */
+function applyFloorShading(
+  material: THREE.MeshStandardMaterial,
+  room: Room,
+  url: string,
+  mesh: THREE.Mesh,
+): void {
+  const xs = room.floorPolygon.map((p) => p[0]);
+  const zs = room.floorPolygon.map((p) => p[1]);
+  const minX = Math.min(...xs);
+  const minZ = Math.min(...zs);
+  const neutral = new THREE.DataTexture(new Uint8Array([128, 128, 128, 255]), 1, 1);
+  neutral.needsUpdate = true;
+  const uniforms = {
+    shadingMap: { value: neutral as THREE.Texture },
+    shadingRect: {
+      value: new THREE.Vector4(minX, minZ, 1 / (Math.max(...xs) - minX), 1 / (Math.max(...zs) - minZ)),
+    },
+  };
+  material.userData.shading = neutral;
+  material.customProgramCacheKey = () => 'floor-shading';
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vFloorXZ;')
+      .replace(
+        '#include <begin_vertex>',
+        '#include <begin_vertex>\nvFloorXZ = (modelMatrix * vec4(position, 1.0)).xz;',
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        '#include <common>\nuniform sampler2D shadingMap;\nuniform vec4 shadingRect;\nvarying vec2 vFloorXZ;',
+      )
+      .replace(
+        '#include <map_fragment>',
+        '#include <map_fragment>\ndiffuseColor.rgb *= texture2D(shadingMap, (vFloorXZ - shadingRect.xy) * shadingRect.zw).r * 2.0;',
+      );
+  };
+  new THREE.TextureLoader().load(url, (t) => {
+    if (mesh.parent === null) {
+      t.dispose();
+      return;
+    }
+    // A factor, not a colour: no colour-space conversion, and row 0 at min z.
+    t.colorSpace = THREE.NoColorSpace;
+    t.flipY = false;
+    t.wrapS = THREE.ClampToEdgeWrapping;
+    t.wrapT = THREE.ClampToEdgeWrapping;
+    t.needsUpdate = true;
+    neutral.dispose();
+    uniforms.shadingMap.value = t;
+    material.userData.shading = t;
+  });
 }
 
 function loadFloorMaps(

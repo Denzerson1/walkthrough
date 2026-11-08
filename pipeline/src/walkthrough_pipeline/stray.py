@@ -58,6 +58,7 @@ class StrayCapture:
     cam_to_world: np.ndarray  # (N, 4, 4), OpenCV camera axes
     intrinsics: np.ndarray  # (N, 4) fx, fy, cx, cy at the video's resolution
     size: tuple[int, int]  # video width, height
+    timestamps: np.ndarray | None = None  # (N,) seconds, as odometry.csv gives them
 
     def __len__(self) -> int:
         return len(self.frames)
@@ -112,7 +113,8 @@ def load(root: Path, size: tuple[int, int] | None = None) -> StrayCapture:
 
         stream = probe(root / "rgb.mp4")["streams"][0]
         size = (int(stream["width"]), int(stream["height"]))
-    return StrayCapture(root, rows[:, 1].astype(int), poses, intrinsics.astype(np.float64), size)
+    return StrayCapture(root, rows[:, 1].astype(int), poses, intrinsics.astype(np.float64), size,
+                        timestamps=rows[:, 0].astype(np.float64))
 
 
 def _columns(root: Path) -> int:

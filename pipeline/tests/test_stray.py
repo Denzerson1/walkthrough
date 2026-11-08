@@ -64,14 +64,16 @@ def _render_depth(pose):
     return t  # rays have unit z, so the ray parameter is the z-depth
 
 
-def _write_capture(root: Path, n: int = 90, columns: int = 13) -> list[np.ndarray]:
+def _write_capture(root: Path, n: int = 90, columns: int = 13,
+                   pitch=lambda i: -10.0) -> list[np.ndarray]:
     (root / "depth").mkdir(parents=True)
     (root / "confidence").mkdir()
     (root / "rgb.mp4").write_bytes(b"")  # presence only; size is passed in
     poses, rows = [], []
     for i in range(n):
         # A full turn at a realistic hand-held pace: 4° and under 3 cm per frame.
-        pose = _pose([0.3 * np.cos(i / 12), 0.0, 0.3 * np.sin(i / 12)], yaw_deg=i * 4)
+        pose = _pose([0.3 * np.cos(i / 12), 0.0, 0.3 * np.sin(i / 12)], yaw_deg=i * 4,
+                     pitch_deg=pitch(i))
         poses.append(pose)
         depth_mm = np.clip(np.round(_render_depth(pose) * 1000), 0, 65535).astype(np.uint16)
         cv2.imwrite(str(root / "depth" / f"{i:06d}.png"), depth_mm)
@@ -471,3 +473,34 @@ def test_a_video_one_frame_behind_its_poses_is_detected(capture, tmp_path):
                     "-pix_fmt", "yuv420p", str(cap.video)], check=True)
     offset, agreement = stray.frame_offset(cap, samples=1)
     assert (offset, agreement) == (-1, 1.0)
+
+
+def test_a_room_without_a_scan_keeps_its_high_ceiling(tmp_path, monkeypatch):
+    """
+    The first real Stray room has a 3.3 m ceiling; a room outlined without a
+    scan got 2.6 m walls, and export crops 0.5 m above the walls: the
+    ceiling was cut off. Walls now stand as high as the LiDAR ceiling.
+    """
+    monkeypatch.setattr(sys.modules[__name__], "HI", np.array([2.0, 1.9, 1.5]))  # 3.3 m room
+    # The view sweeps up to the ceiling and back, slowly enough for ARKit.
+    poses = _write_capture(tmp_path / "cap", pitch=lambda i: 10.0 + 30.0 * np.sin(i / 15))
+    cap = stray.load(tmp_path / "cap", size=VIDEO)
+    paths = ProjectPaths(tmp_path / "p")
+    paths.ensure()
+    stray.build_dataset(cap, _frames(tmp_path, cap), paths.work / "undistorted")
+    rng = np.random.default_rng(5)
+    floor = np.column_stack([rng.uniform(LO[0], HI[0], 40_000), np.full(40_000, LO[1]),
+                             rng.uniform(LO[2], HI[2], 40_000)])
+    n = len(floor)
+    q = np.zeros((n, 4), np.float32)
+    q[:, 0] = 1
+    write_ply(SplatCloud(floor.astype(np.float32), np.full((n, 3), 0.5, np.float32),
+                         np.full(n, 0.9, np.float32), np.full((n, 3), 0.01, np.float32), q),
+              paths.work / "trained.ply")
+    report = align_scene(paths, "p", metric=True)
+    from walkthrough_pipeline.manifest import Manifest
+
+    room = Manifest.load(aligned_dir(paths) / "manifest.json").rooms[0]
+    assert report.floor["ceiling_m"] == pytest.approx(3.3, abs=0.05)
+    assert all(w.height == pytest.approx(3.3, abs=0.05) for w in room.walls)
+    del poses

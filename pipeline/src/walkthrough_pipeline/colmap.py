@@ -14,6 +14,7 @@ class Camera:
     name: str
     rotation: np.ndarray  # (3, 3) world -> camera
     translation: np.ndarray  # (3,)
+    camera_id: int = 1  # its intrinsics in cameras.bin
 
     @property
     def centre(self) -> np.ndarray:
@@ -43,7 +44,7 @@ def read_images_bin(path: Path) -> list[Camera]:
     off = 8
     cameras = []
     for _ in range(count):
-        _, qw, qx, qy, qz, tx, ty, tz, _ = struct.unpack_from("<idddddddi", data, off)
+        _, qw, qx, qy, qz, tx, ty, tz, camera_id = struct.unpack_from("<idddddddi", data, off)
         off += struct.calcsize("<idddddddi")
         end = data.index(b"\0", off)
         name = data[off:end].decode("utf-8")
@@ -55,6 +56,7 @@ def read_images_bin(path: Path) -> list[Camera]:
                 name=name,
                 rotation=quaternion_to_matrix(np.array([qw, qx, qy, qz])),
                 translation=np.array([tx, ty, tz]),
+                camera_id=camera_id,
             )
         )
     return cameras

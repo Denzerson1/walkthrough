@@ -258,6 +258,26 @@ export function Viewer() {
     });
   }, [manifest, activeRoomId]);
 
+  // Each room's floor splats, so one can be replaced while the rest stay;
+  // an older export's single floor file is "*", every room at once.
+  const floorUrls = useMemo(() => {
+    const assets = manifest?.assets;
+    if (!projectId || !assets?.sceneNoFloor) return undefined;
+    if (assets.floors && Object.keys(assets.floors).length > 0) {
+      return Object.fromEntries(
+        Object.entries(assets.floors).map(([room, file]) => [room, fileUrl(projectId, file)]),
+      );
+    }
+    return assets.floor ? { '*': fileUrl(projectId, assets.floor) } : undefined;
+  }, [manifest, projectId]);
+  const floorShadingUrls = useMemo(() => {
+    const shading = manifest?.assets?.floorShading;
+    if (!projectId || !shading) return undefined;
+    return Object.fromEntries(
+      Object.entries(shading).map(([room, file]) => [room, fileUrl(projectId, file)]),
+    );
+  }, [manifest, projectId]);
+
   const staged = isStaged(viewer);
   const stagedRooms = useMemo(
     () => stagedRoomIds(viewer, manifest?.items ?? []),
@@ -441,11 +461,8 @@ export function Viewer() {
               : undefined
           }
           daylight={daylight ?? undefined}
-          floorUrl={
-            manifest.assets?.sceneNoFloor && manifest.assets?.floor
-              ? fileUrl(projectId, manifest.assets.floor)
-              : undefined
-          }
+          floorUrls={floorUrls}
+          floorShadingUrls={floorShadingUrls}
           activeRoomId={activeRoomId}
           viewer={viewer}
           floorCatalog={catalog.floors}

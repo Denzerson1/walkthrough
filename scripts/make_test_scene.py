@@ -25,6 +25,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import cv2
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "pipeline" / "src"))
@@ -37,6 +38,7 @@ from walkthrough_pipeline.manifest import (  # noqa: E402
     Waypoint,
 )
 from walkthrough_pipeline.paths import ProjectPaths, repo_root  # noqa: E402
+from walkthrough_pipeline.scene import floor_shading  # noqa: E402
 from walkthrough_pipeline.splat import (  # noqa: E402
     SplatCloud,
     write_ply,
@@ -602,33 +604,42 @@ def main() -> int:
         print(f"  {spz.name:<22} {len(cloud_part):>9,} splats  {size:6.1f} MB")
         return spz.name
 
-    # The real pipeline produces this split in `pipeline floor` (M3). The
-    # generator knows which splats are floor, so it can emit the same three
-    # assets and let the viewer's floor-replacement path be exercised without
-    # the segmentation model.
+    # The real pipeline's `export` makes this split: the scene without its
+    # floor, and each room's floor on its own, so one room's floor can be
+    # replaced while the others keep theirs. The generator knows which
+    # splats are floor, so it emits the same assets (and the floor shading
+    # maps) and the viewer's floor-replacement path runs without a capture.
     scene_asset = write(cloud, "scene")
     nofloor_asset = write(cloud.select(~floor_mask), "scene_nofloor")
-    floor_asset = write(cloud.select(floor_mask), "floor")
+    for stale in paths.scene.glob("floor*.*"):
+        stale.unlink()
 
-    # Average floor colour per room, so a room whose floor was not replaced can
-    # still be drawn once the floor splats are hidden.
-    floor_points = cloud.positions[floor_mask]
-    floor_colours = cloud.colours[floor_mask]
     averages: dict[str, str] = {}
+    floors: dict[str, str] = {}
+    shading: dict[str, str] = {}
+    claimed = np.zeros(len(cloud), dtype=bool)
     for spec in ROOMS:
         x0, z0, x1, z1 = spec.rect
-        inside = (
-            (floor_points[:, 0] >= x0)
-            & (floor_points[:, 0] <= x1)
-            & (floor_points[:, 2] >= z0)
-            & (floor_points[:, 2] <= z1)
+        inside = floor_mask & ~claimed & (
+            (cloud.positions[:, 0] >= x0) & (cloud.positions[:, 0] <= x1)
+            & (cloud.positions[:, 2] >= z0) & (cloud.positions[:, 2] <= z1)
         )
-        if inside.any():
-            averages[spec.id] = _average_colour(floor_colours[inside])
+        claimed |= inside
+        if not inside.any():
+            continue
+        part = cloud.select(inside)
+        averages[spec.id] = _average_colour(part.colours)
+        floors[spec.id] = write(part, f"floor-{spec.id}")
+        poly = np.array([[x0, z0], [x1, z0], [x1, z1], [x0, z1]], dtype=np.float64)
+        map_ = floor_shading(part, poly)
+        if map_ is not None:
+            cv2.imwrite(str(paths.scene / f"floor-shading-{spec.id}.png"), map_)
+            shading[spec.id] = f"floor-shading-{spec.id}.png"
 
     manifest = build_manifest(args.project, scene_asset, averages)
     manifest.assets.sceneNoFloor = nofloor_asset
-    manifest.assets.floor = floor_asset
+    manifest.assets.floors = floors
+    manifest.assets.floorShading = shading
     manifest.write(paths.manifest)
     print(f"  manifest               {paths.manifest.relative_to(repo_root())}")
     print(f"Done. Open http://localhost:5173/p/{args.project}")

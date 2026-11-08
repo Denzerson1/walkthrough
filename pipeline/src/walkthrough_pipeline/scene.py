@@ -320,10 +320,23 @@ def align_scene(
             # drift metres away, and an outline from splats picks them up.
             plan_pts = _transform_points(lidar, transform)
             outline_xz = plan_pts[(plan_pts[:, 1] > -0.05) & (plan_pts[:, 1] < 2.2)][:, [0, 2]]
+            ceiling = ceiling_height(plan_pts[:, 1])
         else:
             near = opaque & (np.abs(heights * scale) < 0.02)
             outline_xz = (aligned[near] * scale)[:, [0, 2]]
-        manifest.rooms = [_room_from_floor(outline_xz, measured=lidar is not None)]
+            ceiling = ceiling_height(heights[opaque] * scale)
+        room = _room_from_floor(outline_xz, measured=lidar is not None)
+        # The walls stand as high as the ceiling measured: export crops at
+        # the walls' height, and a guessed 2.6 m cut the 3.3 m ceiling off
+        # the first real Stray room.
+        if ceiling is not None and 2.0 < ceiling < 6.0:
+            for wall in room.walls:
+                wall.height = round(ceiling, 3)
+        else:
+            warnings.append("No clear ceiling: walls left at 2.6 m, and export crops 0.5 m "
+                            "above that. Check the ceiling in the viewer.")
+        floor_report["ceiling_m"] = None if ceiling is None else round(ceiling, 3)
+        manifest.rooms = [room]
         manifest.items = []
 
     _stand_where_filmed(manifest.rooms[0], cameras, transform)

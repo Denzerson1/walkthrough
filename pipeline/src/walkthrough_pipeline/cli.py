@@ -527,9 +527,14 @@ def _switch(value: str, auto: bool, name: str) -> bool:
 
 def _run_logged(cmd: list[str], cwd: Path, log: Path) -> None:
     """Run `cmd`, its output both shown and kept in `log` (a failed run's evidence)."""
+    import os
+
     log.parent.mkdir(parents=True, exist_ok=True)
+    # tqdm redraws ~20 times a second; every 10 s is plenty for a log.
+    env = {**os.environ, "TQDM_MININTERVAL": "10"}
     with log.open("w", encoding="utf-8") as out, subprocess.Popen(
         cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
+        env=env,
     ) as proc:
         assert proc.stdout is not None
         for line in proc.stdout:
@@ -561,6 +566,10 @@ def train(
     experiment: str | None = typer.Option(
         None, help="Train into work/experiments/<name> and leave work/train and trained.ply "
         "alone: for comparing one setting against the baseline."),
+    displaced: str | None = typer.Option(
+        None, help="With --experiment, on a Stray capture: leave the stretch 'start:end' of the "
+        "walk (fractions, e.g. 0.45:0.55) out of training, so `pipeline compare` scores views "
+        "away from every training camera, not just between them."),
 ) -> None:
     """Train the splat with gsplat (Apache-2.0), MCMC strategy, capped count."""
     paths = _paths(project)
@@ -569,6 +578,17 @@ def train(
         raise typer.BadParameter("No undistorted poses. Run `pipeline poses` first.")
     if experiment is not None and not experiment.replace("-", "").replace("_", "").isalnum():
         raise typer.BadParameter("--experiment takes letters, digits, - and _ only")
+    left_out: list[str] = []
+    if displaced is not None:
+        if experiment is None or _stray(paths) is None:
+            raise typer.BadParameter("--displaced needs --experiment and a Stray capture")
+        try:
+            start, end = (float(v) for v in displaced.split(":"))
+        except ValueError as exc:
+            raise typer.BadParameter("--displaced is start:end, e.g. 0.45:0.55") from exc
+        if not 0 <= start < end <= 1 or end - start > 0.5:
+            raise typer.BadParameter("--displaced: 0 <= start < end <= 1, at most half the walk")
+        data, left_out = _dataset_without(paths, experiment, start, end)
     posed_by_arkit = _stray(paths) is not None
     settings = train_mod.TrainSettings(
         max_splats=max_splats,
@@ -606,6 +626,8 @@ def train(
                 run.metrics["pose_refinement"] = train_mod.export_refined_poses(
                     data, build, settings)
             train_mod.write_report(report, build / "train_report.json")
+            if left_out:
+                (build / "displaced.json").write_text(json.dumps(left_out))
         if experiment is None:
             prov.atomic_copy(target / "trained.ply", trained_ply(paths))
             train_mod.write_report(report, paths.work / "train_report.json")
@@ -620,6 +642,69 @@ def train(
         moved = run.metrics["pose_refinement"]
         console.print(f"  poses refined: median {moved['moved_cm']['median']} cm, "
                       f"{moved['turned_deg']['median']}°; worst {moved['moved_cm']['max']} cm")
+
+
+def _dataset_without(paths: ProjectPaths, experiment: str, start: float,
+                     end: float) -> tuple[Path, list[str]]:
+    """The Stray dataset rebuilt without a stretch of the walk; the frames left out."""
+    capture = _stray(paths)
+    frames_all = sorted((paths.work / "frames").glob("frame_*.png"))
+    a, b = int(start * len(frames_all)), int(end * len(frames_all))
+    keep = frames_all[:a] + frames_all[b:]
+    report = json.loads((paths.work / "poses_report.json").read_text())
+    data = paths.work / "experiments" / f"{experiment}.data"
+    stray_mod.build_dataset(capture, keep, data, int(report.get("video_frame_offset", 0)))
+    console.print(f"  left out frames {a}-{b} of {len(frames_all)} "
+                  f"({frames_all[a].name}..{frames_all[b - 1].name}) for a displaced test")
+    return data, [p.name for p in frames_all[a:b]]
+
+
+@app.command()
+def compare(
+    project: str = typer.Option(..., "--project", "-p"),
+    label: str = typer.Option("latest", help="Folder under work/compare/"),
+    views: int = typer.Option(8, min=1, max=64),
+    experiment: str | None = typer.Option(None, help="Score an experiment's splat instead"),
+) -> None:
+    """
+    Render the same views from the trained, aligned and exported splat with
+    gsplat and score each against the source frames: where a defect starts.
+    """
+    from .compare import stage_comparison
+
+    report = stage_comparison(_paths(project), label, views, experiment)
+    console.print(f"[green]Compared[/green] {len(report['views'])} {report['set']} views "
+                  f"({report['poses']}):")
+    for stage, m in report["stages"].items():
+        console.print(f"  {stage:<9} PSNR {m.get('psnr')} dB, SSIM {m.get('ssim')}")
+
+
+@app.command(name="compare-browser")
+def compare_browser(
+    project: str = typer.Option(..., "--project", "-p"),
+    shots: Path = typer.Option(..., help="Folder for cameras.json and the browser's shots"),
+    prepare: bool = typer.Option(False, help="Only write cameras.json for "
+                                 "scripts/browser-compare.mjs"),
+    views: int = typer.Option(6, min=1, max=40),
+) -> None:
+    """
+    The browser stage: the viewer's canvas against gsplat's render of the
+    published SPZ from the same camera. Run with --prepare, then
+    `node scripts/browser-compare.mjs <viewer url> <shots>/cameras.json <shots>`, then again.
+    """
+    from .compare import browser_cameras, browser_comparison
+
+    paths = _paths(project)
+    shots = local_path(shots)
+    if prepare:
+        shots.mkdir(parents=True, exist_ok=True)
+        cams = browser_cameras(paths, views)
+        (shots / "cameras.json").write_text(json.dumps(cams, indent=1))
+        console.print(f"Wrote {len(cams)} cameras to {shots / 'cameras.json'}")
+        return
+    report = browser_comparison(paths, shots)
+    console.print(f"[green]Browser against gsplat[/green]: {report['browser_vs_gsplat']} "
+                  f"over {report['views']} views at {report['canvas']}")
 
 
 @app.command()
@@ -699,6 +784,74 @@ def export(
     )
     for warning in report.warnings:
         console.print(f"[yellow]{warning}[/yellow]")
+
+
+@app.command()
+def check(project: str = typer.Option(..., "--project", "-p")) -> None:
+    """
+    Check a capture before training: format, sync, intrinsics, poses,
+    coverage. Pictures and report.json in work/preflight/.
+    """
+    from .check import preflight
+
+    paths = _paths(project)
+    report = preflight(paths)
+    console.print(f"[green]Checked[/green] the {report['capture']} capture; pictures and "
+                  f"report in {(paths.work / 'preflight').relative_to(paths.root)}")
+    for warning in report.get("warnings", []):
+        console.print(f"[yellow]{warning}[/yellow]")
+    if not report.get("warnings"):
+        console.print("  No warnings.")
+
+
+@app.command()
+def verify(project: str = typer.Option(..., "--project", "-p")) -> None:
+    """
+    Check our splat code against PlayCanvas's splat-transform: every
+    published SPZ read by it, and SH rotation against its own.
+    """
+    from .verify import verify_published, verify_sh_rotation
+
+    paths = _paths(project)
+    report = {"published": verify_published(paths), "sh_rotation": verify_sh_rotation()}
+    prov.atomic_write_text(paths.work / "verify_report.json", json.dumps(report, indent=2))
+    problems = [f"{name}: {p}" for group in report.values() for name, r in group.items()
+                for p in r.get("problems", [])]
+    for name, r in report["published"].items():
+        console.print(f"  {name}: {r['splats']:,} splats, positions within "
+                      f"{r['position_m'] * 1000:.3f} mm, SH within {r.get('sh', 0):.2g}")
+    for axis, r in report["sh_rotation"].items():
+        console.print(f"  rotation about {axis}: centres {r['position_m']:.2g} m, "
+                      f"SH {r.get('sh', 0):.2g}, |q.q'| >= {r['rotation_dot_min']:.6f}")
+    if problems:
+        for p in problems:
+            console.print(f"[red]{p}[/red]")
+        raise typer.Exit(1)
+    console.print("[green]splat-transform agrees with every file and every rotation.[/green]")
+
+
+@app.command(name="rerun")
+def rerun_cmd(
+    project: str = typer.Option(..., "--project", "-p"),
+    every: int = typer.Option(3, min=1, max=100, help="Log every Nth frame"),
+) -> None:
+    """
+    Save a local Rerun recording of the capture (frames, poses, points, splat,
+    plan walls) to work/diagnostics/. Needs the `diagnostics` extra.
+    """
+    try:
+        import rerun  # noqa: F401
+
+        from .rerun_export import export_recording
+    except ImportError as exc:
+        raise ToolMissing("rerun-sdk is not installed: `uv sync --extra diagnostics` "
+                          "(or --extra pipeline --extra diagnostics on the pipeline machine)."
+                          ) from exc
+    paths = _paths(project)
+    out = paths.work / "diagnostics" / f"{project}.rrd"
+    summary = export_recording(paths, out, every=every)
+    console.print(f"[green]Saved[/green] {out.relative_to(paths.root)}: {summary}. "
+                  f"Open it with `rerun {out}`.")
 
 
 @app.command(name="floor")
@@ -920,7 +1073,7 @@ def run_all(
     train(project=project, max_splats=max_splats, steps=steps, holdout_every=8,
           sh_degree=sh_degree, depth="auto", depth_lambda=1e-2, pose_opt="auto",
           pose_opt_lr=1e-5, pose_opt_reg=1e-6, antialiased=False, data_factor=1,
-          experiment=None)
+          experiment=None, displaced=None)
     align(project=project, scale_tolerance=0.0)
     export(project=project, max_splats=max_splats, crop=True, crop_margin=crop_margin,
            sh_degree=sh_degree)

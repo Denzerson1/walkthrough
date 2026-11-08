@@ -73,16 +73,53 @@ re-solves them.
 
 Each stage reads what the last wrote under `data/projects/<id>/` and writes a
 `work/<stage>_report.json`; any stage can be rerun alone. `pnpm run pipeline info
---project <id>` shows what exists and every report.
+--project <id>` shows what exists, which stages are current, and every report.
 
 ```bash
-pnpm run pipeline ingest <video> --project <id> [--roomplan <file>]
+pnpm run pipeline ingest <capture> --project <id> [--roomplan <file> | --keep-roomplan]
 pnpm run pipeline frames  --project <id> [--fps 3] [--long-edge 1600]
 pnpm run pipeline poses   --project <id> [--matcher auto] [--camera-model OPENCV]
-pnpm run pipeline train   --project <id> [--max-splats 1500000] [--steps 30000]
-pnpm run pipeline align   --project <id>
+pnpm run pipeline check   --project <id>          # preflight: before training
+pnpm run pipeline train   --project <id> [--steps 30000] [--max-splats 1500000] [--depth auto] [--pose-opt auto]
+pnpm run pipeline align   --project <id> [--scale-tolerance 0]
 pnpm run pipeline export  --project <id> [--no-crop] [--sh-degree 3]
+pnpm run pipeline verify  --project <id>          # against splat-transform
+pnpm run pipeline compare --project <id>          # the same views at every stage
 ```
+
+### Reruns: records, staleness, atomic outputs
+
+Every stage leaves `work/runs/<stage>.json` (and a copy per run under
+`work/runs/history/`): the input fingerprints (a SHA-256 of the capture and
+the scan), the run id of each stage it built on, its settings, the git
+commit and a hash of the pipeline source, tool versions (Python, numpy,
+OpenCV, pycolmap, ffmpeg; for `train` also gsplat, torch, CUDA, the GPU and
+the gsplat examples' tag) and the trainer's seed (42 + rank, fixed in
+gsplat's `simple_trainer.py` at the pinned tag).
+
+- **No silent mixing.** A stage refuses to run when what it builds on was
+  rerun since — frames cut from an older video, poses for older frames, a
+  splat trained on older poses: `StaleInput`, naming the stage to rerun.
+  `info` lists every stage as current or stale.
+- **The scan goes with its capture.** `ingest` without `--roomplan` sets an
+  existing scan aside (`input/roomplan.set-aside-<run>`); reusing it is
+  explicit, `--keep-roomplan`, and recorded. `align` refuses a scan that
+  changed since `ingest`.
+- **Nothing good is deleted before its replacement exists.** Frames, the
+  COLMAP model, the dataset and training are built beside the old output
+  and swapped in when complete. A failed run leaves its partial output, its
+  record and its log under `work/failed/<stage>-<run>/` and `work/logs/`;
+  the last good result and record stay current.
+- **Publishing is last.** `align` writes `work/aligned/` (levelled splat,
+  draft manifest). `export` builds every published file in a staging folder,
+  reads each SPZ back and checks it, and only then moves the files into
+  `scene/` and writes the manifest that points at them. Until then the
+  viewer shows the last export. Manifests are written atomically.
+- **Experiments beside the baseline.** `train --experiment <name>` trains
+  into `work/experiments/<name>/` with its own record, leaving `work/train`
+  and `trained.ply` alone. `--displaced 0.45:0.55` (Stray) also leaves that
+  stretch of the walk out of training, so `compare --experiment` scores
+  views away from every training camera, not just between them.
 
 ### Two kinds of capture
 
@@ -90,110 +127,236 @@ pnpm run pipeline export  --project <id> [--no-crop] [--sh-degree 3]
 |---|---|---|
 | Camera positions | ARKit's, recorded by the phone | Estimated by COLMAP from texture |
 | Plain walls | Held by LiDAR depth in training | Often fog |
-| Scale | Metres, exact | From the RoomPlan scan, else a 10–20% guess |
-| Gravity | Exact | From how the phone was held |
+| Scale | Metres, kept exactly | From the RoomPlan scan, else a 10–20% guess |
+| Gravity | ARKit's, kept | From how the phone was held, refined by the floor (≤ 10°) |
 
 The stage names are the same for both; each stage checks which it has.
 
 ### ingest
 
 Copies the capture and scan into `input/` (`input/stray/` or `input/video.*`),
-then **checks both before anything slow happens**: a video against
-`docs/CAPTURE.md` (HDR, under 4K, under 60 fps, too short), a Stray folder by
-reading its poses, and the scan by parsing it and printing walls, openings,
-furniture boxes, floor area and ceiling height.
+fingerprints them, then **checks both before anything slow happens**: a video
+against `docs/CAPTURE.md` (HDR, under 4K, under 60 fps, too short), a Stray
+folder by reading its poses, and the scan by parsing it and printing walls,
+openings, furniture boxes, floor area and ceiling height. A capture already in
+the project (`input/stray`) is re-registered in place.
 
 ### frames
 
 ffmpeg decodes at `--fps` (default 3), **scaled to `--long-edge` while
 decoding** — a 4K PNG is ~12 MB, so a long walk would otherwise write tens of
-gigabytes before blur rejection starts. Blurry frames are then dropped by
-variance of the Laplacian, relative to this capture's median sharpness (a
-plain wall scores low even when sharp). Too few survivors relaxes the
-threshold; too many thins evenly across the walk.
+gigabytes before selection starts. Then, per window of candidates, the
+sharpest; then (`frames.select_by_coverage`):
 
-**Stray:** decodes every few frames without autorotation (the poses refer to
-the sensor's orientation) and keeps the sharpest of each run of 4 candidates,
-named by frame number (`frame_000420.png`) so each lines up with its pose and
-depth map.
+- **duplicates go**: a frame that barely moved from the last kept one
+  (Stray: under 2 cm and 2°, from the poses; video: under 2/255 mean change
+  between small greyscale copies) adds weight, not views;
+- **blur is judged locally**, against the median of its neighbours, not the
+  capture's: a plain wall is never sharp and still has to be in;
+- **no stretch of the walk goes missing**: after 3 windows in a row dropped
+  as blurry, the next is kept anyway (`kept_for_coverage`) — that is where
+  the person turned, into a corner or through a door, the views a global
+  threshold loses in clumps.
+
+A video still left under `--min-frames` gets its least blurred frames back;
+over `--max-frames` it is thinned evenly. **Stray:** decoded without
+autorotation (the poses refer to the sensor's orientation), named by frame
+number (`frame_000420.png`) so each lines up with its pose and depth map.
 
 ### poses
 
 **Stray:** no estimation. Writes the trainer's dataset straight from ARKit:
 one PINHOLE camera per frame (autofocus moves the focal length), poses as
-recorded, and LiDAR depth back-projected (confidence 2, 0.15–5 m), fused to
-one point per 2 cm voxel with up to 6 sightings each. Those points seed the
-splat, and their sightings are what the depth loss supervises.
+recorded, LiDAR depth back-projected (confidence 2, 0.15–5 m). The video's
+offset from its poses is measured (depth edges against video edges) and
+applied. Fusion (`stray.VoxelFusion`), frame by frame, never holding the
+whole capture:
 
-**Video:** pycolmap: SIFT features on the GPU, matching, incremental mapping, then
-undistortion to pinhole images for the trainer.
+- one point per 2 cm voxel; **a point is seen at most once per image** (a
+  valid COLMAP track — the old fusion let several pixels of one frame fill
+  a voxel's slots: 18% of room3's sightings were such duplicates);
+- each point keeps up to 6 sightings (`--max-track`) **spread along the
+  walk**, not the first six frames to see it;
+- every frame keeps at least 300 of its own (`--min-frame-obs`), and a
+  frame whose LiDAR saw under 50 usable points is **left out and named**:
+  gsplat's depth loss averages over a frame's points, and an empty set is
+  NaN for the whole run. Frames at tracking jumps are left out and named too.
+
+`poses_report.json` and `depth_observations.json` give sightings per frame.
+
+**Video:** pycolmap: SIFT features on the GPU, matching, incremental mapping,
+then undistortion to pinhole images for the trainer.
 
 - `--matcher auto` is exhaustive up to 400 frames (a room) and sequential
   above. Exhaustive closes the loop of a 1 m circle that sequential can miss.
-- `--camera-model OPENCV` by default. iOS corrects most of the ultra-wide's
-  distortion in video, which leaves a mild residual that OPENCV models well.
-  Use `OPENCV_FISHEYE` only if frames look visibly fisheye.
-- Reports the registered share. **Below 70% means the capture went wrong.**
-  If COLMAP splits into several models, only the largest is used, and it says so.
+- `--camera-model OPENCV` by default; `OPENCV_FISHEYE` only if frames look
+  visibly fisheye.
+- Reports more than the registered share, which alone says little: mean
+  reprojection error, track length, observations per image, the calibrated
+  camera (parameters, field of view), the size of every model COLMAP split
+  the walk into, and **which stretches of frames did not register**.
+
+### check (preflight)
+
+`pipeline check` before training, into `work/preflight/`:
+
+- **Stray**: frame numbering gaps; depth and confidence beside every pose;
+  timestamps (monotonic, frame rate, hitches); depth map size against the
+  video's aspect; depth units (median depth must be an indoor distance in
+  millimetres); confidence and usable share; intrinsics (principal point,
+  fx/fy, field of view, per-frame spread); pose convention (proper
+  rotations; the LiDAR floor level under ARKit's +Y; the camera mostly
+  looking across the room, which also catches a frame turned 90° in a box
+  room where a wall passes for a floor); tracking jumps; yaw coverage and
+  pitch range; **depth against video** at the measured offset over the frame,
+  its centre and its corners — corners agreeing much worse than the centre
+  means lens distortion the pinhole model ignores.
+- **Video**: exposure jumps (auto-exposure), share of motion-blurred frames,
+  stabilisation (not readable from the file: a reminder), and once COLMAP
+  has run, its numbers above plus loop consistency (3D points seen both in
+  the first and the last tenth of the walk).
+- **Pictures**: `contact_sheet.jpg` (every Nth kept frame, with sharpness),
+  `trajectory.png` (the path from blue to red with a frustum every few
+  frames, over the LiDAR or COLMAP points), `depth_overlay.jpg` (depth over
+  video, depth edges in white), `observations.png` (depth sightings per frame).
+
+No number here is a pass/fail gate; the warnings say what to look at.
 
 ### train
 
 gsplat's reference trainer, MCMC strategy, because it takes a hard cap on the
 Gaussian count — the 8 GB VRAM budget and the download both need one — and
-leaves fewer floaters than the default densification.
+leaves fewer floaters than the default densification. Faint splats are kept:
+MCMC leaves most of them faint on purpose, and no opacity cut is applied.
 
 Every 8th frame is held out and the trainer reports **PSNR, SSIM and LPIPS on
-frames it never saw**: the honest quality number. World-space normalisation is
-off so the result stays in COLMAP's frame, where `align` can read gravity
-from the cameras. Output: `work/trained.ply`, never modified afterwards.
+frames it never saw** — but those sit between training frames, so the number
+mostly measures interpolation; `--displaced` experiments measure new
+viewpoints. World-space normalisation is off so the result stays in the
+capture's frame. Output: `work/trained.ply`, never modified afterwards, and
+the trainer's folder `work/train/` with its log in `work/logs/`.
 
-**Stray:** adds `--depth-loss`: the rendered depth is pulled toward the LiDAR
-depth at every sighting, which is what keeps a white wall a wall.
+Settings, validated: `--steps`, `--max-splats`, `--sh-degree`,
+`--holdout-every`, `--depth auto|on|off` and `--depth-lambda`,
+`--pose-opt auto|on|off`, `--pose-opt-lr`, `--pose-opt-reg`, `--antialiased`,
+`--data-factor`. `auto` turns depth supervision and pose refinement on for
+a Stray capture (LiDAR depth; ARKit poses good to a centimetre, not a pixel)
+and off for COLMAP's.
+
+**Pose refinement is kept**: the corrections the trainer learned are read
+from its checkpoint and written as `work/train/refined_poses.json` and a
+COLMAP model `work/train/sparse_refined/`, with how far the poses moved.
+`compare` renders training views from the refined poses. Alignment uses the
+original ARKit poses: the refinement is centimetres and degrees around them,
+in the same world frame, and gravity comes from ARKit, not from the cameras.
 
 ### align
 
-**Stray:** the scene is already in metres with Y along gravity, so up is
-taken as given and scale is fixed at 1; only the floor height, and with a
-scan the yaw and position, are found. The scan fit allows ±2% for the two
-ARKit sessions to disagree.
+**Stray:** the scene is in metres with Y along ARKit's gravity. **Gravity is
+kept**; the floor gives only its height — the lowest level layer of the
+LiDAR points under the cameras that covers at least 1 m² and 15% of the
+area under them, with the cameras standing 0.4–2.2 m above it. Candidates
+that fail are listed with the reason. The floor's own lean from ARKit's up
+is measured and reported (> 2° warns), never applied: the old plane fit
+could tilt the scene up to 35° to lie on a bed. With a scan, the fit is
+**rigid** (yaw and position only); `--scale-tolerance 0.01` allows a bounded
+refinement. A free-scale fit is run alongside as a probe, and if it fits
+much better at a scale over 3% away, the scan and the capture disagree on
+size and nothing is written.
 
 **Video:**
 
-1. **Up from the cameras.** People film upright, so the mean of the images'
-   up vectors is gravity. A plane fit alone cannot tell a floor from a wall
-   or ceiling in a frame with no fixed orientation.
-2. **Floor**: RANSAC for the dominant level plane below the cameras, moved to y = 0.
+1. **Up from the cameras.** People film without rolling the phone, so every
+   image's right vector is level: up is perpendicular to all of them.
+2. **Floor**: RANSAC planes within 10° of that up (not 35°), each checked
+   for area under the cameras and for the cameras standing above it; the
+   floor's normal refines up.
 3. **With a RoomPlan scan**: yaw, position and **metric scale** from fitting
-   the splat's wall points (the band between furniture and ceiling) onto the
-   scan's walls with every door and window cut out. Scale starts from ceiling
-   height ÷ scan wall height; a coarse search over yaw and scale, then ICP.
-   Cutting out the openings is what tells a rectangular room from itself
-   turned 180°. **Refuses to write a scene** if under 25% of wall points land
-   within 5 cm, or the median error exceeds 3 cm — a scan of the wrong room
-   fails here rather than producing a subtly wrong scene. Warns when a
-   symmetric room barely distinguishes its two orientations.
+   the splat's wall points onto the scan's walls with every door and window
+   cut out, from the best few coarse yaws and from shifted starts (a wall
+   hidden behind a wardrobe moves the splat's centre by half a room). The
+   scale bounds (0.85–1.15 around ceiling height ÷ scan wall height) hold
+   **through every ICP step and the result**: an unbounded ICP once turned a
+   0.98–1.02 search into 1.12.
 4. **Without a scan**: scale is guessed from a typical phone height (1.3 m),
    **labelled as an estimate, 10–20% uncertain**, and the room is outlined
    from the floor splats with no doors or windows.
 
-Rotations carry the spherical harmonics with them (view-dependent shading
-would otherwise point the wrong way), and positions, scales and orientations
-are transformed together. Writes `scene/scene.ply` and the manifest: rooms,
-walls, openings, waypoint and furniture boxes from the scan.
+With a scan, every fit reports inlier share, median, RMS and 90th-percentile
+error, the share of the plan's solid wall length the capture saw, and **per
+wall**: sightings, residuals, coverage, and how far it leans from vertical.
+Walls leaning in step mean the scene is not level: over 5° refuses, over
+1.5° warns. It **refuses to write a scene** under 25% inliers, over 3 cm
+median error, or under 20% of the wall length seen.
+
+Rotations carry the spherical harmonics with them; positions, scales and
+orientations are transformed together (checked against splat-transform by
+`verify`). Writes `work/aligned/scene.ply` and a draft manifest; nothing is
+published.
 
 ### export
 
-1. **Crop** to the rooms plus 0.75 m (`--crop-margin`), which drops the view
-   through windows and the floaters around it. `--no-crop` keeps everything.
+1. **Crop** to the rooms plus 0.75 m (`--crop-margin`); `--no-crop` keeps
+   everything.
 2. **Cap** the count (`--max-splats`).
-3. **Split the floor geometrically**: splats within 3.5 cm of y = 0 inside the
-   room outline. No segmentation model is needed for a scanned room. Records
-   each room's average floor colour.
-4. **SPZ v3**, written by our own encoder (`splat.py`, following Niantic's
-   MIT reference). Verified against Spark: a scene renders pixel-identical
-   from SPZ and PLY. About 10x smaller than PLY.
-5. Warns if the viewer's download exceeds 60 MB; `--sh-degree 2` or lower
-   shrinks it.
+3. **Privacy masks** from the editor are applied to the splats themselves,
+   before anything is written: `delete` drops every splat reaching into the
+   box (its centre within the box grown by its own 3σ, up to 15 cm); `blur`
+   averages colour over 8 cm cells and drops the view-dependent colour.
+   Every published file, the comparison original included, is cut from the
+   masked cloud.
+4. **Each room's floor on its own** (`floor-<room>.spz`): splats within
+   3.5 cm of y = 0 inside the room (grown 5 cm), and not standing upright —
+   a splat with a clear thin axis must have it within 35° of vertical, so
+   skirting boards and furniture legs stay. A layer 1–3 cm up over a quarter
+   of a room's floor is reported as a likely rug.
+5. **Floor shading maps** (`floor-shading-<room>.png`): how light fell on
+   each room's floor, from its splats' linear luminance, blurred 10 cm so the
+   old planks do not print through; a replacement floor is multiplied by it.
+6. **SPZ v3**, our encoder, **read back** and compared before publishing.
+7. Then the files move into `scene/`, the manifest is written, and files
+   nothing points at any more (an old single `floor.spz`, an unmasked
+   `scene.ply`) are deleted.
+
+In the viewer, replacing one room's floor takes only that room's floor
+splats away; the other rooms keep their captured floors. An older export's
+single floor file still works the old way (every room at once).
+
+### verify, compare, rerun (diagnostics)
+
+- **`verify`** checks our splat code against PlayCanvas's
+  [splat-transform](https://github.com/playcanvas/splat-transform) 3.10.3
+  (MIT, run with npx, pinned): every published SPZ decoded by it must match
+  our reader exactly; random degree-3 splats rotated about each axis by it
+  and by `SplatCloud.transformed` must agree (centres exactly, SH to 1e-7).
+  Its rotations are in PlayCanvas's frame, the PLY's turned 180° about Z, so
+  a turn about X or Y there is the opposite turn here.
+- **`compare`** renders the same held-out views from the trained splat, the
+  aligned one and the exported SPZ with gsplat (`pipeline/gsplat_tools/
+  render_eval.py`, in the trainer's venv), at the source resolution, and
+  scores each against the photo: `work/compare/<label>/grid.jpg` and
+  `report.json`. Where the score drops is where the defect starts.
+  **`compare-browser`** does the same for the last step: the viewer's own
+  canvas (`scripts/browser-compare.mjs`, dev server, Chrome with the GPU) at
+  upright cameras where the photos were taken, against gsplat's render of
+  the published SPZ from the same camera.
+- **`rerun`** saves a local [Rerun](https://rerun.io) recording
+  (`work/diagnostics/<id>.rrd`, `uv sync --extra diagnostics`, rerun-sdk
+  0.39.0): every few frames with its camera and image, the LiDAR or COLMAP
+  points, the trained splat's centres and the scan's walls where `align`
+  put them. Open with `rerun <file>`; nothing leaves the machine.
+- **SuperSplat** for looking at and cleaning a splat by hand: it runs in the
+  browser and reads files locally. To keep a private flat entirely offline,
+  run it from source — `git clone https://github.com/playcanvas/supersplat`,
+  `npm install`, `npm run develop`, open http://localhost:3000 and drop in
+  `work/aligned/scene.ply` or `scene/scene.spz`.
+
+Considered and not integrated: **Open3D** (the registration here is 2D wall
+points onto plan segments, where its 3D ICP adds nothing; the room path has
+no problem it was shown to solve), **Brush** (an independent trainer worth a
+benchmark, not run), **SAM 2** (no floor or object mask has yet failed by
+geometry), COLMAP's global mapper (the room captures register fully with the
+incremental one; standalone GLOMAP has moved into COLMAP).
 
 ### floor
 

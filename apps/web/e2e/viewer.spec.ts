@@ -158,6 +158,36 @@ test.describe('viewer', () => {
     for (const id of ids) await expect(changed(id)).toBeVisible();
   });
 
+  test("a floor laid in one room leaves the other rooms' captured floors", async ({ page }) => {
+    // Dev server only: the scene graph is read through window.__viewer.
+    await page.goto(`/p/${PROJECT}`);
+    const strip = page.getByTestId('room-strip');
+    await expect(strip).toBeVisible({ timeout: 45_000 });
+    await page.waitForFunction(() => {
+      const ctx = (window as unknown as { __viewer?: { ctx?: { floorSplats?: Map<string, unknown> } } })
+        .__viewer?.ctx;
+      return (ctx?.floorSplats?.size ?? 0) > 1;
+    });
+    const drawn = () =>
+      page.evaluate(() => {
+        const ctx = (window as unknown as {
+          __viewer: { ctx: { scene: unknown; floorSplats: Map<string, { parent: unknown }> } };
+        }).__viewer.ctx;
+        return [...ctx.floorSplats].filter(([, m]) => m.parent === ctx.scene).map(([id]) => id).sort();
+      });
+    const all = await drawn();
+    const last = all[all.length - 1];
+
+    await page.getByTestId('design-menu-toggle').click();
+    await page.getByTestId('design-tab-floor').click();
+    await page.locator(`[data-scope="${last}"]`).click();
+    await page.locator('[data-floor-id]').first().click();
+    await expect.poll(drawn).toEqual(all.filter((id) => id !== last));
+
+    await page.getByTestId('reset-all').click();
+    await expect.poll(drawn).toEqual(all);
+  });
+
   /**
    * Stub the clipboard rather than granting permissions: WebKit does not
    * support the clipboard-read permission in Playwright, and this records

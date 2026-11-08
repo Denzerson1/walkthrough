@@ -30,6 +30,11 @@ pipeline = [
     "pycolmap-cuda12==4.2.1; sys_platform == 'linux'",
     "usd-core>=25.5",
 ]
+# `pipeline rerun`: a local Rerun recording of a capture (images, poses,
+# LiDAR, the aligned splat and the plan) for inspection. Optional.
+diagnostics = [
+    "rerun-sdk==0.39.0",
+]
 
 [project.scripts]
 pipeline = "walkthrough_pipeline.cli:main"
