@@ -13,8 +13,8 @@
   ],
   "description": "Smooth polished concrete, lightly mottled.",
   "tileSizeM": [
-    1.0,
-    1.0
+    1.1,
+    0.55
   ],
   "glossy": true,
   "license": "CC0-1.0",

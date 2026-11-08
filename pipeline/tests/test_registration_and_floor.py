@@ -247,3 +247,38 @@ def test_walls_lean_in_step_when_the_scene_is_not_level():
     leans = [w["lean_deg"] for w in wall_lean(tilted, (a, b), walls, tsp.H)]
     assert max(abs(v) for v in leans) == pytest.approx(4.0, abs=0.6)
     assert min(leans) < -3 and max(leans) > 3  # opposite walls lean opposite ways
+
+
+def test_the_published_scene_keeps_the_real_floor(tmp_path):
+    """
+    End to end, align then export: what the old room3 export got wrong. Its
+    floor fit lay on a sloped surface, tilted the scene 7° and put the floor
+    0.7 m too high, and export's crop (from 0.5 m under the floor) cut the
+    real floor away. The published scene must hold the floor, level, under
+    the whole room.
+    """
+    from walkthrough_pipeline.scene import export_scene
+    from walkthrough_pipeline.splat import read_spz
+
+    rng = np.random.default_rng(13)
+    xz = rng.uniform([1.0, 0.5], [3.4, 2.4], (80_000, 2))
+    slope = np.column_stack([xz[:, 0], 0.5 + 0.12 * (xz[:, 0] - 1.0), xz[:, 1]])
+    paths = _metric_project(tmp_path, extra=slope)
+    align_scene(paths, "p", metric=True)
+    export_scene(paths)
+    manifest = Manifest.load(paths.manifest)
+    floor = read_spz(paths.scene / manifest.assets.floors["room"])
+    scene = read_spz(paths.scene / "scene.spz")
+    assert np.abs(floor.positions[:, 1]).max() < 0.04
+    poly = np.array(manifest.rooms[0].floorPolygon)
+    cells = {tuple(c) for c in np.floor(floor.positions[:, [0, 2]] / 0.25).astype(int)}
+    lo, hi = poly.min(axis=0), poly.max(axis=0)
+    grid = np.stack(np.meshgrid(np.arange(lo[0] + 0.125, hi[0], 0.25),
+                                np.arange(lo[1] + 0.125, hi[1], 0.25)), -1).reshape(-1, 2)
+    from walkthrough_pipeline.scene import points_in_polygon
+
+    inside = grid[points_in_polygon(grid, poly)]
+    covered = np.mean([tuple(c) in cells for c in np.floor(inside / 0.25).astype(int)])
+    assert covered > 0.9
+    # Nothing of the room hangs below the floor it stands on.
+    assert np.percentile(scene.positions[:, 1], 0.5) > -0.05

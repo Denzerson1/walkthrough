@@ -209,8 +209,11 @@ then undistortion to pinhole images for the trainer.
   looking across the room, which also catches a frame turned 90° in a box
   room where a wall passes for a floor); tracking jumps; yaw coverage and
   pitch range; **depth against video** at the measured offset over the frame,
-  its centre and its corners — corners agreeing much worse than the centre
-  means lens distortion the pinhole model ignores.
+  its centre and its corners. Corners agreeing much worse than the centre
+  hint at lens distortion the pinhole model ignores (Stray records no
+  distortion model) — or at LiDAR thinner at the frame's edges: ARKit
+  registers depth to the image, so this cannot tell the two apart, and the
+  overlay is there to look at.
 - **Video**: exposure jumps (auto-exposure), share of motion-blurred frames,
   stabilisation (not readable from the file: a reminder), and once COLMAP
   has run, its numbers above plus loop consistency (3D points seen both in

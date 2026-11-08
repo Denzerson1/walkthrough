@@ -12,8 +12,8 @@
   ],
   "description": "Black and buff geometric pattern in the Victorian manner.",
   "tileSizeM": [
-    0.4,
-    0.4
+    1.0,
+    1.0
   ],
   "glossy": false,
   "license": "CC0-1.0",

@@ -12,8 +12,8 @@
   ],
   "description": "Blue and white stencilled tile pattern.",
   "tileSizeM": [
-    0.3,
-    0.3
+    1.0,
+    1.0
   ],
   "glossy": false,
   "license": "CC0-1.0",

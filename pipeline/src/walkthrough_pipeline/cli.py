@@ -562,6 +562,8 @@ def train(
     pose_opt_lr: float = typer.Option(1e-5, min=0.0, max=1e-2),
     pose_opt_reg: float = typer.Option(1e-6, min=0.0, max=1e-2),
     antialiased: bool = typer.Option(False),
+    app_opt: bool = typer.Option(False, help="Per-frame appearance (exposure) embeddings; the "
+                                 "exported splat loses view-dependent colour"),
     data_factor: int = typer.Option(1, min=1, max=8, help="Train on frames shrunk this much"),
     experiment: str | None = typer.Option(
         None, help="Train into work/experiments/<name> and leave work/train and trained.ply "
@@ -605,6 +607,7 @@ def train(
         pose_opt_lr=pose_opt_lr,
         pose_opt_reg=pose_opt_reg,
         antialiased=antialiased,
+        app_opt=app_opt,
         data_factor=data_factor,
     )
     target = paths.work / ("train" if experiment is None else f"experiments/{experiment}")
@@ -1072,7 +1075,7 @@ def run_all(
           max_track=stray_mod.MAX_TRACK, min_frame_obs=stray_mod.MIN_FRAME_OBS)
     train(project=project, max_splats=max_splats, steps=steps, holdout_every=8,
           sh_degree=sh_degree, depth="auto", depth_lambda=1e-2, pose_opt="auto",
-          pose_opt_lr=1e-5, pose_opt_reg=1e-6, antialiased=False, data_factor=1,
+          pose_opt_lr=1e-5, pose_opt_reg=1e-6, antialiased=False, app_opt=False, data_factor=1,
           experiment=None, displaced=None)
     align(project=project, scale_tolerance=0.0)
     export(project=project, max_splats=max_splats, crop=True, crop_margin=crop_margin,

@@ -41,6 +41,10 @@ class TrainSettings:
     pose_opt_lr: float = 1e-5  # gsplat's defaults
     pose_opt_reg: float = 1e-6
     antialiased: bool = False
+    #: Per-image appearance embeddings (absorb exposure and white-balance
+    #: changes between frames). gsplat bakes them into plain colours on
+    #: export, so the PLY loses all view-dependent shading (SH degree 0).
+    app_opt: bool = False
     #: Image downscale factor the trainer applies (1 = frames as extracted).
     data_factor: int = 1
 
@@ -101,6 +105,7 @@ def command(data_dir: Path, result_dir: Path, settings: TrainSettings) -> list[s
         *(["--pose-opt", "--pose-opt-lr", str(settings.pose_opt_lr),
             "--pose-opt-reg", str(settings.pose_opt_reg)] if settings.refine_poses else []),
         *(["--antialiased"] if settings.antialiased else []),
+        *(["--app-opt"] if settings.app_opt else []),
     ]
 
 

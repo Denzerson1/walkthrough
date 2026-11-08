@@ -12,8 +12,8 @@
   ],
   "description": "Plain white square tile with a fine grout line.",
   "tileSizeM": [
-    0.2,
-    0.2
+    1.0,
+    1.0
   ],
   "glossy": true,
   "license": "CC0-1.0",

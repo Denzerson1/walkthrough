@@ -6,9 +6,10 @@ A Stray capture is checked against its own format: frame numbering and
 timestamps, depth beside every pose, depth units and confidence, the
 intrinsics, the pose convention (ARKit Y up: the LiDAR floor must lie
 level), how well the video's edges line up with the depth's, and whether
-they line up as well at the corners as in the middle (lens distortion the
-pinhole model ignores). A video is checked for sharpness and exposure
-along the walk and, once COLMAP has run, for what its poses are worth.
+they line up as well at the corners as in the middle (a hint of lens
+distortion the pinhole model ignores, or of thin LiDAR at the edges). A
+video is checked for sharpness and exposure along the walk and, once COLMAP
+has run, for what its poses are worth.
 Both get pictures a person can judge at a glance: a contact sheet, the
 camera path with its frustums over the room, depth over the video, and
 the depth sightings per frame.
@@ -34,8 +35,9 @@ from .paths import ProjectPaths
 
 #: ARKit's video runs at 60 fps; a gap over this many frame times is a hitch.
 TIMESTAMP_GAP = 2.5
-#: Edge agreement in the corners under this share of the centre's suggests
-#: lens distortion the PINHOLE model leaves in.
+#: Edge agreement in the corners under this share of the centre's is worth a
+#: look: lens distortion the PINHOLE model leaves in, or thin LiDAR at the
+#: edges (ARKit registers depth to the image, so both share any distortion).
 CORNER_AGREEMENT_RATIO = 0.6
 
 
@@ -236,8 +238,9 @@ def check_stray(capture: stray_mod.StrayCapture, out: Path, paths: ProjectPaths)
     ratio = result["rgb_depth"].get("corner_to_centre")
     if ratio is not None and ratio < CORNER_AGREEMENT_RATIO:
         warnings.append(f"Depth and video edges agree {ratio:.0%} as well in the corners as in "
-                        "the centre: lens distortion the pinhole model ignores, so edges blur "
-                        "toward the frame's sides.")
+                        "the centre. Either lens distortion (Stray records none, so the "
+                        "pinhole model is assumed and the frame's edges train less sharply) or "
+                        "LiDAR thinner at the edges; the depth overlay shows which.")
 
     points = paths.work / "undistorted" / "sparse" / "points3D.bin"
     background = read_points3d_bin(points) if points.is_file() else lidar
