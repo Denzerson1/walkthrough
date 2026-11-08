@@ -1306,7 +1306,10 @@ def finish_parts(finish: str, w: float, h: float, d: float, opts: dict) -> list[
     carcass = ("white", (x0, x1, y0 + FRONT_T, y1, 0.1, h - 0.04))
     top_grip = ("alu", (x0, x1, y0 + 0.004, y0 + FRONT_T + 0.01,
                         h - 0.04 - GRIP + 0.001, h - 0.041))
-    worktop = ("stone", (x0, x1, y0 - 0.02, y1, h - 0.04, h))
+    # `worktopTrim`: the worktop cut back at its ends (x0, x1) where a corner
+    # unit's front overhang lies on it: two tops in one plane flickered.
+    trim0, trim1 = opts.get("worktopTrim", (0.0, 0.0))
+    worktop = ("stone", (x0 + trim0, x1 - trim1, y0 - 0.02, y1, h - 0.04, h))
     xi0, xi1 = x0 + 0.018, x1 - 0.018  # inside a carcass's sides
 
     if finish == "kitchen-base":
@@ -1379,14 +1382,28 @@ def finish_parts(finish: str, w: float, h: float, d: float, opts: dict) -> list[
     if finish == "panel":
         return [(opts.get("surface", "oak-warm"), (x0, x1, y0, y1, 0, h))]
     if finish == "desk":
-        # A plain desk (0056): a white top on four slim legs, nothing under it.
+        # A plain desk (0056): a white top on slim legs, nothing under it;
+        # `panel`: its right end (+x) closed by a side panel to the floor.
         top, leg, legs = 0.025, 0.04, opts.get("legs", "white-matt")
+        panel = opts.get("panel", False)
         parts = [(opts.get("top", "white-matt"), (x0, x1, y0, y1, h - top, h)),
                  (legs, (x0 + 0.03, x1 - 0.03, y1 - 0.05, y1 - 0.03, h - top - 0.08, h - top))]
-        for xa in (x0 + 0.03, x1 - 0.03 - leg):
+        if panel:
+            parts.append((legs, (x1 - 0.025, x1, y0, y1, 0, h - top)))
+        for xa in (x0 + 0.03,) if panel else (x0 + 0.03, x1 - 0.03 - leg):
             for ya in (y0 + 0.03, y1 - 0.03 - leg):
                 parts.append((legs, (xa, xa + leg, ya, ya + leg, 0, h - top)))
         return parts
+    if finish == "side-table":
+        # The small bedroom's bedside table (0054): black steel legs, a dark
+        # top and a shelf under it, a white lamp base standing on it.
+        leg, top = 0.02, 0.02
+        parts = [("walnut", (x0, x1, y0, y1, h - top, h)),
+                 ("walnut", (x0 + leg, x1 - leg, y0 + leg, y1 - leg, 0.16, 0.16 + top))]
+        for xa in (x0, x1 - leg):
+            for ya in (y0, y1 - leg):
+                parts.append(("black-metal", (xa, xa + leg, ya, ya + leg, 0, h - top)))
+        return parts + [("box-white", (-0.05, 0.05, -0.05, 0.05, h, h + 0.08))]
     if finish == "air-con":
         # A split unit as photographed: flat front and top, the front
         # curving round into the underside, and the outlet underneath
@@ -1649,7 +1666,7 @@ def bath_vanity(w: float, h: float, d: float, opts: dict) -> list[Part]:
     basin (vanity_basin) and a frameless mirror over it to the right. All of
     it flush in front, as photographed (0134, 0136): set back, the basin's
     top stood out in front of the shelves. The shelves stop a hand over the
-    tiles and are open at the side to the basin, as well as in front.
+    tiles, an oak side between them and the basin (the owner).
     """
     x0, x1, y0, y1 = -w / 2, w / 2, -d / 2, d / 2
     low, top = 0.14, 0.86
@@ -1673,7 +1690,7 @@ def bath_vanity(w: float, h: float, d: float, opts: dict) -> list[Part]:
         ("oak-warm", (b, c, yu, y1, roof, roof + t)),
         ("white", (b, c, yu + FRONT_T, y1, roof + t, crown)),
         *fronts(b, c, roof + t + GAP, crown - GAP, yu, [[0, 1]], grips=False),
-        ("oak-warm", (c, c + t, yu, y1, roof, h)),
+        ("oak-warm", (c, c + t, yu, y1, top, h)),
         ("oak-warm", (x0, a, yu - 0.01, y1, crown, h)),
         ("oak-warm", (b, c, yu - 0.01, y1, crown, h))]
     mx = (c + t + x1) / 2
@@ -1714,15 +1731,16 @@ def washer_column(w: float, h: float, d: float, opts: dict) -> list[Part]:
 
 
 def roll_shelf(w: float, h: float, d: float, opts: dict) -> list[Part]:
-    """The narrow open oak tower beside the washer column (0126, 0137), rolls on its shelves."""
+    """
+    The narrow open oak shelf beside the washer column (0126, 0137), rolls on
+    its shelves: open at the sides (the owner), the shelves on an oak back.
+    """
     x0, x1, y0, y1 = -w / 2, w / 2, -d / 2, d / 2
     t = 0.018
-    parts: list[Part] = [("oak-warm", (x0, x0 + t, y0, y1, 0, h)),
-                         ("oak-warm", (x1 - t, x1, y0, y1, 0, h)),
-                         ("oak-warm", (x0 + t, x1 - t, y1 - 0.008, y1, 0, h))]
+    parts: list[Part] = [("oak-warm", (x0, x1, y1 - t, y1, 0, h))]
     levels = [0.0, 0.25, 0.5, 0.75, h - t]
     for z in levels:
-        parts.append(("oak-warm", (x0 + t, x1 - t, y0, y1 - 0.008, z, z + t)))
+        parts.append(("oak-warm", (x0, x1, y0, y1 - t, z, z + t)))
     for z in levels[:-1]:  # a roll on each shelf
         parts.append(("paper", (-0.055, 0.055, -0.055, 0.055, z + t, z + t + 0.1)))
     parts.append(("box-white", (x0 - 0.01, x1 + 0.01, y0 + 0.01, y1 - 0.01, h, h + 0.1)))
@@ -2902,17 +2920,19 @@ def finished(item: dict, surfaces: dict) -> bpy.types.Object:
         # A drum shade on a cable from the ceiling. Its light is baked per
         # vertex through the fabric (vertex_light), so its side is cut into
         # rings for the light to vary down it.
-        radius, shade = min(w, d) / 2, 0.28
+        # A table lamp's shade is the same drum, as tall as its box, no cable.
+        radius, shade = min(w, d) / 2, min(0.28, h)
         cone = bmesh.ops.create_cone(bm, cap_ends=True, segments=48, radius1=radius,
                                      radius2=radius, depth=shade)
         bmesh.ops.translate(bm, verts=cone["verts"], vec=(0, 0, shade / 2))
         sides = [e for e in bm.edges if abs(e.verts[0].co.z - e.verts[1].co.z) > shade / 2]
         bmesh.ops.subdivide_edges(bm, edges=sides, cuts=6, use_grid_fill=True)
-        cable = bmesh.ops.create_cube(bm, size=1.0)
-        bmesh.ops.scale(bm, verts=cable["verts"], vec=(0.008, 0.008, h - shade))
-        bmesh.ops.translate(bm, verts=cable["verts"], vec=(0, 0, shade + (h - shade) / 2))
+        if h - shade > 0.005:
+            cable = bmesh.ops.create_cube(bm, size=1.0)
+            bmesh.ops.scale(bm, verts=cable["verts"], vec=(0.008, 0.008, h - shade))
+            bmesh.ops.translate(bm, verts=cable["verts"], vec=(0, 0, shade + (h - shade) / 2))
         for face in bm.faces:
-            face.material_index = slot("shade")
+            face.material_index = slot(opts.get("surface", "shade"))
     else:
         # A piece in other colours than the finish's own: `surfaces` names
         # the dressing's palette entry each of its surfaces is drawn in.
@@ -2958,6 +2978,8 @@ def finished(item: dict, surfaces: dict) -> bpy.types.Object:
         mesh.set_sharp_from_angle(angle=math.radians(40))
         VERTEX_LIT.add(obj.name)
         TRANSLUCENT.add(obj.name)
+        # `bulb`: a bulb (a `lights` entry) inside it, whose light it lets out.
+        obj.visible_shadow = not opts.get("bulb")
     if item["finish"] in ("yucca", "backdrop"):
         # Leaves too thin for the light map; house fronts too big for it.
         VERTEX_LIT.add(obj.name)
@@ -3524,7 +3546,7 @@ def drop_darker(obj: bpy.types.Object, below: float) -> None:
 
 
 def lighten(obj: bpy.types.Object, model: str, size: float, scratch: Path,
-            colour: str | None = None, darker: float | None = None) -> None:
+            colour: str | None = None, darker: float | None = None, flat: bool = False) -> None:
     """
     An imported model made light enough for a phone: decimated, unwrapped
     afresh and its colour baked onto that from the original, smooth shaded,
@@ -3539,7 +3561,8 @@ def lighten(obj: bpy.types.Object, model: str, size: float, scratch: Path,
     is what its fabric is brought to (match_colour): a generated sofa came
     grey where the real one is cream, the stools a pale grey where theirs is
     a mid grey. `darker`: faces darker than this are dropped first
-    (drop_darker), so the triangles go to what is kept.
+    (drop_darker), so the triangles go to what is kept. `flat`: all of it
+    brought to `colour`, not only its fabric (match_colour).
     """
     if model in LIGHTENED:
         imported = obj.data
@@ -3609,7 +3632,7 @@ def lighten(obj: bpy.types.Object, model: str, size: float, scratch: Path,
     bpy.data.meshes.remove(original_mesh)
     fill_unbaked(colour_map)
     if colour:
-        match_colour(colour_map, colour)
+        match_colour(colour_map, colour, flat)
     # Saved as a JPEG and loaded back, so the exporter writes the file as is.
     path = scratch / f"{Path(model).stem}-colour.jpg"
     colour_map.file_format = "JPEG"
@@ -3653,11 +3676,13 @@ def fill_unbaked(image: bpy.types.Image) -> None:
     image.pixels.foreach_set(pixels)
 
 
-def match_colour(image: bpy.types.Image, colour: str) -> None:
+def match_colour(image: bpy.types.Image, colour: str, flat: bool = False) -> None:
     """
     Bring a colour map's fabric to `colour`: scaled per channel, in linear
     light, so its near-grey texels' median matches. Coloured ones (a
     stool's beech legs) are left as they are, fading between the two.
+    `flat`: every texel brought near `colour`, its own lightness kept only
+    as a hint. Scaled, a black office chair's grey plastic went white.
     """
     import numpy as np
 
@@ -3668,6 +3693,13 @@ def match_colour(image: bpy.types.Image, colour: str) -> None:
     saturation = (rgb.max(axis=1) - rgb.min(axis=1)) / np.maximum(rgb.max(axis=1), 1e-4)
     fabric = np.clip((0.25 - saturation) / 0.1, 0.0, 1.0)
     target = np.array(hex_rgba(colour)[:3])
+    if flat:
+        lum = linear @ np.array([0.2126, 0.7152, 0.0722])
+        shade = np.clip((lum / max(float(np.median(lum)), 1e-4)) ** 0.3, 0.75, 1.3)
+        linear = np.clip(target[None, :] * shade[:, None], 0.0, 1.0)
+        rgb[:] = np.where(linear <= 0.0031308, linear * 12.92, 1.055 * linear ** (1 / 2.4) - 0.055)
+        image.pixels.foreach_set(pixels)
+        return
     gain = target / np.maximum(np.median(linear[fabric > 0.99], axis=0), 1e-4)
     linear = np.clip(linear * (1 + fabric[:, None] * (gain - 1)), 0.0, 1.0)
     rgb[:] = np.where(linear <= 0.0031308, linear * 12.92, 1.055 * linear ** (1 / 2.4) - 0.055)
@@ -3709,7 +3741,7 @@ def furniture(item: dict, surfaces: dict, scratch: Path) -> bpy.types.Object:
         bounds = co.reshape(-1, 3).min(axis=0), co.reshape(-1, 3).max(axis=0)
         opts = item.get("options") or {}
         lighten(obj, item["model"], max(w, h, d), scratch, opts.get("colour"),
-                opts.get("dropDarker"))
+                opts.get("dropDarker"), opts.get("flat", False))
         VERTEX_LIT.add(item["id"])
     else:
         mesh = bpy.data.meshes.new(item["id"])
@@ -3779,6 +3811,16 @@ def ceiling_lights(spec: dict) -> list[bpy.types.Object]:
     for i, lamp in enumerate(spec.get("lights") or []):
         x, y, z = lamp["at"]
         size = lamp.get("size", 0.25)
+        if lamp.get("shape") == "bulb":
+            # A table lamp's bulb inside its shade (a pendant piece), which
+            # it lights through: a point, no panel of its own.
+            bulb = bpy.data.lights.new(f"lamp-light-{i}", "POINT")
+            bulb.energy, bulb.shadow_soft_size = lamp.get("power", 5.0), size
+            bulb.color = lamp.get("colour", (1.0, 0.86, 0.72))
+            obj = bpy.data.objects.new(bulb.name, bulb)
+            bpy.context.collection.objects.link(obj)
+            obj.location = P(x, y, z)
+            continue
         # Round or square, as each room's lamp is photographed (flat-02: round
         # flush lamps in the living room and bedrooms, square panels in the hall).
         round_ = lamp.get("shape") == "round"

@@ -12,7 +12,6 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
-import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
 import {
   DEFAULT_FOV,
   type Glide,
@@ -55,6 +54,7 @@ import {
   walkableWith,
 } from '../lib/doors';
 import { AutoExposure } from '../lib/exposure';
+import { createMirror, mirrorTarget } from '../lib/mirror';
 import { type Finish, surfaceFinish } from '../lib/finishes';
 import { splitFloors } from '../lib/floorSplit';
 import { fetchGlb } from '../lib/glb';
@@ -1789,35 +1789,8 @@ const REFLECTIVITY: Record<string, number> = {
 
 /** A mirror reflects the room as seen from the viewer's eye, mirrored in its plane (addMirrors). */
 const MIRROR = 'surface-mirror';
-/** Silvered glass: a little light lost, a faint green from the glass. */
 /** A mirror's silvering: a touch darker than what it shows, and no colour of its own. */
-const MIRROR_TINT = new THREE.Color(0.9, 0.9, 0.9);
-/** three's ReflectorShader, the reflection tinted instead of overlay-blended. */
-const MIRROR_SHADER = {
-  name: 'MirrorShader',
-  uniforms: { color: { value: null }, tDiffuse: { value: null }, textureMatrix: { value: null } },
-  vertexShader: /* glsl */ `
-    uniform mat4 textureMatrix;
-    varying vec4 vUv;
-    #include <common>
-    #include <logdepthbuf_pars_vertex>
-    void main() {
-      vUv = textureMatrix * vec4( position, 1.0 );
-      gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
-      #include <logdepthbuf_vertex>
-    }`,
-  fragmentShader: /* glsl */ `
-    uniform vec3 color;
-    uniform sampler2D tDiffuse;
-    varying vec4 vUv;
-    #include <logdepthbuf_pars_fragment>
-    void main() {
-      #include <logdepthbuf_fragment>
-      gl_FragColor = vec4( texture2DProj( tDiffuse, vUv ).rgb * color, 1.0 );
-      #include <tonemapping_fragment>
-      #include <colorspace_fragment>
-    }`,
-};
+const MIRROR_TINT = new THREE.Color(0.94, 0.94, 0.94);
 
 /**
  * Each mirror as a planar reflector: the room drawn again from the viewer's
@@ -1825,7 +1798,7 @@ const MIRROR_SHADER = {
  * taken once from in front of it showed the room from the wrong place: it
  * did not move as one walked past, so it read as a picture, not a mirror.
  */
-function addMirrors(model: THREE.Object3D, renderer: THREE.WebGLRenderer): void {
+function addMirrors(model: THREE.Object3D): void {
   model.updateMatrixWorld(true);
   const found: THREE.Mesh[] = [];
   model.traverse((node) => {
@@ -1833,14 +1806,12 @@ function addMirrors(model: THREE.Object3D, renderer: THREE.WebGLRenderer): void 
       found.push(node);
     }
   });
-  const size = renderer.getDrawingBufferSize(new THREE.Vector2());
-  // Each mirror draws the room into a buffer of its own. At the screen's
-  // size, half-float and 4x multisampled, that is ~100 MB a mirror on a
-  // phone: the first two got theirs and the bathroom's and the study's came
-  // out black. A phone's are a quarter of that, without multisampling.
+  // One buffer for every mirror (lib/mirror), at the screen's full size:
+  // a buffer each, five of them, ran the GPU out of memory (black mirrors),
+  // and capped smaller they were pixelated. A phone's not multisampled.
   const phone = navigator.maxTouchPoints > 0 && Math.min(window.innerWidth, window.innerHeight) < 600;
-  const cap = phone ? 1024 : 2048;
-  const scale = Math.min(1, cap / Math.max(size.x, size.y));
+  const target = mirrorTarget(1, 1, phone ? 0 : 4);
+  const maxSide = phone ? 2048 : 3072;
   const toModel = model.matrixWorld.clone().invert();
   for (const node of found) {
     const geometry = node.geometry.clone().applyMatrix4(node.matrixWorld);
@@ -1861,16 +1832,9 @@ function addMirrors(model: THREE.Object3D, renderer: THREE.WebGLRenderer): void 
     frame.lookAt(centre.clone().add(facing.normalize()));
     frame.updateMatrixWorld(true);
     geometry.applyMatrix4(frame.matrixWorld.clone().invert());
-    const mirror = new Reflector(geometry, {
-      textureWidth: Math.round(size.x * scale),
-      textureHeight: Math.round(size.y * scale),
-      multisample: phone ? 0 : 4,
-      // Only a hair: at 3 mm the wall a few millimetres behind the glass
-      // was drawn into the reflection, seen at the mirror's edges.
-      clipBias: 0.0004,
-      color: MIRROR_TINT,
-      shader: MIRROR_SHADER,
-    });
+    // clipBias only a hair: at 3 mm the wall a few millimetres behind the
+    // glass was drawn into the reflection, seen at the mirror's edges.
+    const mirror = createMirror(geometry, target, MIRROR_TINT, 0.0004, maxSide);
     mirror.name = node.name;
     mirror.applyMatrix4(toModel.clone().multiply(frame.matrixWorld));
     mirror.userData.mirror = true;
@@ -1905,7 +1869,7 @@ function addReflections(
     'textureCube( envMap, envMapRotation * reflectVec )',
     'textureCube( envMap, envMapRotation * reflectVec, 1.0 )',
   );
-  addMirrors(model, renderer);
+  addMirrors(model);
   model.traverse((node) => {
     if (!(node instanceof THREE.Mesh) || node.userData.mirror) return;
     const material = node.material as THREE.MeshBasicMaterial;

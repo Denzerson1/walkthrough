@@ -183,3 +183,22 @@ Every room screenshotted against the photos; what was not clean:
 - [x] 108. The study's guest duvet a dark green floral print, yellow, pink and cream flowers
   (0139); it was white with dark leaves.
 - [x] 109. The striped duvet's print tiles without a seam.
+
+## The owner's review of the live flat (2026-11-08)
+- [x] 110. One light, not five: a quarter to seven in the evening, the lamps on and the sky still
+  lit (at half past eight the windows were black); one bake, no time slider.
+- [x] 111. Mirrors drawn into one buffer at the screen's full size: a buffer each ran the GPU out
+  of memory (black) and capped smaller they were pixelated.
+- [x] 112. The hall's pebble mirrors with wider brass rims standing off the wall: seen along the
+  wall, one read as a see-through door by the bathroom's.
+- [x] 113. The kitchen's worktops no longer flicker: two ran under a corner unit's front edge,
+  two tops in one plane; cut back to it.
+- [x] 114. Study: the guest bed along the window wall to the west wall, under the poster, a step
+  clear of the wardrobe (0067, 0068, 0139).
+- [x] 115. Bathroom: the open shelves narrower (22 cm), an oak side to the basin; the towels
+  beside the shower towards the shaft, the shower's glass shut by default (half open, it stood
+  in front of them); the roll shelf open at its sides.
+- [x] 116. Small bedroom: a plain bed clear of the wardrobe, white pillows (no blue cushions);
+  the black bedside table by its head with a lamp that is on (0054); the desk closed at its
+  right end (0056); MARKUS black all over (scaled, its grey plastic went white), as is the
+  study's JARVFJALLET: a black that still shows their form.

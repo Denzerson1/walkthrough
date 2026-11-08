@@ -7,6 +7,33 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-11-08 — flat-02, the owner's review of the live flat
+
+Items 110–116 of `docs/flat-02-punchlist.md`.
+
+- **Light:** one bake, a quarter to seven in the evening, lamps on and the
+  sky still lit; no time slider (it shows only with more than one bake).
+- **Mirrors (viewer):** every mirror draws into one half-float buffer at the
+  screen's size (`lib/mirror.ts`, three's Reflector maths): a buffer each,
+  five of them at up to 2048 px and 4x multisampled, ran out of GPU memory
+  (black mirrors), and capped smaller they were pixelated. The hall's pebble
+  mirrors have wider rims standing off the wall.
+- **Kitchen:** two worktops lay in one plane with a corner unit's front
+  overhang (the flicker): cut back to it (`worktopTrim`).
+- **Pieces:** the study's guest bed towards the west wall; the bathroom's open
+  shelves narrower with an oak side, the towels clear of the shower glass, the
+  roll shelf open; the small bedroom's bed plain and clear of the wardrobe,
+  a bedside table with a lit lamp (`side-table`, a `pendant` shade over a
+  `bulb`), the desk closed at its right end, both office chairs a black
+  that shows their form (`match_colour(flat=True)`); the shower's glass
+  shut by default, so the towels hang clear of it.
+- **Verified:** one bake at 320 samples, 4096 px (25.8 min, the owner
+  wanted it quick), manifest with the one lighting entry; every item
+  screenshotted in the dev viewer from where the owner looks (the hall
+  mirror at their screenshot's angle) before deploying; `pnpm test`
+  (162 web, 367 py) and `pnpm lint` green. Not verified: a phone's GPU
+  (the shared mirror buffer is sized for it, but no phone was tried).
+
 ## 2026-11-07 — flat-02, every detail against the photos; the time of day
 
 The owner went through the live flat and listed what was still wrong (items
