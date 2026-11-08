@@ -311,8 +311,9 @@ published.
 4. **Each room's floor on its own** (`floor-<room>.spz`): splats within
    3.5 cm of y = 0 inside the room (grown 5 cm), and not standing upright —
    a splat with a clear thin axis must have it within 35° of vertical, so
-   skirting boards and furniture legs stay. A layer 1–3 cm up over a quarter
-   of a room's floor is reported as a likely rug.
+   skirting boards and furniture legs stay. A floor layer lopsided upward
+   (15 points more of its splats 1–3 cm above its level than below) is
+   reported as a likely rug.
 5. **Floor shading maps** (`floor-shading-<room>.png`): how light fell on
    each room's floor, from its splats' linear luminance, blurred 10 cm so the
    old planks do not print through; a replacement floor is multiplied by it.
@@ -348,11 +349,15 @@ single floor file still works the old way (every room at once).
   0.39.0): every few frames with its camera and image, the LiDAR or COLMAP
   points, the trained splat's centres and the scan's walls where `align`
   put them. Open with `rerun <file>`; nothing leaves the machine.
-- **SuperSplat** for looking at and cleaning a splat by hand: it runs in the
-  browser and reads files locally. To keep a private flat entirely offline,
-  run it from source — `git clone https://github.com/playcanvas/supersplat`,
-  `npm install`, `npm run develop`, open http://localhost:3000 and drop in
-  `work/aligned/scene.ply` or `scene/scene.spz`.
+- **SuperSplat** (PlayCanvas, MIT) for looking at and cleaning a splat by
+  hand. To keep a private flat entirely on this machine, build it from
+  source and serve it on localhost only:
+  `git clone https://github.com/playcanvas/supersplat`, `npm ci`,
+  `npm run build`, `npx serve dist -l tcp://127.0.0.1:3000`, then open
+  `http://127.0.0.1:3000` in desktop Chrome or Edge and drop in
+  `work/aligned/scene.ply` or `scene/scene.spz`. Built here from master
+  (3.7.0, 2026-11-08); it now **requires WebGPU**, which headless Chrome on
+  this PC lacks, so loading our file in it was not verified automatically.
 
 Considered and not integrated: **Open3D** (the registration here is 2D wall
 points onto plan segments, where its 3D ICP adds nothing; the room path has

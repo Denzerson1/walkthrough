@@ -171,7 +171,15 @@ def align_scene(
                                              clearance_range=(0.4, 2.2))
                     gap = splat_floor.height - floor.height
                     floor_report["splat_minus_lidar_m"] = round(gap, 4)
-                    if abs(gap) > 0.03:
+                    if abs(gap) <= 0.03:
+                        # The viewer shows the splats: furniture and the
+                        # walk stand on the floor as seen, LiDAR vouching
+                        # for it (the first real room: 1.35 cm apart).
+                        floor_report["from"] = "splats, within 3 cm of LiDAR"
+                        floor_report["lidar_height"] = round(floor.height, 4)
+                        splat_floor.rejected = floor.rejected + splat_floor.rejected
+                        floor = splat_floor
+                    else:
                         warnings.append(f"The splat's floor sits {gap * 100:+.1f} cm from the "
                                         "LiDAR floor; the LiDAR floor was used.")
                 except FloorRejected as exc:
@@ -758,11 +766,17 @@ def export_scene(
             continue
         rgb = np.clip(part.colours.mean(axis=0), 0, 1)
         room.originalFloorColor = "#{:02x}{:02x}{:02x}".format(*np.round(rgb * 255).astype(int))
+        # A rug is a second layer just above the floor (y = 0, the lowest
+        # broad layer, so under any rug): the layer goes lopsided. A trained
+        # floor is a centimetre or two thick either way (the first real
+        # room: 32% above, 36% below), which is not a rug.
         y = part.positions[:, 1]
         raised = float(((y > RUG_BAND_M[0]) & (y < RUG_BAND_M[1])).mean())
-        if raised > 0.25:
-            warnings.append(f"{room.name}: {raised:.0%} of the floor splats sit 1-3 cm up: a rug "
-                            "or an uneven floor. Check it before replacing that floor.")
+        lowered = float(((y < -RUG_BAND_M[0]) & (y > -RUG_BAND_M[1])).mean())
+        if raised - lowered > 0.15:
+            warnings.append(f"{room.name}: {raised:.0%} of the floor splats sit 1-3 cm above the "
+                            f"floor's level, {lowered:.0%} below it: a rug or an uneven floor. "
+                            "Check it before replacing that floor.")
         floors[room.id] = f"floor-{room.id}.spz"
         parts[floors[room.id]] = part
         map_ = floor_shading(part, poly)

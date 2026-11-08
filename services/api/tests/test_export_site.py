@@ -65,3 +65,11 @@ def test_site_head_keeps_the_page_out_of_search_and_escapes_the_name():
     assert 'content="https://denzerson1.github.io/walkthrough/preview.jpg"' in out
     assert out.index("og:image") < out.index("</head>")
     assert "og:image" not in site_head(page, "Flat", None)
+
+
+def test_scene_files_include_each_rooms_floor_and_its_shading():
+    manifest = {"assets": {"scene": "scene.spz", "sceneNoFloor": "scene_nofloor.spz",
+                           "floors": {"hall": "floor-hall.spz", "bed": "floor-bed.spz"},
+                           "floorShading": {"hall": "floor-shading-hall.png"}}}
+    assert scene_files(manifest) == {"scene.spz", "scene_nofloor.spz", "floor-hall.spz",
+                                     "floor-bed.spz", "floor-shading-hall.png"}

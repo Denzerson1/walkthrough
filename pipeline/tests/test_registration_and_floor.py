@@ -282,3 +282,31 @@ def test_the_published_scene_keeps_the_real_floor(tmp_path):
     assert covered > 0.9
     # Nothing of the room hangs below the floor it stands on.
     assert np.percentile(scene.positions[:, 1], 0.5) > -0.05
+
+
+def test_a_rug_is_reported_and_a_thick_floor_is_not(tmp_path):
+    from walkthrough_pipeline.scene import export_scene
+
+    paths = _metric_project(tmp_path)
+    align_scene(paths, "p", metric=True)
+    assert not any("rug" in w for w in export_scene(paths).warnings)
+
+    from walkthrough_pipeline.splat import read_ply
+
+    rug_path = aligned_dir(paths) / "scene.ply"
+    cloud = read_ply(rug_path)
+    rng = np.random.default_rng(14)
+    n = 30_000
+    rug = SplatCloud(
+        np.column_stack([rng.uniform(1.2, 2.6, n), rng.normal(0.018, 0.002, n),
+                         rng.uniform(0.8, 2.0, n)]).astype(np.float32),
+        np.full((n, 3), 0.3, np.float32), np.full(n, 0.9, np.float32),
+        np.full((n, 3), 0.004, np.float32), np.tile([1.0, 0, 0, 0], (n, 1)).astype(np.float32),
+        sh_rest=np.zeros((n, 3, 3), np.float32) if cloud.sh_rest is not None else None,
+    )
+    merged = SplatCloud(*(np.concatenate([getattr(cloud, f), getattr(rug, f)])
+                          for f in ("positions", "colours", "opacities", "scales", "rotations")),
+                        sh_rest=None if cloud.sh_rest is None else np.concatenate(
+                            [cloud.sh_rest, rug.sh_rest]))
+    write_ply(merged, rug_path)
+    assert any("rug" in w for w in export_scene(paths).warnings)
