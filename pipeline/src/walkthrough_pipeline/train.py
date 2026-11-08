@@ -130,6 +130,20 @@ def trainer_versions() -> dict:
         out["gsplat_examples"] = subprocess.run(
             ["git", "-C", str(examples), "describe", "--tags", "--always", "--dirty"],
             capture_output=True, text=True, timeout=20).stdout.strip() or None
+        # The setup script patches the trainer (a NaN guard on rendered depth,
+        # scripts/setup_pipeline_wsl.sh); the record names exactly what differs.
+        diff = subprocess.run(["git", "-C", str(examples), "diff"], capture_output=True,
+                              timeout=20).stdout
+        if diff:
+            import hashlib
+
+            out["gsplat_examples_patch"] = {
+                "sha256": hashlib.sha256(diff).hexdigest()[:16],
+                "files": subprocess.run(["git", "-C", str(examples), "diff", "--name-only"],
+                                        capture_output=True, text=True,
+                                        timeout=20).stdout.split(),
+                "from": "scripts/setup_pipeline_wsl.sh",
+            }
     except (OSError, subprocess.SubprocessError, ValueError) as exc:
         out["error"] = str(exc)
     return out
