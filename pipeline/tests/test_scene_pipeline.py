@@ -22,6 +22,7 @@ from walkthrough_pipeline.register import distance_to_segments, solid_segments
 from walkthrough_pipeline.scene import (
     AlignmentFailed,
     align_scene,
+    aligned_dir,
     export_scene,
     floor_outline,
     points_in_polygon,
@@ -144,7 +145,7 @@ def test_align_puts_the_splat_on_the_plan_in_metres(capture):
     assert report.scale == pytest.approx(1 / S_TRUE, rel=0.005)
     assert report.roomplan["inlier_ratio"] > 0.5
 
-    scene = read_ply(paths.scene / "scene.ply")
+    scene = read_ply(aligned_dir(paths) / "scene.ply")
     y = scene.positions[:, 1]
     # Floor at y = 0 and ceiling at the scan's wall height.
     assert np.median(np.abs(y[np.abs(y) < 0.05])) < 0.005
@@ -156,10 +157,11 @@ def test_align_puts_the_splat_on_the_plan_in_metres(capture):
     )
     assert np.median(d) < 0.01
 
-    manifest = Manifest.load(paths.manifest)
+    manifest = Manifest.load(aligned_dir(paths) / "manifest.json")
     assert manifest.rooms[0].floorPolygon == room.floorPolygon
     assert [i.label for i in manifest.items] == ["sofa"]
-    assert manifest.assets.scene == "scene.ply"
+    # Nothing is published until export has built and checked the scene.
+    assert not paths.manifest.exists() and not (paths.scene / "scene.ply").exists()
 
 
 def test_align_never_touches_the_trainer_output(capture):
@@ -181,7 +183,7 @@ def test_align_refuses_a_scan_of_another_room(capture):
     (paths.input / "roomplan" / "scan.json").write_text(json.dumps(other))
     with pytest.raises(AlignmentFailed, match="does not fit"):
         align_scene(paths, "proj")
-    assert not (paths.scene / "scene.ply").exists()
+    assert not (aligned_dir(paths) / "scene.ply").exists()
 
 
 def test_export_splits_the_floor_and_writes_spz(capture):
@@ -194,16 +196,21 @@ def test_export_splits_the_floor_and_writes_spz(capture):
     assert report.floor_splats == pytest.approx(n_floor, rel=0.02)
     manifest = Manifest.load(paths.manifest)
     assert manifest.assets.sceneNoFloor == "scene_nofloor.spz"
-    assert manifest.assets.floor == "floor.spz"
+    assert manifest.assets.floors == {"room": "floor-room.spz"}
+    assert manifest.assets.floor is None
     assert manifest.rooms[0].originalFloorColor == "#999999"
-    for name in ("scene.spz", "scene_nofloor.spz", "floor.spz"):
+    for name in ("scene.spz", "scene_nofloor.spz", "floor-room.spz"):
         assert (paths.scene / name).stat().st_size > 1000
+        assert report.validation[name]["max_position_error_mm"] < 0.2
+    assert manifest.assets.floorShading == {"room": "floor-shading-room.png"}
+    assert (paths.scene / "floor-shading-room.png").is_file()
+    assert not list(paths.scene.glob(".export-*"))
 
 
 def test_export_crops_what_lies_beyond_the_walls(capture):
     paths, _, _ = capture
     align_scene(paths, "proj")
-    scene = read_ply(paths.scene / "scene.ply")
+    scene = read_ply(aligned_dir(paths) / "scene.ply")
     floater = SplatCloud(
         positions=np.array([[50.0, 1.0, 50.0]], dtype=np.float32),
         colours=np.ones((1, 3), dtype=np.float32),
@@ -216,7 +223,7 @@ def test_export_crops_what_lies_beyond_the_walls(capture):
         *(np.concatenate([getattr(scene, f), getattr(floater, f)])
           for f in ("positions", "colours", "opacities", "scales", "rotations", "sh_rest"))
     )
-    write_ply(merged, paths.scene / "scene.ply")
+    write_ply(merged, aligned_dir(paths) / "scene.ply")
     assert export_scene(paths).cropped_out == 1
     assert export_scene(paths, crop_margin=None).cropped_out == 0
 
@@ -293,9 +300,10 @@ def test_without_a_scan_the_viewer_starts_where_the_video_was_shot(capture):
     (paths.input / "roomplan" / "scan.json").unlink()
     report = align_scene(paths, "proj")
     assert report.scale_from == "camera height (estimate)"
-    room = Manifest.load(paths.manifest).rooms[0]
+    draft = Manifest.load(aligned_dir(paths) / "manifest.json")
+    room = draft.rooms[0]
     cams = read_images_bin(paths.work / "undistorted" / "sparse" / "images.bin")
-    t = np.array(Manifest.load(paths.manifest).transform)
+    t = np.array(draft.transform)
     centres = np.array([c.centre for c in cams]) @ t[:3, :3].T + t[:3, 3]
     x, _, z = room.waypoint.position
     np.testing.assert_allclose([x, z], np.median(centres[:, [0, 2]], axis=0), atol=1e-3)
@@ -320,7 +328,7 @@ def test_the_viewer_starts_facing_what_was_filmed(capture):
         cams.append((r, -r @ c))
     _write_images_bin(paths.work / "undistorted" / "sparse" / "images.bin", cams)
     align_scene(paths, "proj")
-    wp = Manifest.load(paths.manifest).rooms[0].waypoint
+    wp = Manifest.load(aligned_dir(paths) / "manifest.json").rooms[0].waypoint
     # lib/camera.ts: yaw 0 looks down -Z, direction (-sin yaw, -cos yaw).
     look = np.array([-np.sin(np.radians(wp.yaw)), -np.cos(np.radians(wp.yaw))])
     np.testing.assert_allclose(look, [1.0, 0.0], atol=0.1)

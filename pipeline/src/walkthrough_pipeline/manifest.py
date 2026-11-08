@@ -180,7 +180,14 @@ class ViewPhoto(BaseModel):
 class SceneAssets(BaseModel):
     scene: str | None = None
     sceneNoFloor: str | None = None
+    #: One floor splat file for every room (older exports). Superseded by
+    #: `floors`, which lets a room's floor be replaced while the others stay.
     floor: str | None = None
+    #: Room id -> that room's floor splats (SPZ).
+    floors: dict[str, str] = Field(default_factory=dict)
+    #: Room id -> how light falls on its floor (8-bit PNG over the floor
+    #: polygon's bounding box, row 0 at min z; value / 127.5 multiplies a
+    #: replacement floor's colour).
     floorShading: dict[str, str] = Field(default_factory=dict)
     #: The rebuilt flat: a glTF model with baked lighting (`pipeline rebuild`).
     #: When present the viewer shows it instead of the splat.
@@ -253,8 +260,10 @@ class Manifest(BaseModel):
         return json.dumps(self.model_dump(mode="json"), indent=2) + "\n"
 
     def write(self, path: Path) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(self.to_json(), encoding="utf-8")
+        """Written whole or not at all: a reader never sees half a manifest."""
+        from .provenance import atomic_write_text
+
+        atomic_write_text(Path(path), self.to_json())
 
     @classmethod
     def load(cls, path: Path) -> Manifest:

@@ -239,6 +239,101 @@ def select_frames(
     return FrameSelection(keep, dropped_blurry, dropped_to_target, threshold)
 
 
+@dataclass
+class CoverageSelection:
+    """Frames chosen for sharpness, motion and coverage, and why the rest went."""
+
+    keep: list[Path]
+    dropped_blurry: list[Path]
+    dropped_static: list[Path]
+    #: Kept although blurrier than their neighbours: the only view of a stretch
+    #: of the walk (a turn into a corner or through a doorway).
+    kept_for_coverage: list[Path]
+
+    def summary(self) -> dict:
+        return {"kept": len(self.keep), "dropped_blurry": len(self.dropped_blurry),
+                "dropped_static": len(self.dropped_static),
+                "kept_for_coverage": len(self.kept_for_coverage)}
+
+
+def _local_median(values: np.ndarray, radius: int) -> np.ndarray:
+    return np.array([np.median(values[max(0, i - radius): i + radius + 1])
+                     for i in range(len(values))])
+
+
+def select_by_coverage(
+    scores: dict[Path, float],
+    moved: np.ndarray,
+    window: int,
+    *,
+    static: float,
+    blur_ratio: float = 0.5,
+    max_gap: int = 3,
+) -> CoverageSelection:
+    """
+    One frame per `window` consecutive candidates, the sharpest, then:
+
+    * a frame barely moved from the last kept one (`moved[i]` < `static`,
+      motion since the previous candidate) is dropped as a duplicate — a
+      phone held still adds nothing but weight;
+    * a frame much blurrier than its neighbours (under `blur_ratio` of the
+      local median) is dropped — unless dropping it would leave more than
+      `max_gap` windows in a row without a frame, which is where the person
+      turned: corners and doorways, the views a global threshold loses.
+
+    Sharpness is judged against the neighbourhood, not the whole capture:
+    a plain wall is never sharp, and it still has to be in the dataset.
+    """
+    ordered = sorted(scores, key=lambda p: p.name)
+    values = np.array([scores[p] for p in ordered], dtype=np.float64)
+    if len(ordered) == 0:
+        return CoverageSelection([], [], [], [])
+    local = _local_median(values, 3 * window)
+    windows = [list(range(i, min(i + window, len(ordered))))
+               for i in range(0, len(ordered), window)]
+    best = [max(w, key=lambda i: values[i]) for w in windows]
+
+    keep_idx: list[int] = []
+    blurry: list[int] = []
+    static_idx: list[int] = []
+    forced: list[int] = []
+    gap = 0
+    for i in best:
+        if keep_idx and float(np.sum(moved[keep_idx[-1] + 1: i + 1])) < static:
+            static_idx.append(i)
+            continue
+        soft = values[i] < blur_ratio * local[i]
+        if soft and gap < max_gap:
+            blurry.append(i)
+            gap += 1
+            continue
+        if soft:
+            forced.append(i)
+        keep_idx.append(i)
+        gap = 0
+    return CoverageSelection(
+        keep=[ordered[i] for i in keep_idx],
+        dropped_blurry=[ordered[i] for i in blurry],
+        dropped_static=[ordered[i] for i in static_idx],
+        kept_for_coverage=[ordered[i] for i in forced],
+    )
+
+
+def image_motion(paths: list[Path], size: tuple[int, int] = (64, 48)) -> np.ndarray:
+    """
+    Mean absolute change (0-255) between consecutive frames, on small
+    greyscale copies: how much the view moved, for a video without poses.
+    """
+    thumbs = []
+    for path in sorted(paths, key=lambda p: p.name):
+        image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+        thumbs.append(cv2.resize(image, size, interpolation=cv2.INTER_AREA).astype(np.float32))
+    moved = np.zeros(len(thumbs))
+    for i in range(1, len(thumbs)):
+        moved[i] = float(np.abs(thumbs[i] - thumbs[i - 1]).mean())
+    return moved
+
+
 def score_directory(frame_dir: Path) -> dict[Path, float]:
     scores: dict[Path, float] = {}
     for path in sorted(frame_dir.glob("frame_*.png")):

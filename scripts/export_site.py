@@ -58,6 +58,7 @@ def scene_files(manifest: dict[str, Any]) -> set[str]:
     assets = manifest.get("assets") or {}
     names = {assets.get(k) for k in ("scene", "sceneNoFloor", "floor", "model", "lightmap")}
     names |= set((assets.get("floorShading") or {}).values())
+    names |= set((assets.get("floors") or {}).values())
     for light in assets.get("lighting") or []:
         names |= {light.get("lightmap"), light.get("sky")}
     if assets.get("viewPhoto"):

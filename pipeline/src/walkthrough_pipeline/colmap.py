@@ -60,6 +60,44 @@ def read_images_bin(path: Path) -> list[Camera]:
     return cameras
 
 
+def write_images_bin(source: Path, out_dir: Path, cam_to_world: dict[str, np.ndarray]) -> None:
+    """
+    A copy of the model whose images.bin is `source`, with the camera-to-
+    world poses of the images named in `cam_to_world` replaced (the rest,
+    and every observation, unchanged). cameras.bin and points3D.bin are
+    copied from beside `source`.
+    """
+    import shutil
+
+    from .splat import matrix_to_quaternion
+
+    data = Path(source).read_bytes()
+    (count,) = struct.unpack_from("<Q", data, 0)
+    off, chunks = 8, [data[:8]]
+    head = struct.calcsize("<idddddddi")
+    for _ in range(count):
+        image_id, qw, qx, qy, qz, tx, ty, tz, camera_id = struct.unpack_from(
+            "<idddddddi", data, off)
+        end = data.index(b"\0", off + head)
+        name = data[off + head:end].decode("utf-8")
+        (n_points,) = struct.unpack_from("<Q", data, end + 1)
+        tail = data[end + 1: end + 9 + n_points * 24]
+        if name in cam_to_world:
+            c2w = np.asarray(cam_to_world[name], dtype=np.float64)
+            rotation = c2w[:3, :3].T
+            qw, qx, qy, qz = matrix_to_quaternion(rotation)
+            tx, ty, tz = -rotation @ c2w[:3, 3]
+        chunks.append(struct.pack("<idddddddi", image_id, qw, qx, qy, qz, tx, ty, tz, camera_id))
+        chunks.append(name.encode("utf-8") + b"\0" + tail)
+        off = end + 9 + n_points * 24
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "images.bin").write_bytes(b"".join(chunks))
+    for other in ("cameras.bin", "points3D.bin"):
+        if (Path(source).parent / other).is_file():
+            shutil.copy2(Path(source).parent / other, out_dir / other)
+
+
 def read_points3d_bin(path: Path) -> np.ndarray:
     """(N, 3) positions from COLMAP's binary `points3D.bin`."""
     data = Path(path).read_bytes()

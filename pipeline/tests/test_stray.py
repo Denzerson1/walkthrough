@@ -22,7 +22,7 @@ from walkthrough_pipeline import stray
 from walkthrough_pipeline.colmap import read_images_bin
 from walkthrough_pipeline.frames import extract_numbered, sharpest_per_window
 from walkthrough_pipeline.paths import ProjectPaths
-from walkthrough_pipeline.scene import align_scene
+from walkthrough_pipeline.scene import align_scene, aligned_dir
 from walkthrough_pipeline.splat import SplatCloud, write_ply
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -149,13 +149,99 @@ def test_fusion_keeps_one_point_per_voxel_and_bounded_tracks():
     world = [base + rng.normal(0, 0.001, base.shape) for _ in range(10)]  # same surface, 10x
     pixels = [rng.uniform(0, 100, (500, 2)) for _ in range(10)]
     colours = [np.full((500, 3), 200.0) for _ in range(10)]
-    fused = stray.fuse(world, pixels, colours, voxel=0.02, max_track=6)
+    fused = stray.fuse(world, pixels, colours, voxel=0.02, max_track=6, min_frame_obs=0)
     # 5000 sightings of 500 surface points collapse to about 500; a point
     # within a millimetre of a voxel edge may straddle two.
     assert 500 <= len(fused.points) < 800
     counts = np.bincount(fused.obs_point)
     assert counts.max() <= 6
     np.testing.assert_allclose(fused.colours, 200.0)
+
+
+def _pairs_are_unique(fused):
+    pairs = fused.obs_point.astype(np.int64) * 1_000_000 + fused.obs_image
+    return len(np.unique(pairs)) == len(pairs)
+
+
+def test_one_frame_cannot_take_every_sighting():
+    """
+    The audit's reproduction: several pixels of one frame fall in one voxel,
+    and the old fusion let them fill all six of its slots, so three frames
+    of one wall came out as [6, 0, 0] sightings. One per frame per voxel.
+    """
+    rng = np.random.default_rng(2)
+    centres = (np.arange(10)[:, None] * [0.1, 0, 0]) + 0.01  # 10 voxel centres, 10 cm apart
+    world = [np.repeat(centres, 40, axis=0) + rng.uniform(-0.004, 0.004, (400, 3))
+             for _ in range(3)]
+    pixels = [rng.uniform(0, 100, (400, 2)) for _ in range(3)]
+    colours = [np.full((400, 3), 100.0) for _ in range(3)]
+    fused = stray.fuse(world, pixels, colours, voxel=0.02, max_track=6)
+    assert len(fused.points) == 10
+    assert fused.per_image.tolist() == [10, 10, 10]
+    assert _pairs_are_unique(fused)
+
+
+def test_tracks_are_spread_along_the_trajectory():
+    rng = np.random.default_rng(3)
+    base = rng.uniform(0, 2, (400, 3))
+    frames = 40
+    world = [base + rng.normal(0, 0.0005, base.shape) for _ in range(frames)]
+    pixels = [rng.uniform(0, 100, (400, 2)) for _ in range(frames)]
+    colours = [np.full((400, 3), 50.0) for _ in range(frames)]
+    fused = stray.fuse(world, pixels, colours, voxel=0.02, max_track=6, min_frame_obs=0)
+    assert np.bincount(fused.obs_point).max() <= 6
+    assert _pairs_are_unique(fused)
+    # Every frame shares in the supervision, not just the first six.
+    assert fused.per_image.min() > 0.5 * fused.per_image.mean()
+    # And each point's sightings span the capture, not six neighbouring frames.
+    spans = [np.ptp(fused.obs_image[fused.obs_point == p]) for p in range(0, len(fused.points), 7)]
+    assert np.median(spans) >= 25
+
+
+def test_a_frame_left_short_gets_its_own_sightings_back():
+    rng = np.random.default_rng(4)
+    base = rng.uniform(0, 2, (300, 3))
+    world = [base + rng.normal(0, 0.0005, base.shape) for _ in range(30)]
+    pixels = [rng.uniform(0, 100, (300, 2)) for _ in range(30)]
+    colours = [np.full((300, 3), 50.0) for _ in range(30)]
+    fused = stray.fuse(world, pixels, colours, voxel=0.02, max_track=2, min_frame_obs=120)
+    # Two of thirty frames per point leaves ~20 per frame; each is topped up.
+    seen = fused.seen_per_image
+    assert (fused.per_image >= np.minimum(120, seen)).all()
+    assert _pairs_are_unique(fused)
+
+
+def test_a_frame_without_lidar_depth_is_left_out_and_named(capture, tmp_path):
+    cap, _ = capture
+    frames = _frames(tmp_path, cap)
+    blind = int(cap.frames[10])  # in the chosen subset (every other frame)
+    cv2.imwrite(str(cap.confidence_path(blind)), np.zeros(DEPTH[::-1], np.uint8))
+    report = stray.build_dataset(cap, frames, tmp_path / "ds")
+    name = f"frame_{blind:06d}.png"
+    assert report.dropped_no_depth == [name]
+    assert name not in report.observations_per_frame
+    assert not (tmp_path / "ds" / "images" / name).exists()
+    assert min(report.observations_per_frame.values()) > 0
+    assert [c.name for c in read_images_bin(tmp_path / "ds" / "sparse" / "images.bin")] == list(
+        report.observations_per_frame)
+
+
+def test_a_failed_build_keeps_the_last_good_dataset(capture, tmp_path, monkeypatch):
+    cap, _ = capture
+    frames = _frames(tmp_path, cap)
+    stray.build_dataset(cap, frames, tmp_path / "ds")
+    before = (tmp_path / "ds" / "sparse" / "images.bin").read_bytes()
+
+    import walkthrough_pipeline.colmap as colmap_mod
+
+    def broken(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(colmap_mod, "write_model", broken)
+    with pytest.raises(OSError):
+        stray.build_dataset(cap, frames, tmp_path / "ds")
+    assert (tmp_path / "ds" / "sparse" / "images.bin").read_bytes() == before
+    assert not list(tmp_path.glob(".ds.partial-*"))
 
 
 def _read_cameras(path):
@@ -295,7 +381,7 @@ def test_metric_alignment_keeps_arkit_scale(tmp_path, monkeypatch):
     (paths.input / "roomplan" / "scan.json").write_text(json.dumps(tsp._captured_room()))
 
     report = align_scene(paths, "p", metric=True)
-    assert report.up_from == "ARKit gravity"
+    assert report.up_from == "ARKit gravity (kept)"
     assert report.scale == pytest.approx(1.0, abs=0.005)
     assert report.roomplan["inlier_ratio"] > 0.5
 
@@ -342,7 +428,7 @@ def test_room_is_outlined_from_lidar_not_from_drifting_splats(capture, tmp_path)
     align_scene(paths, "p", metric=True)
     from walkthrough_pipeline.manifest import Manifest
 
-    poly = np.array(Manifest.load(paths.manifest).rooms[0].floorPolygon)
+    poly = np.array(Manifest.load(aligned_dir(paths) / "manifest.json").rooms[0].floorPolygon)
     x, z = poly.T
     area = abs(0.5 * np.sum(x * np.roll(z, -1) - np.roll(x, -1) * z))
     assert area == pytest.approx((HI[0] - LO[0]) * (HI[2] - LO[2]), rel=0.1)

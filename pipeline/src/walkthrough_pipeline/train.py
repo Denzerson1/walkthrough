@@ -16,6 +16,8 @@ import shutil
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+import numpy as np
+
 #: Where docs/PIPELINE.md's setup puts them; override with the env vars.
 DEFAULT_PYTHON = Path.home() / ".venvs" / "gsplat" / "bin" / "python"
 DEFAULT_EXAMPLES = Path.home() / "gsplat" / "examples"
@@ -33,8 +35,14 @@ class TrainSettings:
     sh_degree: int = 3
     #: Supervise rendered depth with the dataset's 3D points (LiDAR).
     depth: bool = False
+    depth_lambda: float = 1e-2  # gsplat's default
     #: Optimise camera poses alongside the splat (for sensor-given poses).
     refine_poses: bool = False
+    pose_opt_lr: float = 1e-5  # gsplat's defaults
+    pose_opt_reg: float = 1e-6
+    antialiased: bool = False
+    #: Image downscale factor the trainer applies (1 = frames as extracted).
+    data_factor: int = 1
 
 
 @dataclass
@@ -74,7 +82,7 @@ def command(data_dir: Path, result_dir: Path, settings: TrainSettings) -> list[s
     return [
         str(python), str(examples / "simple_trainer.py"), "mcmc",
         "--data-dir", str(data_dir),
-        "--data-factor", "1",
+        "--data-factor", str(settings.data_factor),
         "--result-dir", str(result_dir),
         "--test-every", str(settings.holdout_every),
         "--max-steps", last,
@@ -88,9 +96,110 @@ def command(data_dir: Path, result_dir: Path, settings: TrainSettings) -> list[s
         "--sh-degree", str(settings.sh_degree),
         "--strategy.cap-max", str(settings.max_splats),
         "--packed",
-        *(["--depth-loss"] if settings.depth else []),
-        *(["--pose-opt"] if settings.refine_poses else []),
+        *(["--depth-loss", "--depth-lambda", str(settings.depth_lambda)]
+          if settings.depth else []),
+        *(["--pose-opt", "--pose-opt-lr", str(settings.pose_opt_lr),
+            "--pose-opt-reg", str(settings.pose_opt_reg)] if settings.refine_poses else []),
+        *(["--antialiased"] if settings.antialiased else []),
     ]
+
+
+#: simple_trainer.py seeds every run with 42 + rank (not a CLI option at the
+#: pinned tag), so a rerun with the same data and settings is the same run,
+#: up to CUDA's non-deterministic atomics.
+TRAINER_SEED = 42
+
+
+def trainer_versions() -> dict:
+    """gsplat, torch and CUDA in the trainer's venv, the examples' git tag, the GPU."""
+    import subprocess
+
+    python, examples = trainer_paths()
+    out: dict = {"trainer_seed": TRAINER_SEED}
+    probe = ("import json, gsplat, torch; print(json.dumps({'gsplat': gsplat.__version__, "
+             "'torch': torch.__version__, 'cuda': torch.version.cuda, "
+             "'gpu': torch.cuda.get_device_name(0) if torch.cuda.is_available() else None}))")
+    try:
+        out.update(json.loads(subprocess.run([str(python), "-c", probe], capture_output=True,
+                                             text=True, check=True, timeout=120).stdout))
+        out["gsplat_examples"] = subprocess.run(
+            ["git", "-C", str(examples), "describe", "--tags", "--always", "--dirty"],
+            capture_output=True, text=True, timeout=20).stdout.strip() or None
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        out["error"] = str(exc)
+    return out
+
+
+def _rotation_6d(d6: np.ndarray) -> np.ndarray:
+    """gsplat's (pytorch3d's) 6D rotation: Gram-Schmidt rows."""
+    a1, a2 = d6[:, :3], d6[:, 3:]
+    b1 = a1 / np.linalg.norm(a1, axis=1, keepdims=True)
+    b2 = a2 - (b1 * a2).sum(axis=1, keepdims=True) * b1
+    b2 /= np.linalg.norm(b2, axis=1, keepdims=True)
+    return np.stack([b1, b2, np.cross(b1, b2)], axis=1)
+
+
+def refined_poses(cam_to_world: np.ndarray, embeds: np.ndarray) -> np.ndarray:
+    """
+    The trainer's corrected camera-to-world poses: CameraOptModule applies
+    c2w @ [R(6D delta + identity) | dx] to each training image.
+    """
+    delta = np.tile(np.eye(4), (len(embeds), 1, 1))
+    delta[:, :3, :3] = _rotation_6d(embeds[:, 3:] + np.array([1.0, 0, 0, 0, 1.0, 0]))
+    delta[:, :3, 3] = embeds[:, :3]
+    return cam_to_world @ delta
+
+
+def export_refined_poses(data_dir: Path, result_dir: Path, settings: TrainSettings) -> dict:
+    """
+    Read the pose corrections the trainer learned (its checkpoint's
+    `pose_adjust`), apply them to the training images' poses, and write
+    them beside the result: refined_poses.json, and a COLMAP model of the
+    refined cameras (sparse_refined/) for rendering the training views as
+    the splat saw them. Held-out images keep their poses. Returns how far
+    the poses moved.
+    """
+    import subprocess
+
+    from .colmap import read_images_bin, write_images_bin
+
+    python, _ = trainer_paths()
+    ckpt = result_dir / "ckpts" / f"ckpt_{settings.steps - 1}_rank0.pt"
+    dump = result_dir / "pose_adjust.npy"
+    subprocess.run([str(python), "-c",
+                    "import sys, numpy, torch; ck = torch.load(sys.argv[1], map_location='cpu', "
+                    "weights_only=False); numpy.save(sys.argv[2], "
+                    "ck['pose_adjust']['embeds.weight'].numpy())", str(ckpt), str(dump)],
+                   check=True, timeout=600)
+    embeds = np.load(dump).astype(np.float64)
+    cameras = sorted(read_images_bin(data_dir / "sparse" / "images.bin"), key=lambda c: c.name)
+    # gsplat's parser sorts by name and holds out every Nth; the rest are
+    # the training set, in that order, which is the embedding's index.
+    train = [c for i, c in enumerate(cameras) if i % settings.holdout_every != 0]
+    if len(train) != len(embeds):
+        raise RuntimeError(f"{len(embeds)} pose corrections for {len(train)} training images")
+    c2w = np.tile(np.eye(4), (len(train), 1, 1))
+    for i, c in enumerate(train):
+        c2w[i, :3, :3] = c.rotation.T
+        c2w[i, :3, 3] = c.centre
+    fixed = refined_poses(c2w, embeds)
+    moved_cm = np.linalg.norm(fixed[:, :3, 3] - c2w[:, :3, 3], axis=1) * 100
+    rel = np.einsum("nji,njk->nik", c2w[:, :3, :3], fixed[:, :3, :3])
+    turned = np.degrees(np.arccos(np.clip((np.trace(rel, axis1=1, axis2=2) - 1) / 2, -1, 1)))
+    refined = {c.name: f.tolist() for c, f in zip(train, fixed, strict=True)}
+    (result_dir / "refined_poses.json").write_text(json.dumps(refined))
+    write_images_bin(data_dir / "sparse" / "images.bin", result_dir / "sparse_refined",
+                     {name: np.array(m) for name, m in refined.items()})
+    return {
+        "images": len(train),
+        "moved_cm": {"median": round(float(np.median(moved_cm)), 2),
+                     "p95": round(float(np.percentile(moved_cm, 95)), 2),
+                     "max": round(float(moved_cm.max()), 2)},
+        "turned_deg": {"median": round(float(np.median(turned)), 3),
+                       "p95": round(float(np.percentile(turned, 95)), 3),
+                       "max": round(float(turned.max()), 3)},
+        "worst": [train[i].name for i in np.argsort(-moved_cm)[:5]],
+    }
 
 
 def collect(

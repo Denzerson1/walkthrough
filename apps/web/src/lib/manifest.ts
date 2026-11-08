@@ -189,7 +189,15 @@ export interface Manifest {
   assets?: {
     scene?: string;
     sceneNoFloor?: string;
+    /** Every room's floor splats in one file (older exports; see `floors`). */
     floor?: string;
+    /** Room id -> that room's floor splats, so one room's floor can be replaced alone. */
+    floors?: Record<string, string>;
+    /**
+     * Room id -> how light fell on its floor: an 8-bit PNG over the floor
+     * polygon's bounding box (row 0 at min z, column 0 at min x); value / 127.5
+     * multiplies a replacement floor's colour.
+     */
     floorShading?: Record<string, string>;
     /** The rebuilt flat with baked lighting; shown instead of the splat. */
     model?: string | null;

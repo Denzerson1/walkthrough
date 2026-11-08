@@ -410,6 +410,61 @@ def write_spz(cloud: SplatCloud, path: Path) -> None:
     path.write_bytes(gzip.compress(body, compresslevel=6))
 
 
+def read_spz(path: Path) -> SplatCloud:
+    """
+    Read an SPZ v2/v3 file (gzip-framed): the inverse of `write_spz`, used to
+    check every export after it is written.
+    """
+    raw = gzip.decompress(Path(path).read_bytes())
+    magic, version, n, degree, frac, _flags, _ = struct.unpack_from("<IIIBBBB", raw, 0)
+    if magic != SPZ_MAGIC or version not in (2, 3):
+        raise ValueError(f"{path}: not an SPZ v2/v3 file (magic {magic:#x}, version {version})")
+    off = 16
+
+    def take(count: int) -> np.ndarray:
+        nonlocal off
+        out = np.frombuffer(raw, np.uint8, count, off)
+        off += count
+        return out
+
+    pos = take(n * 9).reshape(n, 3, 3).astype(np.int64)
+    fixed = pos[..., 0] | (pos[..., 1] << 8) | (pos[..., 2] << 16)
+    fixed = np.where(fixed & 0x800000, fixed - (1 << 24), fixed)
+    positions = (fixed / float(1 << frac)).astype(np.float32)
+    alphas = take(n).astype(np.float32) / 255.0
+    dc = (take(n * 3).reshape(n, 3).astype(np.float64) / 255.0 - 0.5) / SPZ_COLOR_SCALE
+    scales = np.exp(take(n * 3).reshape(n, 3).astype(np.float64) / 16.0 - 10.0)
+    if version == 3:
+        rotations = _unpack_smallest_three(take(n * 4).reshape(n, 4))
+    else:  # v2: xyz as signed bytes, w recovered
+        xyz = take(n * 3).reshape(n, 3).astype(np.float64) / 127.5 - 1.0
+        w = np.sqrt(np.maximum(0.0, 1.0 - (xyz**2).sum(axis=1)))
+        rotations = np.column_stack([w, xyz])
+    sh_rest = None
+    if degree:
+        k = SH_REST_COUNTS[degree]
+        sh_rest = ((take(n * k * 3).reshape(n, k, 3).astype(np.float64) - 128.0) / 128.0)
+        sh_rest = sh_rest.astype(np.float32)
+    return SplatCloud(positions, sh_to_colour(dc).astype(np.float32), alphas,
+                      scales.astype(np.float32), rotations.astype(np.float32), sh_rest=sh_rest)
+
+
+def _unpack_smallest_three(packed: np.ndarray) -> np.ndarray:
+    """Inverse of `_pack_smallest_three`: (N, 4) bytes to wxyz quaternions."""
+    comp = packed.copy().view("<u4").reshape(-1).astype(np.int64)
+    largest = comp >> 30
+    q = np.zeros((len(comp), 4))  # xyzw
+    for i in (3, 2, 1, 0):  # packed first-to-last, so unpacked last-first
+        use = largest != i
+        mag = (comp & 0x1FF) / 511.0 * np.sqrt(0.5)
+        neg = (comp >> 9) & 1
+        q[use, i] = np.where(neg[use] == 1, -mag[use], mag[use])
+        comp = np.where(use, comp >> 10, comp)
+    rows = np.arange(len(q))
+    q[rows, largest] = np.sqrt(np.maximum(0.0, 1.0 - (q**2).sum(axis=1)))
+    return q[:, [3, 0, 1, 2]]
+
+
 def _to_u8(x: np.ndarray) -> np.ndarray:
     return np.clip(np.round(x), 0, 255).astype(np.uint8)
 

@@ -149,6 +149,166 @@ def gravity_alignment(
     return transform
 
 
+class FloorRejected(ValueError):
+    """No floor candidate passed the checks; the message lists why each failed."""
+
+
+@dataclass
+class FloorEstimate:
+    """The floor in a levelled frame (Y up), and the evidence for it."""
+
+    height: float
+    #: The floor plane n.p + d = 0: unit normal, (0, 1, 0) when gravity is kept.
+    normal: np.ndarray
+    plane_d: float
+    #: Angle between the plane fitted to the floor's own points and +Y: how
+    #: far the floor disagrees with the up direction used. Measured, never
+    #: applied when gravity is kept.
+    tilt_deg: float
+    inliers: int
+    #: Floor area (occupied cells) in scene units², and its share of the area
+    #: under the cameras that has any points at all.
+    area: float
+    coverage: float
+    #: Camera heights above it: 5th percentile, median, 95th; share below it.
+    clearance: dict
+    #: Candidates turned down, lowest first, with the reason.
+    rejected: list[dict]
+
+
+def _clearance(height: float, camera_heights: np.ndarray | None) -> dict:
+    if camera_heights is None or len(camera_heights) == 0:
+        return {}
+    c = camera_heights - height
+    return {"p5": float(np.percentile(c, 5)), "median": float(np.median(c)),
+            "p95": float(np.percentile(c, 95)), "below": float((c < 0).mean())}
+
+
+def _occupied(xz: np.ndarray, cell: float) -> set[tuple[int, int]]:
+    return set(map(tuple, np.floor(xz / cell).astype(np.int64)))
+
+
+def find_floor(
+    points: np.ndarray,
+    camera_heights: np.ndarray | None,
+    *,
+    threshold: float,
+    cell: float,
+    keep_gravity: bool,
+    min_area: float = 0.0,
+    min_coverage: float = 0.15,
+    clearance_range: tuple[float, float] | None = None,
+    max_tilt_deg: float = 10.0,
+) -> FloorEstimate:
+    """
+    The floor of a scene already levelled by the best up direction known.
+
+    `keep_gravity` (ARKit): the up direction is measured and stays; only the
+    floor's height is found — the lowest horizontal layer that is broad
+    enough (area, coverage) and that the cameras stand above at a plausible
+    height (`clearance_range` on the median, in scene units). A plane fit
+    that may tilt the scene is not used: it once overrode ARKit's gravity by
+    up to 35° to fit a bed.
+
+    Otherwise (a video, up from how the phone was held): RANSAC planes
+    within `max_tilt_deg` of up, each checked the same way, the best kept;
+    its normal refines up.
+
+    Raises FloorRejected when nothing passes.
+    """
+    pts = np.asarray(points, dtype=np.float64)
+    ref = np.median(camera_heights) if camera_heights is not None and len(camera_heights) else \
+        np.percentile(pts[:, 1], 35)
+    below = pts[pts[:, 1] < ref]
+    if len(below) < 100:
+        raise FloorRejected("Fewer than 100 points below the cameras: the floor was not filmed.")
+    if len(below) > 300_000:
+        below = below[np.random.default_rng(0).choice(len(below), 300_000, replace=False)]
+    region = len(_occupied(below[:, [0, 2]], cell))
+    rejected: list[dict] = []
+
+    def judge(inlier_pts: np.ndarray, height: float) -> str | None:
+        area = len(_occupied(inlier_pts[:, [0, 2]], cell)) * cell * cell
+        coverage = area / max(region * cell * cell, 1e-12)
+        clear = _clearance(height, camera_heights)
+        if area < min_area:
+            return f"area {area:.2f} under the minimum {min_area:.2f}"
+        if coverage < min_coverage:
+            return f"covers {coverage:.0%} of the area under the cameras"
+        if clear:
+            if clear["below"] > 0.02:
+                return f"{clear['below']:.0%} of the cameras would be under it"
+            if clearance_range and not (clearance_range[0] <= clear["median"]
+                                        <= clearance_range[1]):
+                return (f"cameras would be {clear['median']:.2f} above it, outside "
+                        f"{clearance_range[0]}-{clearance_range[1]}")
+        return None
+
+    def estimate(inlier_pts: np.ndarray, normal: np.ndarray, d: float,
+                 height: float) -> FloorEstimate:
+        fitted = np.array(_least_squares_plane(inlier_pts)[:3])
+        tilt = float(np.degrees(np.arccos(min(1.0, abs(fitted[1])))))
+        area = len(_occupied(inlier_pts[:, [0, 2]], cell)) * cell * cell
+        return FloorEstimate(
+            height=float(height), normal=normal, plane_d=float(d), tilt_deg=tilt,
+            inliers=len(inlier_pts), area=area, coverage=area / max(region * cell * cell, 1e-12),
+            clearance=_clearance(height, camera_heights), rejected=rejected,
+        )
+
+    if keep_gravity:
+        y = below[:, 1]
+        edges = np.arange(y.min(), y.max() + threshold, threshold)
+        if len(edges) < 2:
+            edges = np.array([y.min() - threshold, y.max() + threshold])
+        counts, edges = np.histogram(y, bins=edges)
+        strongest = counts.max()
+        last = len(counts) - 1
+        peaks = [i for i in range(len(counts))
+                 if counts[i] >= max(100, 0.2 * strongest)
+                 and counts[i] >= counts[max(i - 1, 0)] and counts[i] >= counts[min(i + 1, last)]]
+        for i in peaks:  # lowest first
+            centre = (edges[i] + edges[i + 1]) / 2
+            near = below[np.abs(y - centre) < threshold]
+            height = float(np.median(near[:, 1]))
+            near = below[np.abs(y - height) < threshold]
+            reason = judge(near, height)
+            if reason is None:
+                return estimate(near, np.array([0.0, 1.0, 0.0]), -height, height)
+            rejected.append({"height": round(height, 4), "points": len(near), "reason": reason})
+        raise FloorRejected(_why(rejected))
+
+    remaining = below
+    for attempt in range(4):
+        if len(remaining) < 100:
+            break
+        fit = fit_plane_ransac(remaining, threshold=threshold, up_hint=np.array([0.0, 1.0, 0.0]),
+                               max_tilt_deg=max_tilt_deg, seed=attempt)
+        if fit.inliers.sum() < 3:
+            break
+        normal = np.array(fit.plane[:3])
+        d = fit.plane[3]
+        if normal[1] < 0:
+            normal, d = -normal, -d
+        inlier_pts = remaining[fit.inliers]
+        # Height of the plane under the cameras' median position (x, z ~ centre).
+        centre = inlier_pts.mean(axis=0)
+        height = float(-(d + normal[0] * centre[0] + normal[2] * centre[2]) / normal[1])
+        reason = judge(inlier_pts, height)
+        if reason is None:
+            return estimate(inlier_pts, normal, d, height)
+        rejected.append({"height": round(height, 4), "points": int(fit.inliers.sum()),
+                         "reason": reason})
+        remaining = remaining[~fit.inliers]
+    raise FloorRejected(_why(rejected))
+
+
+def _why(rejected: list[dict]) -> str:
+    if not rejected:
+        return "No level layer below the cameras stood out at all."
+    lines = "; ".join(f"at {r['height']:+.3f}: {r['reason']}" for r in rejected)
+    return f"No floor candidate passed the checks ({lines})."
+
+
 def apply_transform(points: np.ndarray, transform: np.ndarray) -> np.ndarray:
     pts = np.asarray(points, dtype=np.float64)
     homo = np.hstack([pts, np.ones((len(pts), 1))])

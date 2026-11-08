@@ -31,9 +31,16 @@ import numpy as np
 #: Depth pixels used: highest ARKit confidence, and within LiDAR's range.
 MIN_CONFIDENCE = 2
 DEPTH_RANGE_M = (0.15, 5.0)
-#: Fused points: one per voxel, each kept with at most this many sightings.
+#: Fused points: one per voxel. A voxel keeps at most MAX_TRACK sightings,
+#: from distinct frames spread along the trajectory, and every frame keeps at
+#: least MIN_FRAME_OBS sightings of its own when its LiDAR saw that many.
 VOXEL_M = 0.02
 MAX_TRACK = 6
+MIN_FRAME_OBS = 300
+#: A frame whose LiDAR gave fewer usable points than this is left out of the
+#: dataset: gsplat's depth loss averages over a frame's points, and an empty
+#: set is NaN for the whole run.
+MIN_DEPTH_POINTS = 50
 #: A pose that moves further than this between consecutive frames (1/60 s)
 #: is ARKit relocalising, not the phone moving; frames around it are dropped.
 JUMP_M = 0.05
@@ -152,47 +159,170 @@ class FusedPoints:
     points: np.ndarray  # (P, 3) world
     colours: np.ndarray  # (P, 3) 0-255
     #: Observations: which point (row in `points`) was seen in which image at
-    #: which pixel. At most MAX_TRACK per point.
+    #: which pixel. A point is seen at most once per image, so every track is
+    #: a valid COLMAP track; sorted by image, then point.
     obs_point: np.ndarray  # (K,)
     obs_image: np.ndarray  # (K,)
     obs_xy: np.ndarray  # (K, 2)
+    #: Per image index: observations kept, and voxels its LiDAR saw at all.
+    per_image: np.ndarray  # (F,)
+    seen_per_image: np.ndarray  # (F,)
+
+
+#: Voxel indices are packed into one int64, 21 bits an axis: ±20 km at 2 cm.
+_KEY_BITS = 21
+_KEY_OFFSET = 1 << (_KEY_BITS - 1)
+
+
+def _voxel_keys(points: np.ndarray, voxel: float) -> np.ndarray:
+    idx = np.floor(points / voxel).astype(np.int64) + _KEY_OFFSET
+    if (idx < 0).any() or (idx >= 1 << _KEY_BITS).any():
+        raise StrayError("A depth point lies over 20 km from the origin; the poses are broken.")
+    return (idx[:, 0] << (2 * _KEY_BITS)) | (idx[:, 1] << _KEY_BITS) | idx[:, 2]
+
+
+def _spread(rank: np.ndarray, size: np.ndarray, want: np.ndarray, phase: np.ndarray) -> np.ndarray:
+    """
+    Of each group's `size` members (ranked 0..size-1), pick `want`, evenly
+    spaced; `phase` (0..size-1) shifts where the spacing starts so different
+    groups do not all pick the same ranks. Exactly min(want, size) per group.
+    """
+    a = (rank * want + phase) // size
+    b = ((rank + 1) * want + phase) // size
+    return b > a
+
+
+class VoxelFusion:
+    """
+    LiDAR fused frame by frame into one point per voxel, without holding
+    every depth sample of the capture: each frame is reduced to one sighting
+    per voxel it saw as it arrives, which is also what a COLMAP track needs
+    (a point is observed at most once in an image).
+    """
+
+    def __init__(self, voxel: float = VOXEL_M) -> None:
+        self.voxel = voxel
+        self._parts: list[tuple[np.ndarray, ...]] = []
+        self.frames = 0
+
+    def add(self, world: np.ndarray, pixels: np.ndarray, colours: np.ndarray) -> int:
+        """Add the next frame (image index = call order). Returns its voxel count."""
+        image = self.frames
+        self.frames += 1
+        if len(world) == 0:
+            return 0
+        keys = _voxel_keys(np.asarray(world, np.float64), self.voxel)
+        uniq, inverse, counts = np.unique(keys, return_inverse=True, return_counts=True)
+        inverse = inverse.ravel()
+        n = len(uniq)
+
+        def sums(values: np.ndarray) -> np.ndarray:
+            values = np.asarray(values, np.float64)
+            return np.column_stack(
+                [np.bincount(inverse, weights=values[:, k], minlength=n)
+                 for k in range(values.shape[1])]
+            )
+
+        self._parts.append((
+            uniq, np.full(n, image, np.int32), counts.astype(np.int32),
+            sums(world), sums(colours), sums(pixels) / counts[:, None],
+        ))
+        return n
+
+    def finish(self, max_track: int = MAX_TRACK, min_frame_obs: int = MIN_FRAME_OBS) -> FusedPoints:
+        """
+        The fused points and which sightings to keep: per point, at most
+        `max_track` frames, spread along the trajectory (frame order) rather
+        than the first few — the first frames to see a wall would otherwise
+        take every slot and later frames get no depth at all. A frame left
+        with fewer than `min_frame_obs` gets more of its own sightings back,
+        so no frame that saw something trains without depth.
+        """
+        if max_track < 1:
+            raise ValueError("max_track must be at least 1")
+        frames = self.frames
+        if not self._parts:
+            empty = np.zeros(0, np.int64)
+            return FusedPoints(np.zeros((0, 3)), np.zeros((0, 3)), empty, empty,
+                               np.zeros((0, 2)), np.zeros(frames, np.int64),
+                               np.zeros(frames, np.int64))
+        keys, image, counts, xyz, rgb, xy = (np.concatenate(c) for c in zip(*self._parts,
+                                                                            strict=True))
+        _, point_of = np.unique(keys, return_inverse=True)
+        point_of = point_of.ravel()
+        points_n = int(point_of.max()) + 1
+
+        def mean(sums: np.ndarray) -> np.ndarray:
+            total = np.bincount(point_of, weights=counts, minlength=points_n)
+            return np.column_stack(
+                [np.bincount(point_of, weights=sums[:, k], minlength=points_n)
+                 for k in range(3)]
+            ) / total[:, None]
+
+        # Sightings ranked by frame within each point.
+        order = np.lexsort((image, point_of))
+        point_sorted = point_of[order]
+        track = np.bincount(point_of, minlength=points_n)
+        starts = np.r_[0, np.cumsum(track)[:-1]]
+        rank = np.arange(len(order)) - np.repeat(starts, track)
+        size = track[point_sorted]
+        # A cheap hash of the point id as the phase, so frames share fairly.
+        phase = (point_sorted.astype(np.int64) * 2654435761) % size
+        pick = _spread(rank, size, np.full(len(order), max_track), phase)
+        chosen = order[pick]
+
+        per_image = np.bincount(image[chosen], minlength=frames)
+        need = np.maximum(min_frame_obs - per_image, 0)
+        spare = order[~pick]
+        spare = spare[need[image[spare]] > 0]
+        if len(spare):
+            spare = spare[np.argsort(image[spare], kind="stable")]
+            img = image[spare]
+            avail = np.bincount(img, minlength=frames)
+            first = np.r_[0, np.cumsum(avail)[:-1]]
+            r = np.arange(len(spare)) - np.repeat(first, avail)
+            extra = _spread(r, avail[img], np.minimum(need, avail)[img],
+                            np.zeros(len(spare), np.int64))
+            chosen = np.concatenate([chosen, spare[extra]])
+
+        chosen = chosen[np.lexsort((point_of[chosen], image[chosen]))]
+        return FusedPoints(
+            points=mean(xyz),
+            colours=mean(rgb),
+            obs_point=point_of[chosen],
+            obs_image=image[chosen].astype(np.int64),
+            obs_xy=xy[chosen],
+            per_image=np.bincount(image[chosen], minlength=frames),
+            seen_per_image=np.bincount(image, minlength=frames),
+        )
 
 
 def fuse(
     world: list[np.ndarray], pixels: list[np.ndarray], colours: list[np.ndarray],
-    voxel: float = VOXEL_M, max_track: int = MAX_TRACK,
+    voxel: float = VOXEL_M, max_track: int = MAX_TRACK, min_frame_obs: int = MIN_FRAME_OBS,
 ) -> FusedPoints:
-    """
-    One point per occupied voxel across all frames, at the mean of what fell
-    in it, remembering up to `max_track` frames that saw it. The sightings
-    are what the trainer's depth loss supervises; the voxel keeps a few
-    hundred frames of LiDAR from becoming millions of duplicate points.
-    """
-    xyz = np.vstack(world)
-    rgb = np.vstack(colours).astype(np.float64)
-    xy = np.vstack(pixels)
-    image = np.concatenate([np.full(len(w), i) for i, w in enumerate(world)])
+    """`VoxelFusion` over frames already in memory (image index = list order)."""
+    fusion = VoxelFusion(voxel)
+    for w, p, c in zip(world, pixels, colours, strict=True):
+        fusion.add(w, p, c)
+    return fusion.finish(max_track, min_frame_obs)
 
-    keys = np.floor(xyz / voxel).astype(np.int64)
-    _, voxel_of, counts = np.unique(keys, axis=0, return_inverse=True, return_counts=True)
-    voxel_of = voxel_of.ravel()
-    n = len(counts)
-    sums = np.zeros((n, 3))
-    np.add.at(sums, voxel_of, xyz)
-    rgb_sums = np.zeros((n, 3))
-    np.add.at(rgb_sums, voxel_of, rgb)
 
-    order = np.argsort(voxel_of, kind="stable")
-    starts = np.r_[0, np.cumsum(counts)[:-1]]
-    rank = np.arange(len(order)) - np.repeat(starts, counts)
-    kept = order[rank < max_track]
-    return FusedPoints(
-        points=sums / counts[:, None],
-        colours=rgb_sums / counts[:, None],
-        obs_point=voxel_of[kept],
-        obs_image=image[kept],
-        obs_xy=xy[kept],
-    )
+def pose_motion(capture: StrayCapture, frame_numbers: list[int]) -> np.ndarray:
+    """
+    How far the phone moved between consecutive candidate frames, in units
+    where 1.0 is 2 cm or 2° (whichever is more). Frames without a pose of
+    their own take the nearest one.
+    """
+    rows = np.searchsorted(capture.frames, frame_numbers).clip(0, len(capture) - 1)
+    poses = capture.cam_to_world[rows]
+    moved = np.zeros(len(rows))
+    if len(rows) > 1:
+        step = np.linalg.norm(np.diff(poses[:, :3, 3], axis=0), axis=1)
+        relative = np.einsum("nji,njk->nik", poses[:-1, :3, :3], poses[1:, :3, :3])
+        cos = np.clip((np.trace(relative, axis1=1, axis2=2) - 1) / 2, -1, 1)
+        moved[1:] = np.maximum(step / 0.02, np.degrees(np.arccos(cos)) / 2.0)
+    return moved
 
 
 def tracking_jumps(capture: StrayCapture, margin: int = 3) -> set[int]:
@@ -282,66 +412,107 @@ class DatasetReport:
     observations: int
     width: int
     height: int
+    #: Per frame in the dataset: depth sightings the trainer supervises.
+    observations_per_frame: dict[str, int]
+    #: Frames left out, by reason, so none goes missing silently.
+    dropped_tracking: list[str]
+    dropped_no_pose: list[str]
+    dropped_no_depth: list[str]
+    max_track: int
+
+    def summary(self) -> dict:
+        counts = np.array(list(self.observations_per_frame.values()) or [0])
+        return {
+            "min": int(counts.min()), "median": int(np.median(counts)), "max": int(counts.max()),
+            "frames_under_100": int((counts < 100).sum()),
+        }
 
 
 def build_dataset(
-    capture: StrayCapture, frames: list[Path], out_dir: Path, offset: int = 0
+    capture: StrayCapture, frames: list[Path], out_dir: Path, offset: int = 0,
+    max_track: int = MAX_TRACK, min_frame_obs: int = MIN_FRAME_OBS,
 ) -> DatasetReport:
     """
     The trainer's input — `images/` and a COLMAP `sparse/` model — from
     ARKit's poses and LiDAR depth instead of structure from motion.
 
     `frames` are the chosen video frames, named frame_<number>.png, already
-    scaled; the intrinsics are scaled to match.
+    scaled; the intrinsics are scaled to match. Frames are read one at a
+    time. `out_dir` is written in full or not at all: it is built beside the
+    target and swapped in at the end.
     """
     import shutil
 
     from .colmap import PosedImage, write_model
+    from .provenance import replace_dir
 
     row_of = {int(f): i for i, f in enumerate(capture.frames)}
     unstable = tracking_jumps(capture)
-    # A video frame shows the instant of pose row (frame number - offset).
-    chosen = [(path, row_of[n]) for path in frames
-              if (n := int(path.stem.split("_")[1]) - offset) in row_of
-              and row_of[n] not in unstable]
+    chosen: list[tuple[Path, int]] = []
+    no_pose: list[str] = []
+    jumps: list[str] = []
+    for path in frames:
+        # A video frame shows the instant of pose row (frame number - offset).
+        n = int(path.stem.split("_")[1]) - offset
+        if n not in row_of:
+            no_pose.append(path.name)
+        elif row_of[n] in unstable:
+            jumps.append(path.name)
+        else:
+            chosen.append((path, row_of[n]))
     if len(chosen) < 20:
-        raise StrayError(f"Only {len(chosen)} frames have a pose; the capture is too short.")
+        raise StrayError(f"Only {len(chosen)} frames have a stable pose; the capture is too short.")
 
     first = cv2.imread(str(chosen[0][0]))
     height, width = first.shape[:2]
     s = width / capture.size[0]
 
-    images_dir = out_dir / "images"
-    shutil.rmtree(out_dir, ignore_errors=True)
-    images_dir.mkdir(parents=True)
+    fusion = VoxelFusion()
+    kept: list[tuple[Path, int]] = []
+    no_depth: list[str] = []
+    with replace_dir(out_dir) as build:
+        images_dir = build / "images"
+        images_dir.mkdir(parents=True)
+        for path, row in chosen:
+            pts, xy = depth_points(capture, row)
+            if len(pts) < MIN_DEPTH_POINTS:
+                no_depth.append(path.name)
+                continue
+            xy = xy * s
+            image = cv2.imread(str(path))
+            if image is None or image.shape[:2] != (height, width):
+                raise StrayError(f"{path.name} is unreadable or not {width}x{height}")
+            ix = np.clip(xy[:, 0].astype(int), 0, width - 1)
+            iy = np.clip(xy[:, 1].astype(int), 0, height - 1)
+            fusion.add(pts, xy, image[iy, ix, ::-1])  # BGR -> RGB
+            shutil.copy2(path, images_dir / path.name)
+            kept.append((path, row))
+        if len(kept) < 20:
+            raise StrayError(f"Only {len(kept)} frames have usable LiDAR depth.")
+        fused = fusion.finish(max_track, min_frame_obs)
 
-    world, pixels, colours = [], [], []
-    for path, row in chosen:
-        shutil.copy2(path, images_dir / path.name)
-        pts, xy = depth_points(capture, row)
-        xy = xy * s
-        image = cv2.imread(str(path))
-        ix = np.clip(xy[:, 0].astype(int), 0, width - 1)
-        iy = np.clip(xy[:, 1].astype(int), 0, height - 1)
-        world.append(pts)
-        pixels.append(xy)
-        colours.append(image[iy, ix, ::-1])  # BGR -> RGB
-    fused = fuse(world, pixels, colours)
-
-    posed = []
-    for i, (path, row) in enumerate(chosen):
-        mine = fused.obs_image == i
-        pose = capture.cam_to_world[row]
-        rotation = pose[:3, :3].T
-        posed.append(
-            PosedImage(
-                name=path.name,
-                rotation=rotation,
-                translation=-rotation @ pose[:3, 3],
-                intrinsics=tuple(capture.intrinsics[row] * s),
-                points2d=fused.obs_xy[mine],
-                point_ids=fused.obs_point[mine] + 1,
+        posed = []
+        bounds = np.searchsorted(fused.obs_image, np.arange(len(kept) + 1))
+        for i, (path, row) in enumerate(kept):
+            mine = slice(bounds[i], bounds[i + 1])
+            pose = capture.cam_to_world[row]
+            rotation = pose[:3, :3].T
+            posed.append(
+                PosedImage(
+                    name=path.name,
+                    rotation=rotation,
+                    translation=-rotation @ pose[:3, 3],
+                    intrinsics=tuple(capture.intrinsics[row] * s),
+                    points2d=fused.obs_xy[mine],
+                    point_ids=fused.obs_point[mine] + 1,
+                )
             )
-        )
-    write_model(out_dir / "sparse", width, height, posed, fused.points, fused.colours)
-    return DatasetReport(len(chosen), len(fused.points), len(fused.obs_point), width, height)
+        write_model(build / "sparse", width, height, posed, fused.points, fused.colours)
+    return DatasetReport(
+        frames=len(kept), points=len(fused.points), observations=len(fused.obs_point),
+        width=width, height=height,
+        observations_per_frame={p.name: int(c) for (p, _), c in zip(kept, fused.per_image,
+                                                                     strict=True)},
+        dropped_tracking=jumps, dropped_no_pose=no_pose, dropped_no_depth=no_depth,
+        max_track=max_track,
+    )
