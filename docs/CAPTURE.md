@@ -43,6 +43,23 @@ pnpm run pipeline run-all "C:\captures\stray\8a3f1c2e" --project flat-01 --roomp
 oom.glb"
 ```
 
+**What the first real Stray room (room3) showed** — measured, see
+`docs/PIPELINE.md` "Measured":
+
+- **Walk the room's edges, not only its middle.** room3's path stayed in a
+  3.5 × 1.6 m strip in the centre. Views between filmed frames score about
+  25 dB; views from a stretch of the walk the splat never trained on score
+  18 dB. A splat is only as good as the nearest place the phone was.
+- **Turn slower still, and look up on purpose.** Fast turns smear and
+  double edges (the crown moulding came out twice), and a 3.3 m ceiling is
+  only seen when the phone points at it.
+- **One recording per room, one Polycam Floorplan of the whole flat, same
+  visit.** Separate Stray recordings do not share a coordinate origin; the
+  flat's scan is what can place the rooms together (not built yet: one room
+  at a time today).
+- After copying, run `pnpm run pipeline check --project <id>` once frames and
+  poses exist: it reads the capture before an hour of training goes into it.
+
 The rest of this guide covers the older **video-only** capture (Blackmagic
 Camera), still supported: the pipeline then recovers camera positions with
 COLMAP, which struggles on plain walls and gives no real scale.
