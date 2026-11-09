@@ -38,10 +38,20 @@ class VerifyFailed(RuntimeError):
     pass
 
 
+def _windows_path(arg: str) -> str:
+    """A WSL path as Windows' Node sees it (`wslpath -w`), for npx run through interop."""
+    if not (arg.startswith("/") and (Path(arg).exists() or Path(arg).parent.is_dir())):
+        return arg
+    return subprocess.run(["wslpath", "-w", arg], capture_output=True, text=True,
+                          check=True).stdout.strip()
+
+
 def splat_transform(*args: str) -> str:
     npx = shutil.which("npx") or shutil.which("npx.cmd")
     if npx is None:
         raise VerifyFailed("npx (Node) is not on PATH; splat-transform needs it.")
+    if npx.startswith("/mnt/"):  # Windows' Node from inside WSL: Windows paths
+        args = tuple(_windows_path(a) for a in args)
     done = subprocess.run([npx, "-y", SPLAT_TRANSFORM, "-q", "-w", *args],
                           capture_output=True, text=True, timeout=1800)
     if done.returncode:
