@@ -114,7 +114,11 @@ def copy(src: Path, dst: Path) -> None:
         npx = shutil.which("npx")
         if not npx:
             raise SystemExit("npx is needed to compress the glTF files")
-        subprocess.run([npx, "--yes", *MESHOPT, str(src), str(dst), *MESHOPT_OPTIONS],
+        paths = [str(src), str(dst)]
+        if npx.startswith("/mnt/"):  # Windows' Node from inside WSL: Windows paths
+            paths = [subprocess.run(["wslpath", "-w", p], capture_output=True, text=True,
+                                    check=True).stdout.strip() for p in paths]
+        subprocess.run([npx, "--yes", *MESHOPT, *paths, *MESHOPT_OPTIONS],
                        check=True, capture_output=True)
     else:
         shutil.copy2(src, dst)
