@@ -183,7 +183,24 @@ def align_scene(
                         warnings.append(f"The splat's floor sits {gap * 100:+.1f} cm from the "
                                         "LiDAR floor; the LiDAR floor was used.")
                 except FloorRejected as exc:
-                    floor_report["splat_floor"] = f"not found: {exc}"
+                    floor_report["splat_floor"] = f"not found as a layer: {exc}"
+                    # A long MCMC run leaves the floor in faint splats that
+                    # form no layer of opaque ones (room3 at 30k steps); where
+                    # they sit, weighted by opacity, still says where the floor
+                    # shows.
+                    near = np.abs(pts[:, 1] - floor.height) < 0.05
+                    if near.sum() > 1000:
+                        h = pts[near, 1]
+                        w = cloud.opacities[near].astype(np.float64)
+                        order = np.argsort(h)
+                        cum = np.cumsum(w[order])
+                        gap = float(h[order][np.searchsorted(cum, cum[-1] / 2)]) - floor.height
+                        floor_report["splat_minus_lidar_m"] = round(gap, 4)
+                        if abs(gap) <= 0.03:
+                            floor_report["from"] = ("LiDAR, levelled to the splats there "
+                                                    "(opacity-weighted)")
+                            floor_report["lidar_height"] = round(floor.height, 4)
+                            floor.height += gap
             if floor.tilt_deg > WARN_FLOOR_TILT_DEG:
                 warnings.append(f"The floor's own points lean {floor.tilt_deg:.1f}° from ARKit's "
                                 "gravity; gravity was kept. Check the room is level in the viewer.")
@@ -768,6 +785,48 @@ def _check_spz(path: Path, expected: SplatCloud) -> dict:
             "bounds": [np.round(b, 3).tolist() for b in back.bounds()]}
 
 
+#: Above this share of opacity x area outside the crop box, the crop is
+#: taking the backdrop the room's surfaces show through (room3 at 30k
+#: steps: 98.8%, and cropping cost 2.75 dB with stained ceilings).
+BACKDROP_WARN = 0.5
+
+
+#: SPZ stores positions as 24-bit fixed point with 12 fractional bits:
+#: +-2048 m. A backdrop splat further out wraps round; pulled in to here.
+BACKDROP_RADIUS_M = 1000.0
+
+
+def pull_in_backdrop(cloud: SplatCloud, centre: np.ndarray,
+                     radius: float = BACKDROP_RADIUS_M) -> tuple[SplatCloud, int]:
+    """
+    Splats further than `radius` from `centre` moved in along their own
+    direction to `radius`, their size scaled by the same factor: seen from
+    the room they cover the same angle, so the backdrop looks the same, and
+    it fits SPZ's coordinate range. Returns the cloud and how many moved.
+    """
+    offset = cloud.positions.astype(np.float64) - centre
+    dist = np.linalg.norm(offset, axis=1)
+    far = dist > radius
+    if not far.any():
+        return cloud, 0
+    factor = np.ones(len(cloud))
+    factor[far] = radius / dist[far]
+    positions = (centre + offset * factor[:, None]).astype(np.float32)
+    scales = (cloud.scales * factor[:, None]).astype(np.float32)
+    return SplatCloud(positions, cloud.colours, cloud.opacities, scales, cloud.rotations,
+                      sh_rest=cloud.sh_rest), int(far.sum())
+
+
+def backdrop_share(cloud: SplatCloud, lo: np.ndarray, hi: np.ndarray) -> float:
+    """Share of the cloud's opacity x area (two largest axes) outside the box."""
+    if len(cloud) == 0:
+        return 0.0
+    s = np.sort(cloud.scales.astype(np.float64), axis=1)
+    weight = cloud.opacities.astype(np.float64) * s[:, 1] * s[:, 2]
+    outside = ~np.all((cloud.positions >= lo) & (cloud.positions <= hi), axis=1)
+    return float(weight[outside].sum() / max(weight.sum(), 1e-30))
+
+
 def export_scene(
     paths: ProjectPaths,
     max_splats: int = 1_500_000,
@@ -807,8 +866,21 @@ def export_scene(
         lo = np.array([allpts[:, 0].min() - crop_margin, -0.5, allpts[:, 1].min() - crop_margin])
         hi = np.array([allpts[:, 0].max() + crop_margin, height + 0.5,
                        allpts[:, 1].max() + crop_margin])
+        before = cloud
         cloud = crop_to_box(cloud, lo, hi)
+        share = backdrop_share(before, lo, hi)
+        if share > BACKDROP_WARN:
+            warnings.append(
+                f"The crop removed {share:.0%} of the scene's opaque coverage (opacity x area) "
+                "in big splats outside the room. Its walls are partly see-through and lean "
+                "on that backdrop: cropped, they come out stained. Check `pipeline compare`; "
+                "export with --no-crop if the exported score drops.")
     cropped = total - len(cloud)
+    centre = np.r_[np.vstack(polys).mean(axis=0), 1.5][[0, 2, 1]]
+    cloud, pulled = pull_in_backdrop(cloud, centre)
+    if pulled:
+        warnings.append(f"{pulled:,} backdrop splats beyond {BACKDROP_RADIUS_M:.0f} m pulled in "
+                        "along their direction (same angle from the room; SPZ holds +-2 km).")
     cloud = cap_splat_count(cloud, max_splats)
     # Masks after cropping and capping: what is published is what is masked.
     cloud, privacy = apply_privacy_masks(cloud, manifest.privacyMasks)

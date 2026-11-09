@@ -300,7 +300,11 @@ published.
 ### export
 
 1. **Crop** to the rooms plus 0.75 m (`--crop-margin`); `--no-crop` keeps
-   everything.
+   everything. It **warns** when the crop takes over half of the scene's
+   opaque coverage (opacity x area): the room's surfaces are see-through and
+   lean on a backdrop outside (room3 at 30k steps; cropped, its ceiling came
+   out stained). A backdrop beyond 1 km is **pulled in** along its direction,
+   its size scaled to keep its angle from the room, because SPZ holds ±2 km.
 2. **Cap** the count (`--max-splats`).
 3. **Privacy masks** from the editor are applied to the splats themselves,
    before anything is written: `delete` drops every splat reaching into the
@@ -372,6 +376,91 @@ Segmentation-based detection (M3) is still unbuilt, by design: the brief
 asks for a confirmed model shortlist first. `export` covers a scanned room.
 
 ## Measured
+
+### room3, the first Stray capture, rebaked 2026-11-08
+
+One room (no RoomPlan scan), 9,563 posed frames, 160 s at 60 fps. `check`:
+numbering, timestamps (59.98 fps, no hitches), depth units and aspect,
+intrinsics and pose convention all clean; LiDAR floor 0.36° from ARKit's up,
+cameras 1.44–1.47 m above it; every compass direction faced; depth and video
+edges agree at a −1 frame offset, steady along the walk (the samples where
+the phone turned enough to tell), corners 58% as well as the centre.
+
+**What the old pipeline had published** (2026-10-17, kept in
+`work/baseline/`): the floor fit had lain on a sloped surface, **tilting the
+scene 6.9° off ARKit's gravity and putting the floor 0.7 m too high**, and
+export's crop (from 0.5 m under that floor) had **cut the real parquet away**:
+every view looking down showed white smears. The LiDAR fusion had 510,159
+same-image duplicate sightings (18%).
+
+**Short experiments** (7,000 steps, 1.5 M splats, ~10 min each, one setting
+changed from the defaults; held-out = every 8th frame, gsplat's own eval;
+8 views = `compare` on the same 8 held-out frames):
+
+| Experiment | Held-out PSNR / SSIM / LPIPS | 8 views PSNR | Verdict |
+|---|---|---|---|
+| defaults (depth on, pose refinement on) | 23.86 / 0.896 / 0.286 | 24.76 | baseline |
+| depth supervision off | 23.79 / 0.895 / 0.290 | 24.59 | no measurable gain either way at 7k |
+| pose refinement off | 23.96 / 0.897 / 0.298 | 24.23 | refinement moved poses 0.08 cm, 0.05°: nothing to correct |
+| pose refinement lr 1e-4 (10x) | 23.12 / 0.880 / 0.275 | 23.92 | moved 0.55 cm (max 1.1 cm); PSNR 0.7 dB down, LPIPS slightly better: mixed, no clear gain |
+| appearance embeddings (`--app-opt`) | 21.52 / 0.885 / 0.286 | 20.59 (exported) | worse, and the export loses view-dependent colour |
+| **displaced**: 10% of the walk left out | 24.52 on its own held-out | **18.02** (SSIM 0.748) on the left-out stretch | the honest novel-view number |
+
+The defaults stay. What limits the room is coverage (18 dB a stretch away
+from the filmed path against 25 dB between filmed frames) and soft, doubled
+edges on fast turns (crown moulding twice) that neither sync (steady),
+poses (refining them harder gave no clear gain) nor depth supervision explains —
+most likely rolling shutter and motion blur in turns, which gsplat 1.5.3's
+pinhole trainer does not model. Both are capture limits: `docs/CAPTURE.md`.
+
+**The bake** (defaults, 30,000 steps, 52.7 min, peak 2.3 GB VRAM; records in
+`work/runs/`, trainer patch and seed recorded):
+
+| Stage | Result |
+|---|---|
+| poses | 450 frames (1 left out at a tracking jump), 832,128 LiDAR points, 2.42 M sightings, every frame 478–10,788 (median 5,209) |
+| train | held-out **25.66 dB / 0.901 / 0.222** (the old pipeline's: 25.65 / 0.902 / 0.220 — interpolation between frames was never what failed); poses refined 0.27 cm, 0.14° median |
+| align | ARKit gravity kept; floor from LiDAR, levelled +2.1 cm to the splats on it; cameras 1.44 m above it; ceiling 3.29 m; 4 furniture obstacles |
+| export | 1.5 M splats, **38.3 MB** download, SH 3; every file read back, and splat-transform agrees exactly |
+
+Same 12 held-out views rendered at every stage (`compare`): trained **24.59 dB**,
+aligned **24.59** (identical: the transform carries positions, orientations
+and SH intact), exported **24.22** uncropped — and **21.68** with the default
+crop. The crop is where quality was lost: at 30k steps the walls and ceiling
+are partly see-through (median opacity 0.003) and lean on big backdrop
+splats outside the room (6% of splats, 98.8% of the opacity x area); cropped,
+the ceiling comes out stained (one view 24.7 → 13.7 dB). Export now warns
+when its crop takes over half of that coverage, and pulls a backdrop beyond
+1 km in along its direction (SPZ holds ±2 km; uncropped, 862 splats wrapped
+round and the read-back refused the file). room3 is published with
+`--no-crop`. That the room's own surfaces are see-through is a training
+result, not fixed here.
+
+Before and after from the same viewer cameras (gsplat renders of each
+published SPZ, `var/evidence/before-after/sheet.jpg`): the old export shows a
+black void wherever it looks down — the floor cropped away — and the new one
+the herringbone parquet, level.
+
+Reproduce:
+
+```bash
+pnpm run pipeline ingest data/projects/room3/input/stray --project room3   # in place
+pnpm run pipeline frames  --project room3
+pnpm run pipeline poses   --project room3
+pnpm run pipeline check   --project room3
+pnpm run pipeline train   --project room3
+pnpm run pipeline align   --project room3
+pnpm run pipeline export  --project room3 --no-crop
+pnpm run pipeline verify  --project room3
+pnpm run pipeline compare --project room3 --label final --views 12
+```
+
+**Not measured here**: room3 in the browser after the final bake (the
+session's sandbox stopped the dev servers starting; the 7k dry run was
+walked, floored and checked in the browser the day before), its load time and
+frame times, and any phone. flat-02 has no capture at all.
+
+### Mip-NeRF 360 "room", 2026-10-03
 
 First real run, 2026-10-03, on the 2080 Super. **Input: Mip-NeRF 360
 "room" (311 photos at 1556x1038), turned into a 3 fps video**, because no

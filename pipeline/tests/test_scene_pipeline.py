@@ -390,3 +390,62 @@ def test_a_blurred_region_keeps_its_shape_and_loses_its_detail():
     for g in range(5):  # one colour per cell
         assert np.ptp(out.colours[inside][group.ravel() == g], axis=0).max() < 1e-6
     np.testing.assert_array_equal(out.colours[~inside], cloud.colours[~inside])
+
+
+def test_export_warns_when_the_crop_takes_the_backdrop(capture):
+    """room3 at 30k steps: see-through walls leaned on far splats; cropping stained them."""
+    paths, _, _ = capture
+    align_scene(paths, "proj")
+    scene = read_ply(aligned_dir(paths) / "scene.ply")
+    assert not any("backdrop" in w for w in export_scene(paths).warnings)
+    far = SplatCloud(
+        positions=np.array([[40.0, 5.0, 40.0]], dtype=np.float32),
+        colours=np.ones((1, 3), dtype=np.float32),
+        opacities=np.ones(1, dtype=np.float32),
+        scales=np.full((1, 3), 20.0, dtype=np.float32),  # a backdrop the size of a building
+        rotations=np.array([[1.0, 0, 0, 0]], dtype=np.float32),
+        sh_rest=np.zeros((1, 3, 3), dtype=np.float32),
+    )
+    merged = SplatCloud(*(np.concatenate([getattr(scene, f), getattr(far, f)])
+                          for f in ("positions", "colours", "opacities", "scales", "rotations",
+                                    "sh_rest")))
+    write_ply(merged, aligned_dir(paths) / "scene.ply")
+    assert any("backdrop" in w for w in export_scene(paths).warnings)
+
+
+def test_a_far_backdrop_is_pulled_in_and_still_exports(capture):
+    """
+    SPZ holds positions to +-2048 m. Uncropped, room3's backdrop reached
+    kilometres out and wrapped round; export's read-back refused it.
+    """
+    from walkthrough_pipeline.scene import BACKDROP_RADIUS_M, pull_in_backdrop
+    from walkthrough_pipeline.splat import read_spz
+
+    paths, _, _ = capture
+    align_scene(paths, "proj")
+    scene = read_ply(aligned_dir(paths) / "scene.ply")
+    far = SplatCloud(
+        positions=np.array([[3000.0, 400.0, -4000.0]], dtype=np.float32),
+        colours=np.ones((1, 3), dtype=np.float32), opacities=np.ones(1, dtype=np.float32),
+        scales=np.full((1, 3), 50.0, dtype=np.float32),
+        rotations=np.array([[1.0, 0, 0, 0]], dtype=np.float32),
+        sh_rest=np.zeros((1, 3, 3), dtype=np.float32),
+    )
+    centre = np.array([1.0, 1.5, 2.0])
+    moved, n = pull_in_backdrop(far, centre)
+    assert n == 1
+    offset = moved.positions[0] - centre
+    assert np.linalg.norm(offset) == pytest.approx(BACKDROP_RADIUS_M, rel=1e-5)
+    before = far.positions[0] - centre
+    np.testing.assert_allclose(offset / np.linalg.norm(offset), before / np.linalg.norm(before),
+                               atol=1e-6)  # same direction
+    ratio = moved.scales[0, 0] / np.linalg.norm(offset)
+    assert ratio == pytest.approx(50.0 / np.linalg.norm(before), rel=1e-4)  # same angle
+
+    merged = SplatCloud(*(np.concatenate([getattr(scene, f), getattr(far, f)])
+                          for f in ("positions", "colours", "opacities", "scales", "rotations",
+                                    "sh_rest")))
+    write_ply(merged, aligned_dir(paths) / "scene.ply")
+    report = export_scene(paths, crop_margin=None)
+    assert any("pulled in" in w for w in report.warnings)
+    assert np.abs(read_spz(paths.scene / "scene.spz").positions).max() < 2048

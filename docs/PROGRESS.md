@@ -7,6 +7,75 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-11-08 — the capture pipeline, audited and fixed; room3 rebaked
+
+The audit's list (defects A–D, reruns, preflight, helpers, experiments,
+floors, structure, output, the bake). **flat-02 has no capture** — it is
+the Blender rebuild from a Polycam scan and photos — so the corrected
+capture pipeline was run on **room3**, the only Stray (ARKit + LiDAR)
+capture on this machine, one room.
+
+**Defects**
+
+- **A. run-all**: already calling `ingest(capture=...)` on this branch; now
+  tested through Typer with the slow stages stubbed (order and every
+  option). The same test caught the same class of bug again during this
+  work (`train --displaced` not passed by `run-all`).
+- **B. LiDAR fusion**: one sighting per voxel per image (valid COLMAP
+  tracks), up to 6 spread along the walk, at least 300 per frame, frames
+  without depth left out and named, streamed frame by frame. Synthetic
+  reproduction [6, 0, 0] → [10, 10, 10]. On room3's 450 frames: 510,159
+  duplicate same-image sightings (18%) → 0; sightings per point from 2.62
+  to 2.91 distinct frames, spanning 38.9 frames of the walk on average
+  instead of 28.3. room3 never had a frame without depth.
+- **C. Metric scale**: bounds held through every ICP step and the result
+  (the 1.12-from-0.98–1.02 reproduction stays at ≤ 1.02 and reports a bad
+  fit); ARKit captures fitted rigidly, with a free-scale probe that refuses
+  a scan of another size; multi-start (one wall hidden no longer sends the
+  fit half a room off); RMS/p90, coverage and lean per wall.
+- **D. Gravity**: ARKit's kept; the floor gives height only, and floor
+  candidates are checked (area, coverage, camera clearance); a video's
+  floor may correct up by 10°, not 35°. **room3's old export was tilted
+  6.9° off ARKit's gravity with the floor 0.7 m too high, and export's crop
+  had cut the real parquet floor away** (`var/evidence/browser-before`).
+
+**Reruns** — run records with input fingerprints, code and tool versions,
+settings, seed and upstream run ids; stale inputs refused; scan reuse
+explicit; atomic outputs; failed runs keep logs and partial output; align
+drafts and export publishes only after reading every file back.
+
+**Preflight, helpers, experiments, floors, output** — see
+`docs/PIPELINE.md` (check, verify, compare, compare-browser, rerun;
+splat-transform agrees exactly with our SPZ and SH rotation; floors per
+room with shading maps; privacy masks applied to every published file;
+catalog floors at their published physical size).
+
+**room3 rebaked** (details and the experiment table: `docs/PIPELINE.md`
+"Measured"): held-out 25.66 dB, 38.3 MB; trained, aligned and exported
+renders of the same 12 views 24.59 / 24.59 / 24.22 dB. Six short experiments
+changed one setting each; none beat the defaults (depth and pose refinement
+make no measurable difference on this capture, appearance embeddings cost
+4 dB); views from a stretch of the walk never trained on score 18.0 dB
+against ~25 between frames — coverage is the limit. Found on the way and
+fixed: the default crop removed the backdrop see-through walls lean on
+(−2.9 dB, stained ceilings; now warned, and room3 exported uncropped), SPZ's
+±2 km range (backdrop pulled in), a 2.6 m guessed wall height that cropped
+a 3.3 m ceiling, the camera walking into furniture (LiDAR obstacles), floor
+textures laid at up to 7x the wrong scale (now ambientCG's published sizes).
+
+**Verified**: 439 Python tests in WSL (pipeline and API), 166 web, eslint,
+tsc and ruff green; the desktop e2e suite 22 of 23 (the landing test expects
+demo-01 to be the featured flat, which on this machine it is not; CI is
+unaffected), including the new per-room floor test; `verify` against
+splat-transform on every published file; in the browser on the 7k dry run:
+floor replaced and shaded, walk stopped by walls and furniture.
+**Not verified**: room3 in the browser after the final bake, its load time
+and frame times (the sandbox in the last session refused to start the dev
+servers: Windows error 448 on uv's and pnpm's junctions), any phone, Brush,
+SuperSplat opening our file (it needs WebGPU; headless Chrome here has none),
+multi-room assembly (not built; there is no multi-room capture), and
+anything for flat-02, which has no capture.
+
 ## 2026-11-08 — flat-02, the owner's review of the live flat
 
 Items 110–116 of `docs/flat-02-punchlist.md`.
