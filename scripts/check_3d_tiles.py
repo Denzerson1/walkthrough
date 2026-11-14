@@ -35,7 +35,8 @@ def token() -> str:
 
 
 def get(url: str, headers: dict | None = None) -> dict:
-    request = urllib.request.Request(url, headers={"User-Agent": "walkthrough-tiles-check", **(headers or {})})
+    agent = {"User-Agent": "walkthrough-tiles-check"}
+    request = urllib.request.Request(url, headers={**agent, **(headers or {})})
     with urllib.request.urlopen(request, timeout=60) as response:
         return json.loads(response.read())
 
@@ -85,7 +86,8 @@ def finest(lat: float, lon: float) -> dict:
         if ".json" in uri and best["requests"] < 80:
             part = urllib.parse.urlsplit(uri)
             query.update(urllib.parse.parse_qsl(part.query))  # the session id
-            url = urllib.parse.urlunsplit((base.scheme, base.netloc, part.path, urllib.parse.urlencode(query), ""))
+            url = urllib.parse.urlunsplit(
+                (base.scheme, base.netloc, part.path, urllib.parse.urlencode(query), ""))
             best["requests"] += 1
             walk(get(url)["root"], depth + 1)
 
@@ -95,15 +97,18 @@ def finest(lat: float, lon: float) -> dict:
 
 def main(args: list[str]) -> None:
     if args[:1] == ["--site"]:
-        site = json.loads((REPO / "data" / "projects" / args[1] / "input" / "site.json").read_text(encoding="utf-8"))
+        path = REPO / "data" / "projects" / args[1] / "input" / "site.json"
+        site = json.loads(path.read_text(encoding="utf-8"))
         places = [(args[1], site["sceneOrigin"]["latitude"], site["sceneOrigin"]["longitude"])]
         rest = args[2:]
     else:
         places, rest = [], args
-    places += [(f"{rest[i]},{rest[i + 1]}", float(rest[i]), float(rest[i + 1])) for i in range(0, len(rest) - 1, 2)]
+    places += [(f"{rest[i]},{rest[i + 1]}", float(rest[i]), float(rest[i + 1]))
+               for i in range(0, len(rest) - 1, 2)]
     for name, lat, lon in places:
         found = finest(lat, lon)
-        print(f"{name}: finest tile {found['size']:.0f} m across, geometric error {found['error']:.2f} m, "
+        print(f"{name}: finest tile {found['size']:.0f} m across, "
+              f"geometric error {found['error']:.2f} m, "
               f"depth {found['depth']}, {found['requests']} requests")
 
 
