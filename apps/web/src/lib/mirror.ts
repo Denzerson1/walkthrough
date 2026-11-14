@@ -9,6 +9,7 @@
  * full size. The maths is three's Reflector (MIT).
  */
 import * as THREE from 'three';
+import { floatCopy } from './floorSplit';
 
 /** The reflection tinted, not overlay-blended, then tone mapped as the screen is. */
 const SHADER = {
@@ -38,6 +39,38 @@ const SHADER = {
 /** The one buffer every mirror draws into, half-float so lamps keep their range. */
 export function mirrorTarget(width: number, height: number, samples: number): THREE.WebGLRenderTarget {
   return new THREE.WebGLRenderTarget(width, height, { samples, type: THREE.HalfFloatType });
+}
+
+/**
+ * A mirror's glass (`source`, placed by `matrixWorld`) laid in the frame a
+ * reflector wants: its local xy plane, looking along +z. Returns the glass
+ * there and the frame's place in the world, or null for a face whose
+ * normals cancel out. The copy is plain floats: a published model's
+ * positions are 16-bit (KHR_mesh_quantization), and moved in place they
+ * wrapped, which drew every mirror metres from its wall.
+ */
+export function mirrorGlass(
+  source: THREE.BufferGeometry,
+  matrixWorld: THREE.Matrix4,
+): { geometry: THREE.BufferGeometry; frame: THREE.Matrix4 } | null {
+  const geometry = floatCopy(source).applyMatrix4(matrixWorld);
+  // A mirror is its face alone (build_flat), so its normals say where it looks.
+  const normals = geometry.getAttribute('normal');
+  const facing = new THREE.Vector3();
+  for (let i = 0; i < normals.count; i++) {
+    facing.x += normals.getX(i);
+    facing.y += normals.getY(i);
+    facing.z += normals.getZ(i);
+  }
+  if (facing.lengthSq() < 1e-8) return null;
+  geometry.computeBoundingBox();
+  const centre = geometry.boundingBox!.getCenter(new THREE.Vector3());
+  const frame = new THREE.Object3D();
+  frame.position.copy(centre);
+  frame.lookAt(centre.clone().add(facing.normalize()));
+  frame.updateMatrixWorld(true);
+  geometry.applyMatrix4(frame.matrixWorld.clone().invert());
+  return { geometry, frame: frame.matrixWorld };
 }
 
 /**

@@ -55,7 +55,7 @@ import {
   walkableWith,
 } from '../lib/doors';
 import { AutoExposure } from '../lib/exposure';
-import { createMirror, mirrorTarget } from '../lib/mirror';
+import { createMirror, mirrorGlass, mirrorTarget } from '../lib/mirror';
 import { type Finish, surfaceFinish } from '../lib/finishes';
 import { splitFloors } from '../lib/floorSplit';
 import { fetchGlb } from '../lib/glb';
@@ -1888,29 +1888,14 @@ function addMirrors(model: THREE.Object3D): void {
   const maxSide = phone ? 2048 : 3072;
   const toModel = model.matrixWorld.clone().invert();
   for (const node of found) {
-    const geometry = node.geometry.clone().applyMatrix4(node.matrixWorld);
-    // A mirror is its face alone (build_flat), so its normals say where it looks.
-    const normals = geometry.getAttribute('normal');
-    const facing = new THREE.Vector3();
-    for (let i = 0; i < normals.count; i++) {
-      facing.x += normals.getX(i);
-      facing.y += normals.getY(i);
-      facing.z += normals.getZ(i);
-    }
-    if (facing.lengthSq() < 1e-8) continue;
-    geometry.computeBoundingBox();
-    const centre = geometry.boundingBox!.getCenter(new THREE.Vector3());
     // The reflector looks along its local +z: its glass laid in that frame.
-    const frame = new THREE.Object3D();
-    frame.position.copy(centre);
-    frame.lookAt(centre.clone().add(facing.normalize()));
-    frame.updateMatrixWorld(true);
-    geometry.applyMatrix4(frame.matrixWorld.clone().invert());
+    const glass = mirrorGlass(node.geometry, node.matrixWorld);
+    if (!glass) continue;
     // clipBias only a hair: at 3 mm the wall a few millimetres behind the
     // glass was drawn into the reflection, seen at the mirror's edges.
-    const mirror = createMirror(geometry, target, MIRROR_TINT, 0.0004, maxSide);
+    const mirror = createMirror(glass.geometry, target, MIRROR_TINT, 0.0004, maxSide);
     mirror.name = node.name;
-    mirror.applyMatrix4(toModel.clone().multiply(frame.matrixWorld));
+    mirror.applyMatrix4(toModel.clone().multiply(glass.frame));
     mirror.userData.mirror = true;
     model.add(mirror);
     node.visible = false;

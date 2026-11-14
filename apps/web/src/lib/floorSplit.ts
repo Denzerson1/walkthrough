@@ -25,7 +25,7 @@ const middleOf = (piece: Vec2[]): Vec2 =>
  * floats. A model's are often quantized (KHR_mesh_quantization: small
  * integers, scaled by the node), which moving them into place would clamp.
  */
-function floatCopy(geometry: THREE.BufferGeometry): THREE.BufferGeometry {
+export function floatCopy(geometry: THREE.BufferGeometry): THREE.BufferGeometry {
   const index = geometry.index;
   const count = index ? index.count : geometry.getAttribute('position').count;
   const copy = new THREE.BufferGeometry();
