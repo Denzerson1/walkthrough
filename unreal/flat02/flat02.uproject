@@ -1,0 +1,14 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "5.8",
+	"Category": "",
+	"Description": "flat-02 rendered with the real street (Google Photorealistic 3D Tiles via Cesium) and the sun for a date and time. Built by scripts/unreal (docs/FLAT02_UNREAL.md).",
+	"Plugins": [
+		{ "Name": "CesiumForUnreal", "Enabled": true },
+		{ "Name": "SunPosition", "Enabled": true },
+		{ "Name": "PythonScriptPlugin", "Enabled": true },
+		{ "Name": "EditorScriptingUtilities", "Enabled": true },
+		{ "Name": "MovieRenderPipeline", "Enabled": true },
+		{ "Name": "Interchange", "Enabled": true }
+	]
+}
