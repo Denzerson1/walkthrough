@@ -5,8 +5,8 @@ street outside its windows (Google Photorealistic 3D Tiles, streamed), the
 sun where it stands at a chosen date and time, a 4K still and a 30 s video.
 
 **State, 2026-11-14: researched and decided; nothing built in Unreal yet.**
-Unreal Engine is not installed on this machine (only the Epic launcher), and
-four facts are still missing (see "Needed from the owner"). Rule 6 of
+Unreal Engine is not installed on this machine (only the Epic launcher; the
+owner agreed to install it, see "Needed from the owner"). Rule 6 of
 `CLAUDE.md` applies: nothing below is reported as working until it has run.
 
 The street address, coordinates and OSM building id are personal data and
@@ -34,8 +34,16 @@ stay out of git: they are in `data/projects/flat-02/input/site.json`.
   traced from aerial imagery). `dressing.json` still holds the old
   assumption (south, 180°, a city-centre coordinate); it is not changed
   until the next bake is wanted.
-- **Still unknown:** which floor (the height of the windows above the
-  street), the ground's elevation, the date and time to render.
+- **From the owner (2026-11-14):** the first floor (one above the ground
+  floor). Its height above the street is not measured: it is set in the
+  editor by laying the balcony on the building in the tiles.
+- **Date and time, chosen for the owner:** 15 October 2026, 15:45,
+  Europe/Vienna (CEST). `flat_geometry.sun_position` puts the sun at 229.8°,
+  20.3° high: 38° off the balcony glazing's normal and low enough to pass
+  under the 3 m overhang onto the glass's lower 1.1 m, and 52° off the west
+  window's, a patch 5.8 m along the floor. At the equinox's noon the
+  overhang shades the south glass entirely.
+- **Still unknown:** the ground's elevation (read from the tiles).
 
 ## Research (14 searches, 2026-11-14)
 
@@ -70,8 +78,12 @@ it has not been tried here.
 - **Coverage is the main risk.** Google lists about 2,500 cities in 49
   countries ([Google](https://mapsplatform.google.com/resources/blog/create-immersive-3d-map-experiences-photorealistic-3d-tiles/));
   no source confirmed photogrammetry for this outer part of Vienna's 22nd
-  district. **Unverified** until the tiles are loaded at the address; it is
-  the first thing slice 1 checks.
+  district. Checked through Cesium ion with `scripts/check_3d_tiles.py`
+  (the tile tree only, nothing stored): the finest tile at the flat is 51 m
+  across with a 2.0 m geometric error, the same as Vienna's centre, where a
+  place without coverage stops at 2.4 km and 128 m. So the detailed data
+  reaches the address; that the houses stand in 3D there is **not yet
+  seen** and is the first thing slice 1 looks at.
 
 ### b) Placement
 - `CesiumGeoreference` origin at the flat's latitude, longitude and height;
@@ -210,11 +222,11 @@ without asking first.**
 
 ## Needed from the owner
 
-1. **Which floor** the flat is on (and a storey height if known).
-2. **Date and time** to render (the time zone is Europe/Vienna).
-3. **OK to install Unreal Engine 5.6+** through the Epic launcher (tens of
-   GB) and the Cesium for Unreal plugin from Fab.
-4. **A Cesium ion account and token** (free; the owner creates it), or a
-   Google Maps Platform key with the Map Tiles API (needs a billing
-   account). The token goes in `.env`.
-5. **One daylight photo out of a window**, with its time, for the check.
+1. **Install Unreal Engine** (agreed 2026-11-14, but it cannot be done from
+   a script: the Epic launcher needs the owner's account and licence
+   click). Epic Games Launcher → Unreal Engine → Library → "+" → pick 5.6 or
+   later → Install. Then Fab → "Cesium for Unreal" → add to that engine.
+2. Done: the floor, the date and time, the Cesium ion token (in `.env`).
+3. No daylight photo will be taken (owner). The still is therefore checked
+   against the calculated sun and the tiles' street, and against the night
+   photos only for colours of furniture and walls.
