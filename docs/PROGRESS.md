@@ -7,6 +7,31 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-11-14 — flat-02 in Unreal: built, a 4K still and a 30 s walk
+
+`docs/FLAT02_UNREAL.md` has the commands, the measurements and the list of
+what is not right. In short:
+
+- **Runs:** `scripts/unreal` builds `unreal/flat02` (UE 5.8.4, Cesium for
+  Unreal 2.31.0) from an empty level and renders through Movie Render Queue:
+  a 3840 x 2160 path-traced still (171 s) and a 1920 x 1080, 30 s walk with
+  Lumen (400 s), on the RTX 2080 Super, no out-of-memory.
+- **Measured:** the neighbours' houses in Google's tiles sit on their
+  OpenStreetMap outlines; the sun from Cesium and from the repo's own NOAA
+  equations agree to 0.33 deg (229.6 deg, 20 deg high, 15 Oct 2026 15:45);
+  the flat is placed with no residual on its six pins; the mirror fix is
+  live on Pages.
+- **Found:** the flat's own building is **not in Google's tiles** (an empty
+  plot: the imagery is older). The view out is the real surroundings as
+  flown, coarse close to the glass.
+- **Assumed, not measured:** the floor's height above the ground (0.30 m
+  plinth, 2.86 m storey).
+- **Not verified:** the window view against a daylight photo (none exists;
+  the owner's 89 photos are night shots); rooms other than hall and living
+  room; whether Google's terms cover a published video.
+- Tests: `test_unreal_prepare.py` (5) for the bearings and the model that
+  goes to Unreal.
+
 ## 2026-11-14 — flat-02: mirrors on the live site; where the flat stands; the Unreal plan
 
 - **Mirrors (viewer, tested):** on the published flat the reflecting copy of

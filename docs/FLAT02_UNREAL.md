@@ -4,10 +4,13 @@ Plan for a photoreal render of flat-02: the flat's interior in UE5, the real
 street outside its windows (Google Photorealistic 3D Tiles, streamed), the
 sun where it stands at a chosen date and time, a 4K still and a 30 s video.
 
-**State, 2026-11-14: researched and decided; nothing built in Unreal yet.**
-Unreal Engine is not installed on this machine (only the Epic launcher; the
-owner agreed to install it, see "Needed from the owner"). Rule 6 of
-`CLAUDE.md` applies: nothing below is reported as working until it has run.
+**State, 2026-11-14: built and rendered.** `unreal/flat02` (UE 5.8.4, Cesium
+for Unreal 2.31.0) is built from nothing by `scripts/unreal`, with Google's
+tiles outside and the sun for 15 October 2026, 15:45. A 4K path-traced still
+and a 30 s 1080p walk came out of Movie Render Queue. What was measured, and
+what is still assumed or rough, is under "Built and measured" below; the
+research and the decision that led here follow it unchanged except where
+marked.
 
 The street address, coordinates and OSM building id are personal data and
 stay out of git: they are in `data/projects/flat-02/input/site.json`.
@@ -45,10 +48,101 @@ stay out of git: they are in `data/projects/flat-02/input/site.json`.
   overhang shades the south glass entirely.
 - **Still unknown:** the ground's elevation (read from the tiles).
 
+## Built and measured (2026-11-14)
+
+```bash
+python scripts/unreal/prepare_flat.py     # the model and scene.json for Unreal
+python scripts/unreal/run.py build        # the level, from an empty one (about 1-3 min)
+python scripts/unreal/run.py render       # still + walk (about 11 min on the 2080 Super)
+```
+
+Needs `CESIUM_ION_TOKEN` in `.env`, Unreal 5.6+ with Cesium for Unreal, and
+ffmpeg in WSL for the video. Outputs, all git-ignored, are in
+`data/projects/flat-02/unreal/`: `out/flat02_still.png` (3840 x 2160),
+`out/flat02_walk.mp4` (1920 x 1080, 900 frames, 30 fps), `report.json`.
+
+**How it is put together**
+
+- `prepare_flat.py` takes the web flat's `scene/flat.glb` and drops what
+  only the browser needs: the painted backdrop outside the windows and the
+  baked light. The sliding door stands open. It writes the placement facts
+  (`scene.json`) from `site.json`. Tested (`test_unreal_prepare.py`): the
+  bearings, that the plan is turned and not mirrored, the outline.
+- `in_editor.py` (inside the editor): Cesium's georeference at the flat,
+  the Google tileset through Cesium ion, `CesiumSunSky` for the date and
+  time, the model through Interchange, placed by a fit over six furniture
+  centres, glass and sheers that let light through, a warm light under each
+  of the 11 ceiling lamps, exposure and white balance.
+- `render.py`: the still with the Path Tracer (256 samples, denoised), the
+  walk with Lumen on hardware ray tracing (8 temporal samples), exposure
+  fixed for the still and adapting between EV 7 and 10.8 on the walk.
+- `run.py` starts the editor, then stamps Google's attribution on the still
+  and the video and encodes the video.
+
+**Measured**
+
+| What | Result |
+|---|---|
+| Google's tiles at the address | 3D houses, on their OpenStreetMap outlines to a metre or two (`heightmap.png`, 121 x 121 samples) |
+| **The flat's own building** | **not in the tiles**: an empty plot with trees. Google's imagery is older than the building. |
+| Ground under the flat | 199.91 m above the ellipsoid (median of 81 samples, 199.6-206.3 with the trees) |
+| Floor of the flat | 203.07 m: ground + 0.30 m plinth + 2.86 m storey. **The plinth and the slab are assumed**, there is no building in the tiles to lay the balcony on. |
+| Placement | the six pins within 0.0 cm of where the bearings put them; a pure rotation (determinant 1.0) |
+| Sun | Cesium: 229.55 deg, 20.02 deg high. NOAA (`flat_geometry.sun_position`): 229.8 deg, 20.3 deg. 0.33 deg apart, two independent calculations. |
+| Still | 171 s, no out-of-memory on 8 GB |
+| Walk | 400 s for 900 frames |
+| Still against the owner's photos | median luminance 0.27 (photos 0.24-0.32), red/blue 1.30 (photos 1.21-1.30). The photos are night shots under lamps, so this ties down the overall tone only, not daylight. |
+
+**What is not right or not checked**
+
+- **No daylight photo exists**, so the view out of a window is not checked
+  against one. It is the street as Google flew it: close to the glass the
+  photogrammetry is coarse (the neighbour's house through the west window is
+  a soft shape, trees are lumps), and anything built since is missing, as
+  the flat's own building is.
+- Trees and the neighbour in the tiles shade the west window at this hour;
+  the sun patch on the floor is shorter than the open-sky figure in
+  `site.json`. Whether those trees still stand is not known.
+- The floor height rests on two assumed figures (above); +-0.5 m.
+- The interior is the Blender rebuild, re-lit: its materials are the web
+  flat's colours and textures with roughness only, no normal maps. It reads
+  as a good render, not as a photograph.
+- The attribution is the text Google sends ("Google"), not its logo.
+  Whether a published marketing video is covered by the Map Tiles API
+  policies is still unverified; read them before publishing.
+- The level saves the Cesium token inside `Flat02.umap` (git-ignored).
+  Cesium keeps an HTTP cache next to the project, following the tiles' own
+  cache headers; it is ignored and must not be shared.
+- Only the living room is in the still; the walk covers the hall and living
+  room. Other rooms are in the level but were not looked at.
+
+**Found on the way (each cost a run)**
+
+- `-ExecutePythonScript` quits the editor when the script returns; the build
+  runs over many ticks, so `run.py` uses `-ExecCmds="py ..."`.
+- The editor stops ticking the world when its window is not in front; no
+  tile ever loads. `run.py` switches that off for its run, and the ground is
+  measured in a play session, which ticks regardless.
+- A sky spawned from a script keeps Cesium's start position (Colorado): the
+  sun was 119 deg out until its globe anchor was moved to the flat.
+- Under shader model 5 there is no hardware ray tracing: the Path Tracer is
+  refused and Lumen's bounce light is weak. The project targets SM6.
+- Cesium waits for its tiles only for sequences that are in the level when
+  play begins; Movie Render Queue starts its own. `render.py` puts the
+  tilesets in movie-capture mode itself.
+- An import pumps the editor's loop, which re-entered the step runner and
+  imported the flat twice.
+- `scripts/unreal/dev.sh` with `run.py dev` tries a snippet in the open
+  editor; it is how these were found.
+
 ## Research (14 searches, 2026-11-14)
 
 Claims carry their source. "Unverified" means no primary source was read or
 it has not been tried here.
+
+Written before anything ran. Where "Built and measured" above says
+otherwise (coverage, the sun, 8 GB, the tiles in a render), that is what
+was found; the items it does not mention are as unverified as they were.
 
 ### a) Cesium for Unreal + Google Photorealistic 3D Tiles
 - Setup is: connect to Cesium ion in the Cesium panel, set a project token,
@@ -162,23 +256,17 @@ it has not been tried here.
 ## Decision
 
 **Blender rebuild → glTF → UE 5.6+ on Windows → Cesium tiles outside →
-Lumen to work, Path Tracer (or high-quality Lumen) to render.**
+Lumen to work and for the walk, the Path Tracer for the still.**
 
-1. `pipeline rebuild` gains an export of the flat **without baked light**:
-   one glTF, PBR materials, real-world scale, the windows' glass as separate
-   meshes. The web viewer's `flat.glb` is untouched.
-2. `unreal/flat02` (UE 5.6 or later; C++-free, plugins: Cesium for Unreal,
-   Sun Position Calculator, Movie Render Queue, Python Editor Script
-   Plugin). Kept out of the web build: nothing under `apps/` reads it, and
-   `unreal/**/{Saved,Intermediate,DerivedDataCache,Binaries}` are ignored.
-3. `scripts/unreal/build_scene.py`, run by the editor's Python: imports the
-   glTF, places it from `site.json` (origin, bearing, floor height), adds
-   the tileset, the sun and sky for the date, time and `Europe/Vienna`, the
-   cameras from the web flat's waypoints, and a 30 s sequence.
-4. Movie Render Queue: a 4K still and a 30 s 1080p or 4K video, attribution
-   burned in.
-5. Keys in `.env` (`CESIUM_ION_TOKEN`, or `GOOGLE_MAPS_API_KEY`), read by the
-   script at build time and never written into a committed asset.
+As built it differs from the first plan in three ways: the web flat's
+`flat.glb` is reused (stripped by `prepare_flat.py`) instead of a second
+export from Blender; the sun is Cesium's `CesiumSunSky`, checked against
+the repo's own calculation; and nothing is clipped out of the tiles,
+because the building is not in them.
+
+Keys stay in `.env` (`CESIUM_ION_TOKEN`), handed to the editor in its
+environment. `unreal/` is outside the web build: nothing under `apps/`
+reads it, and what the editor generates is git-ignored.
 
 ### Rejected
 
@@ -202,6 +290,10 @@ without asking first.**
 
 ### VRAM risk and fallback
 
+Outcome: none of these was needed. The Path Tracer rendered 4K at 256
+samples within 8 GB, the tiles had no holes, and they loaded in time once
+in movie-capture mode.
+
 | Risk | Sign | Fallback |
 |---|---|---|
 | No Google photogrammetry at the address | flat, blurry tiles | The surroundings as OSM blocks at their real floor counts (`site.py`, already used for flat-01; ODbL, may be stored), with Sky Atmosphere. Vienna's own city model (CC BY 4.0, [Stadt Wien](https://www.wien.gv.at/stadtentwicklung/stadtvermessung/geodaten/stadtmodell/)) is untextured building volumes; a textured mesh was not confirmed. |
@@ -209,24 +301,15 @@ without asking first.**
 | Holes in tiles under the Path Tracer | gaps in the street | Lumen for the final, or the Path Tracer for the interior only. |
 | Tiles not loaded when a frame is taken | low-detail street | Warm-up frames, `CesiumCameraManager`, a slower camera. |
 
-## Build slices (each committed on its own)
+## Build slices
 
-1. UE project; Cesium tiles at the address; **check coverage**; screenshot.
-2. Interior exported, imported, placed by `site.json`; compare the window
-   bearings with the tiles' streets.
-3. Sun and sky from date, time, time zone; check against `sky.py`.
-4. Materials and glass; exposure against a daylight photo.
-5. A 4K still; compared with a real photo from the same window (brightness,
-   colour, view).
-6. The 30 s video.
+All six ran: project and tiles, the interior placed, the sun, materials and
+glass, the 4K still, the 30 s video. See "Built and measured".
 
-## Needed from the owner
+## Open, for the owner
 
-1. **Install Unreal Engine** (agreed 2026-11-14, but it cannot be done from
-   a script: the Epic launcher needs the owner's account and licence
-   click). Epic Games Launcher → Unreal Engine → Library → "+" → pick 5.6 or
-   later → Install. Then Fab → "Cesium for Unreal" → add to that engine.
-2. Done: the floor, the date and time, the Cesium ion token (in `.env`).
-3. No daylight photo will be taken (owner). The still is therefore checked
-   against the calculated sun and the tiles' street, and against the night
-   photos only for colours of furniture and walls.
+1. A daylight photo out of a window, with its time, would let the view and
+   the light be checked; without it they are checked against calculation.
+2. The floor's real height above the street (or the storey height) would
+   replace the two assumed figures.
+3. Google's policies before any render is published.

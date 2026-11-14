@@ -72,7 +72,7 @@ def finest(lat: float, lon: float) -> dict:
     query = dict(urllib.parse.parse_qsl(base.query))
     # Ground in Vienna is near 200 m on the ellipsoid; any height in a tile's box will do.
     points = [ecef(lat, lon, h) for h in range(-100, 3001, 50)]
-    best = {"error": math.inf, "size": math.inf, "depth": 0, "requests": 1}
+    best = {"error": math.inf, "size": math.inf, "depth": 0, "requests": 1, "glb": None}
 
     def walk(tile: dict, depth: int) -> None:
         box = tile.get("boundingVolume", {}).get("box")
@@ -83,8 +83,11 @@ def finest(lat: float, lon: float) -> dict:
         for child in tile.get("children", []):
             walk(child, depth + 1)
         uri = (tile.get("content") or {}).get("uri", "")
+        part = urllib.parse.urlsplit(uri)
+        if ".glb" in uri and box and tile["geometricError"] <= best["error"]:
+            best["glb"] = urllib.parse.urlunsplit(
+                (base.scheme, base.netloc, part.path, urllib.parse.urlencode(query), ""))
         if ".json" in uri and best["requests"] < 80:
-            part = urllib.parse.urlsplit(uri)
             query.update(urllib.parse.parse_qsl(part.query))  # the session id
             url = urllib.parse.urlunsplit(
                 (base.scheme, base.netloc, part.path, urllib.parse.urlencode(query), ""))
@@ -93,6 +96,23 @@ def finest(lat: float, lon: float) -> dict:
 
     walk(get(root_url)["root"], 0)
     return best
+
+
+def attribution(lat: float, lon: float) -> str:
+    """
+    The copyright line Google sends with the finest tile at a place (its glTF's
+    asset.copyright), which the policies require shown with anything rendered from the
+    tiles. Only the tile's JSON header is read, in memory.
+    """
+    url = finest(lat, lon)["glb"]
+    if not url:
+        return "Google"
+    request = urllib.request.Request(url, headers={"User-Agent": "walkthrough-tiles-check"})
+    with urllib.request.urlopen(request, timeout=60) as response:
+        header = response.read(20)
+        length = int.from_bytes(header[12:16], "little")
+        asset = json.loads(response.read(length)).get("asset", {})
+    return asset.get("copyright") or "Google"
 
 
 def main(args: list[str]) -> None:
@@ -107,6 +127,7 @@ def main(args: list[str]) -> None:
                for i in range(0, len(rest) - 1, 2)]
     for name, lat, lon in places:
         found = finest(lat, lon)
+        found.pop("glb")
         print(f"{name}: finest tile {found['size']:.0f} m across, "
               f"geometric error {found['error']:.2f} m, "
               f"depth {found['depth']}, {found['requests']} requests")

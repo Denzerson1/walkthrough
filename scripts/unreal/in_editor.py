@@ -1,13 +1,13 @@
 """
 Runs inside the Unreal editor (unreal/flat02), started by scripts/unreal/run.py.
 
-FLAT02_MODE=build   the level: Cesium georeference at the flat, Google's tiles
-                    streamed (token from the environment, never saved in git),
-                    the sun for the date and time, the flat imported and placed
-                    by the measured bearings and floor height, the flat's own
-                    building clipped out of the tiles where the flat is,
-                    glass and sheers; then measurements and quick looks.
-FLAT02_MODE=render  Movie Render Queue: the 4K still and the 30 s walk.
+FLAT02_MODE=build   the level, from an empty one: Cesium's georeference at the flat,
+                    Google's tiles streamed (token from the environment), the sun for
+                    the date and time, the flat imported; the ground under it measured
+                    in the tiles (in a play session), the flat placed by the measured
+                    bearings at its floor's height; glass, sheers, lamps, cameras.
+FLAT02_MODE=render  Movie Render Queue (render.py): the 4K still and the 30 s walk.
+FLAT02_MODE=dev     keeps the editor open and runs snippets (dev.sh).
 
 Everything it measures goes to data/projects/flat-02/unreal/report.json.
 """
@@ -28,8 +28,10 @@ MODE = os.environ.get("FLAT02_MODE", "build")
 LEVEL = "/Game/Flat02/Flat02"
 MODEL_DIR = "/Game/Flat02/Model"
 GOOGLE_TILES = 2275207
+APERTURE = 5.6
 REPORT = DATA / "report.json"
-report: dict = json.loads(REPORT.read_text(encoding="utf-8")) if REPORT.exists() else {}
+report: dict = (json.loads(REPORT.read_text(encoding="utf-8"))
+                if REPORT.exists() and MODE != "build" else {})
 
 eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
 les = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
@@ -96,7 +98,7 @@ def fit_affine(src: list[list[float]], dst: list[list[float]]):
     ata = [[sum(r[i] * r[j] for r in rows) for j in range(4)] for i in range(4)]
     out = []
     for k in range(3):
-        atb = [sum(r[i] * d[k] for r, d in zip(rows, dst)) for i in range(4)]
+        atb = [sum(r[i] * d[k] for r, d in zip(rows, dst, strict=True)) for i in range(4)]
         out.append(solve(ata, atb))
     return [o[:3] for o in out], [o[3] for o in out]
 
@@ -119,12 +121,11 @@ def det(m):
 # ---------- the georeference ---------------------------------------------------
 
 def georeference():
-    geo = next(iter(actors(unreal.CesiumGeoreference)), None)
-    if geo is None:
-        geo = eas.spawn_actor_from_class(unreal.CesiumGeoreference, unreal.Vector())
-        geo.set_actor_label("Georeference")
+    """Cesium's own default georeference (the tiles and the sky resolve to it), at the flat."""
+    geo = unreal.CesiumGeoreference.get_default_georeference(world())
     o = SCENE["origin"]
     geo.set_origin_longitude_latitude_height(unreal.Vector(o["longitude"], o["latitude"], 0.0))
+    world().get_world_settings().set_editor_property("enable_world_bounds_checks", False)
     return geo
 
 
@@ -136,15 +137,20 @@ class Frame:
         o = SCENE["origin"]
         self.lat, self.lon = o["latitude"], o["longitude"]
         self.o = self._ue(0, 0, 0)
-        self.e = sub(self._ue(1, 0, 0), self.o)
-        self.n = sub(self._ue(0, 1, 0), self.o)
-        self.u = sub(self._ue(0, 0, 1), self.o)
+        # Unit steps of one metre (100 uu): east, north, up at the origin.
+        self.e, self.n, self.u = (self._unit(sub(self._ue(*d), self.o))
+                                  for d in ((1, 0, 0), (0, 1, 0), (0, 0, 1)))
+
+    @staticmethod
+    def _unit(v):
+        length = math.sqrt(sum(c * c for c in v))
+        return [100.0 * c / length for c in v]
 
     def _ue(self, east, north, up):
         lat = self.lat + north / 111132.954
         lon = self.lon + east / (111412.84 * math.cos(math.radians(self.lat)))
-        p = self.geo.transform_longitude_latitude_height_position_to_unreal(unreal.Vector(lon, lat, up))
-        return vec(p)
+        return vec(self.geo.transform_longitude_latitude_height_position_to_unreal(
+            unreal.Vector(lon, lat, up)))
 
     def at(self, east, north, up) -> list[float]:
         return [self.o[i] + east * self.e[i] + north * self.n[i] + up * self.u[i] for i in range(3)]
@@ -184,39 +190,62 @@ def sun_sky(frame: Frame):
     y, mo, d = (int(v) for v in r["date"].split("-"))
     hh, mm = (int(v) for v in r["time"].split(":"))
     for name, value in (("year", y), ("month", mo), ("day", d), ("solar_time", hh + mm / 60),
-                        ("time_zone", float(r["utcOffset"])), ("use_daylight_saving", False)):
+                        ("time_zone", float(r["utcOffset"])), ("use_daylight_saving_time", False)):
         setp(sky, name, value)
+    # At the flat: a sky spawned from a script keeps the place Cesium starts at.
+    o = SCENE["origin"]
+    sky.set_actor_location(unreal.Vector(0, 0, 0), False, False)
+    sky.get_editor_property("globe_anchor").move_to_longitude_latitude_height(
+        unreal.Vector(o["longitude"], o["latitude"], 0.0))
     sky.update_sun()
+    report["sunCesium"] = {"bearing": round(sky.get_editor_property("azimuth"), 2),
+                           "elevation": round(sky.get_editor_property("elevation"), 2)}
     # The light's direction checked against the NOAA equations (site.json).
     az, el = math.radians(r["sun"]["bearing"]), math.radians(r["sun"]["elevation"])
-    want = frame.direction(-math.sin(az) * math.cos(el), -math.cos(az) * math.cos(el), -math.sin(el))
-    light = next(c for c in sky.get_components_by_class(unreal.DirectionalLightComponent))
+    want = frame.direction(-math.sin(az) * math.cos(el), -math.cos(az) * math.cos(el),
+                           -math.sin(el))
+    light = sky.get_editor_property("directional_light")
     got = vec(light.get_forward_vector())
-    off = math.degrees(math.acos(max(-1, min(1, sum(a * b for a, b in zip(want, got))))))
+    dot = sum(a * b for a, b in zip(want, got, strict=True))
+    off = math.degrees(math.acos(max(-1, min(1, dot))))
     report["sun"] = {"expected": r["sun"], "cesiumOffDeg": round(off, 2)}
     if off > 0.5:
         # Cesium's sun model and NOAA's disagree: the light follows NOAA's.
-        light.set_world_rotation(unreal.MathLibrary.make_rot_from_x(unreal.Vector(*want)), False, False)
+        light.set_world_rotation(unreal.MathLibrary.make_rot_from_x(unreal.Vector(*want)),
+                                 False, False)
         report["sun"]["overridden"] = True
     log("sun off by", round(off, 2), "deg")
     return sky
 
 
-def post_process():
+def post_process(adapt_from: float | None = None) -> None:
+    """
+    Exposure and white balance. Fixed at FLAT02_EV (EV100) for a still: auto exposure
+    would lift the room and burn the street. For the walk, `adapt_from` lets it fall to
+    that EV in the lamp-lit hall and climb back in the sunlit room, as a camera does.
+    """
     ppv = by_label("Exposure")
     if ppv is None:
         ppv = eas.spawn_actor_from_class(unreal.PostProcessVolume, unreal.Vector())
         ppv.set_actor_label("Exposure")
     ppv.set_editor_property("unbound", True)
     s = ppv.settings
+    ev = float(os.environ.get("FLAT02_EV", "10.8"))
     pairs = {
+        # EV100 limits (the project extends the luminance range, DefaultEngine.ini).
         "auto_exposure_method": unreal.AutoExposureMethod.AEM_HISTOGRAM,
-        "auto_exposure_min_brightness": float(os.environ.get("FLAT02_EV_MIN", "7")),
-        "auto_exposure_max_brightness": float(os.environ.get("FLAT02_EV_MAX", "12")),
-        "auto_exposure_bias": float(os.environ.get("FLAT02_EV_BIAS", "0.5")),
+        "auto_exposure_min_brightness": ev if adapt_from is None else adapt_from,
+        "auto_exposure_max_brightness": ev,
+        "auto_exposure_speed_up": 2.5, "auto_exposure_speed_down": 2.5,
+        "auto_exposure_apply_physical_camera_exposure": False,
+        "auto_exposure_bias": 0.0,
+        # White balance as a camera in a sky-lit room would set it: warmer than daylight
+        # film, or the walls come out blue.
+        "white_temp": float(os.environ.get("FLAT02_WB", "6600")),
         "lumen_scene_lighting_quality": 2.0, "lumen_final_gather_quality": 2.0,
-        "lumen_max_trace_distance": 20000.0, "lumen_ray_lighting_mode": unreal.LumenRayLightingModeOverride.HIT_LIGHTING_FOR_REFLECTIONS,
-        "path_tracing_max_bounces": 8, "path_tracing_samples_per_pixel": int(os.environ.get("FLAT02_SPP", "256")),
+        "lumen_max_trace_distance": 20000.0,
+        "lumen_ray_lighting_mode": unreal.LumenRayLightingModeOverride.HIT_LIGHTING_FOR_REFLECTIONS,
+        "path_tracing_max_bounces": 8,
     }
     for k, v in pairs.items():
         try:
@@ -224,78 +253,62 @@ def post_process():
             s.set_editor_property("override_" + k, True)
         except Exception as exc:  # noqa: BLE001
             log("pp", k, exc)
+            report.setdefault("notSet", []).append(k)
     ppv.set_editor_property("settings", s)
 
 
 # ---------- the flat --------------------------------------------------------------
 
-def import_flat() -> None:
+def import_flat():
+    """The flat's glTF through Interchange: one root actor ("Flat") with a mesh actor per node."""
     before = {a.get_path_name() for a in eas.get_all_level_actors()}
     mgr = unreal.InterchangeManager.get_interchange_manager_scripted()
     source = unreal.InterchangeManager.create_source_data(str(DATA / "flat.glb"))
     params = unreal.ImportAssetParameters()
     params.is_automated = True
     mgr.import_scene(MODEL_DIR, source, params)
-    report["importedActors"] = len([a for a in eas.get_all_level_actors() if a.get_path_name() not in before])
+    new = [a for a in eas.get_all_level_actors() if a.get_path_name() not in before]
+    root = next(a for a in new if a.get_attach_parent_actor() is None)
+    root.set_actor_label("Flat")
+    report["importedActors"] = len(new)
+    return root
 
 
-def flat_actors():
-    skip = (unreal.CesiumGeoreference, unreal.Cesium3DTileset, unreal.CesiumSunSky, unreal.PostProcessVolume,
-            unreal.CameraActor, unreal.CesiumCartographicPolygon)
-    return [a for a in eas.get_all_level_actors()
-            if not isinstance(a, skip) and a.get_actor_label() not in ("Flat",)
-            and a.get_attach_parent_actor() is None and a.get_folder_path() != "Cesium"
-            and type(a).__name__ not in ("CesiumCreditSystem", "CesiumCameraManager", "WorldSettings", "Brush")
-            and (a.get_components_by_class(unreal.StaticMeshComponent) or type(a).__name__ == "Actor")]
+def flat_parts() -> dict:
+    return {a.get_actor_label(): a for a in by_label("Flat").get_attached_actors()}
 
 
 def place_flat(frame: Frame, floor: float) -> None:
+    """The flat where it stands: scene metres to east/north/up by the measured bearings."""
     root = by_label("Flat")
-    if root is None:
-        root = eas.spawn_actor_from_class(unreal.Actor, unreal.Vector())
-        root.set_actor_label("Flat")
-        if root.root_component is None:
-            root.set_editor_property("root_component", unreal.SceneComponent(root, "Root"))
     root.set_actor_transform(unreal.Transform(), False, False)
-    children = [a for a in flat_actors() if a != root]
-    for a in children:
-        a.attach_to_actor(root, "", unreal.AttachmentRule.KEEP_WORLD, unreal.AttachmentRule.KEEP_WORLD,
-                          unreal.AttachmentRule.KEEP_WORLD, False)
-    labels = {a.get_actor_label(): a for a in root.get_attached_actors()}
+    parts = flat_parts()
     # How the importer turned glTF's axes: fit the pins' imported centres.
     src, dst = [], []
     for name, centre in SCENE["pins"].items():
-        a = labels.get(name) or next((v for k, v in labels.items() if k.startswith(name)), None)
-        if a is None:
-            continue
-        origin, _ = a.get_actor_bounds(False)
+        origin, _ = parts[name].get_actor_bounds(False)
         src.append(centre)
         dst.append(vec(origin))
     m, t = fit_affine(src, dst)
-    # Where the scene should go: metres east/north/up of the origin, floor `floor` up.
-    target = []
-    for p in src:
-        target.append(frame.at(*scene_to_enu(*p, floor)))
+    target = [frame.at(*scene_to_enu(*p, floor)) for p in src]
     a, c = fit_affine(src, target)
     r = matmul(a, inverse(m))
     origin_new = [c[i] - sum(r[i][k] * t[k] for k in range(3)) for i in range(3)]
     cols = [[r[i][j] for i in range(3)] for j in range(3)]
-    norms = [math.sqrt(sum(x * x for x in col)) for col in cols]
-    report["placement"] = {"pins": len(src), "importAxes": [[round(x, 3) for x in row] for row in m],
-                           "rotationColumnNorms": [round(n, 4) for n in norms], "det": round(det(r), 4),
-                           "floorAboveOriginM": floor}
     rot = unreal.MathLibrary.make_rot_from_xz(unreal.Vector(*cols[0]), unreal.Vector(*cols[2]))
     root.set_actor_location_and_rotation(unreal.Vector(*origin_new), rot, False, False)
-    # Check: every pin where it should be.
     errs = []
     for name, centre in SCENE["pins"].items():
-        act = labels.get(name) or next((v for k, v in labels.items() if k.startswith(name)), None)
-        if act:
-            o, _ = act.get_actor_bounds(False)
-            want = frame.at(*scene_to_enu(*centre, floor))
-            errs.append(math.sqrt(sum((x - y) ** 2 for x, y in zip(vec(o), want))))
-    report["placement"]["pinErrorCm"] = round(max(errs), 2) if errs else None
-    log("placed; pin error cm", report["placement"]["pinErrorCm"], "det", report["placement"]["det"])
+        o, _ = parts[name].get_actor_bounds(False)
+        want = frame.at(*scene_to_enu(*centre, floor))
+        errs.append(math.sqrt(sum((x - y) ** 2 for x, y in zip(vec(o), want, strict=True))))
+    report["placement"] = {
+        "pins": len(src), "importAxes": [[round(x, 3) for x in row] for row in m],
+        "rotationColumnLengths": [round(math.sqrt(sum(x * x for x in col)), 4) for col in cols],
+        "det": round(det(r), 4), "floorAboveEllipsoidM": round(floor, 2),
+        "pinErrorCm": round(max(errs), 2)}
+    log("placed; pin error cm", report["placement"]["pinErrorCm"],
+        "det", report["placement"]["det"])
 
 
 def materials() -> None:
@@ -309,9 +322,11 @@ def materials() -> None:
             return unreal.load_asset(path)
         mat = tools.create_asset(name, "/Game/Flat02", unreal.Material, unreal.MaterialFactoryNew())
         mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
-        mat.set_editor_property("translucency_lighting_mode", unreal.TranslucencyLightingMode.TLM_SURFACE)
+        mat.set_editor_property("translucency_lighting_mode",
+                                unreal.TranslucencyLightingMode.TLM_SURFACE)
         mat.set_editor_property("two_sided", two_sided)
-        base = mel.create_material_expression(mat, unreal.MaterialExpressionConstant3Vector, -300, 0)
+        base = mel.create_material_expression(
+            mat, unreal.MaterialExpressionConstant3Vector, -300, 0)
         base.set_editor_property("constant", unreal.LinearColor(*colour, 1))
         mel.connect_material_property(base, "", unreal.MaterialProperty.MP_BASE_COLOR)
         for prop, value, y in ((unreal.MaterialProperty.MP_OPACITY, opacity, 150),
@@ -327,7 +342,8 @@ def materials() -> None:
     glass = make("M_Glass", (0.92, 0.95, 0.95), 0.06, 0.02, True)
     sheer = make("M_Sheer", (0.92, 0.9, 0.86), 0.45, 0.8, True)
     swapped = {"glass": 0, "sheer": 0, "mirror": 0}
-    for comp in [c for a in actors() for c in a.get_components_by_class(unreal.StaticMeshComponent)]:
+    for comp in [c for a in actors()
+                 for c in a.get_components_by_class(unreal.StaticMeshComponent)]:
         for i, slot in enumerate(comp.get_material_slot_names()):
             s = str(slot).lower()
             if "glass" in s and "frost" not in s and "beige" not in s:
@@ -354,57 +370,60 @@ def materials() -> None:
     report["materials"] = swapped
 
 
-# ---------- the flat's own building out of the tiles --------------------------
-
-def clip(frame: Frame, tiles, ground: float) -> None:
-    poly = next(iter(actors(unreal.CesiumCartographicPolygon)), None)
-    if poly is None:
-        poly = eas.spawn_actor_from_class(unreal.CesiumCartographicPolygon, unreal.Vector(*frame.o))
-        poly.set_actor_label("Flat outline (clipped from the tiles)")
-    spline = poly.get_components_by_class(unreal.SplineComponent)[0]
-    pts = [unreal.Vector(*frame.at(e, n, ground)) for e, n in SCENE["clipEastNorth"]]
-    spline.set_spline_points(pts, unreal.SplineCoordinateSpace.WORLD, True)
-    spline.set_closed_loop(True)
-    overlays = tiles.get_components_by_class(unreal.CesiumPolygonRasterOverlay)
-    if not overlays:
-        sds = unreal.get_engine_subsystem(unreal.SubobjectDataSubsystem)
-        handles = sds.k2_gather_subobject_data_for_instance(tiles)
-        params = unreal.AddNewSubobjectParams(parent_handle=handles[0],
-                                              new_class=unreal.CesiumPolygonRasterOverlay)
-        sds.add_new_subobject(params)
-        overlays = tiles.get_components_by_class(unreal.CesiumPolygonRasterOverlay)
-    overlay = overlays[0]
-    setp(overlay, "polygons", [poly])
-    setp(overlay, "material_layer_key", "Clipping")
-    report["clip"] = {"points": len(pts), "overlay": bool(overlays)}
-
-
-# ---------- measuring in the tiles ------------------------------------------------
-
-def trace_down(frame: Frame, east: float, north: float, top: float = 80.0) -> list[float]:
-    """Every surface straight down at (east, north), metres above the origin's ellipsoid."""
-    hits, z = [], top
-    for _ in range(12):
-        start, end = frame.at(east, north, z), frame.at(east, north, -150.0)
-        hit = unreal.SystemLibrary.line_trace_single(world(), unreal.Vector(*start), unreal.Vector(*end),
-                                                     unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, True, [],
-                                                     unreal.DrawDebugTrace.NONE, True)
-        if hit is None:
-            break
-        t = hit.to_tuple()
-        if not t[0]:
-            break
-        p = vec(t[5])
-        up = sum((p[i] - frame.o[i]) * frame.u[i] for i in range(3)) / sum(c * c for c in frame.u)
-        hits.append(round(up, 2))
-        z = up - 0.3
-    return hits
+def lamps() -> None:
+    """The ceiling lamps on: a warm light under each lamp mesh (the hall has no window)."""
+    root = by_label("Flat")
+    for a in root.get_attached_actors():
+        if a.get_actor_label().startswith("Lamp light"):
+            eas.destroy_actor(a)
+    count = 0
+    for name, part in flat_parts().items():
+        if not name.startswith("lamp-"):
+            continue
+        origin, extent = part.get_actor_bounds(False)
+        up = root.get_actor_up_vector()
+        drop = min(extent.x, extent.y, extent.z) + 12.0
+        at = unreal.Vector(origin.x - up.x * drop, origin.y - up.y * drop, origin.z - up.z * drop)
+        light = eas.spawn_actor_from_class(unreal.PointLight, at)
+        light.set_actor_label(f"Lamp light {name[5:]}")
+        c = light.point_light_component
+        c.set_editor_property("intensity_units", unreal.LightUnits.LUMENS)
+        c.set_editor_property("intensity", float(os.environ.get("FLAT02_LAMP_LM", "1400")))
+        c.set_editor_property("use_temperature", True)
+        c.set_editor_property("temperature", 3000.0)
+        c.set_editor_property("attenuation_radius", 700.0)
+        c.set_editor_property("source_radius", 14.0)
+        c.set_editor_property("soft_source_radius", 6.0)
+        keep = unreal.AttachmentRule.KEEP_WORLD
+        light.attach_to_actor(root, "", keep, keep, keep, False)
+        count += 1
+    report["lamps"] = count
 
 
-def look(name: str, eye, target, fov: float = 70.0) -> None:
-    rot = unreal.MathLibrary.find_look_at_rotation(unreal.Vector(*eye), unreal.Vector(*target))
-    ues.set_level_viewport_camera_info(unreal.Vector(*eye), rot)
-    report.setdefault("looks", []).append(name)
+# ---------- measuring in the tiles (in a play session: the editor's own world only
+# updates Cesium while its viewport is in front on screen) ------------------------
+
+def cesium_camera(game_world, eye, target, fov: float = 90.0) -> None:
+    """Tell Cesium to load tiles for a view, whatever the viewport shows."""
+    cam = unreal.CesiumCamera()
+    cam.set_editor_property("viewport_size", unreal.Vector2D(1920, 1080))
+    cam.set_editor_property("location", unreal.Vector(*eye))
+    cam.set_editor_property("rotation", unreal.MathLibrary.find_look_at_rotation(
+        unreal.Vector(*eye), unreal.Vector(*target)))
+    cam.set_editor_property("field_of_view_degrees", fov)
+    unreal.CesiumCameraManager.get_default_camera_manager(game_world).add_camera(cam)
+
+
+def top_height(game_world, frame: Frame, east: float, north: float):
+    """The highest surface at (east, north), metres above the ellipsoid, or None."""
+    hit = unreal.SystemLibrary.line_trace_single(
+        game_world, unreal.Vector(*frame.at(east, north, 400.0)),
+        unreal.Vector(*frame.at(east, north, 100.0)), unreal.TraceTypeQuery.TRACE_TYPE_QUERY1,
+        True, [], unreal.DrawDebugTrace.NONE, True)
+    if hit is None or not hit.to_tuple()[0]:
+        return None
+    p = vec(hit.to_tuple()[4])
+    return sum((p[i] - frame.o[i]) * frame.u[i] for i in range(3)) / 1e4
 
 
 # ---------- the cameras and the sequence -----------------------------------------
@@ -420,14 +439,14 @@ def cameras(frame: Frame, floor: float):
         cam.set_actor_label("Still camera")
     s = SCENE["cameras"]["still"]
     eye, target = scene_point(frame, s["eye"], floor), scene_point(frame, s["target"], floor)
-    cam.set_actor_location_and_rotation(
-        unreal.Vector(*eye), unreal.MathLibrary.find_look_at_rotation(unreal.Vector(*eye), unreal.Vector(*target)),
-        False, False)
+    rot = unreal.MathLibrary.find_look_at_rotation(unreal.Vector(*eye), unreal.Vector(*target))
+    cam.set_actor_location_and_rotation(unreal.Vector(*eye), rot, False, False)
     cc = cam.get_cine_camera_component()
     fb = cc.filmback
     fb.sensor_width, fb.sensor_height = 36.0, 20.25
     cc.set_editor_property("filmback", fb)
     cc.set_editor_property("current_focal_length", float(s["focalMm"]))
+    cc.set_editor_property("current_aperture", APERTURE)
     focus = cc.focus_settings
     focus.focus_method = unreal.CameraFocusMethod.DISABLE
     cc.set_editor_property("focus_settings", focus)
@@ -444,16 +463,18 @@ class Steps:
     """Runs `steps` in order on the editor's ticks; a step returns seconds to wait after it."""
 
     def __init__(self, steps):
-        self.steps, self.i, self.until = steps, 0, 0.0
+        self.steps, self.i, self.until, self.busy = steps, 0, 0.0, False
         self.handle = unreal.register_slate_post_tick_callback(self.tick)
 
     def tick(self, _dt) -> None:
-        if time.time() < self.until:
+        # A step that imports or saves pumps the editor's loop, which ticks this again.
+        if self.busy or time.time() < self.until:
             return
         if self.i >= len(self.steps):
             unreal.unregister_slate_post_tick_callback(self.handle)
             return
         step = self.steps[self.i]
+        self.busy = True
         try:
             wait = step()
         except Again:
@@ -465,6 +486,8 @@ class Steps:
             save_report()
             self.i = len(self.steps) - 1
             return
+        finally:
+            self.busy = False
         self.i += 1
         self.until = time.time() + (wait or 0)
 
@@ -475,109 +498,151 @@ _polls: dict = {}
 def tiles_ready(tiles, settle: float = 4.0, timeout: float = 240.0) -> float:
     """Raises Again until the tiles in view are loaded and have stayed so for `settle` s."""
     s = _polls.setdefault(id(tiles), {"start": time.time(), "last": -1.0, "since": time.time()})
-    progress = tiles.get_load_progress()
+    progress = tiles.get_editor_property("load_progress")
     if progress != s["last"]:
         s["last"], s["since"] = progress, time.time()
-    if (progress >= 100 and time.time() - s["since"] > settle) or time.time() - s["start"] > timeout:
+    if (progress >= 99 and time.time() - s["since"] > settle) or time.time() - s["start"] > timeout:
         report.setdefault("tileLoads", []).append(round(progress, 1))
         _polls.pop(id(tiles))
         return 1
     raise Again
 
 
-def screenshot(name: str) -> None:
-    """The active viewport, to Saved/Screenshots (run.py collects them in order)."""
-    unreal.SystemLibrary.execute_console_command(world(), "HighResShot 1920x1080")
-    report.setdefault("screenshots", []).append(name)
-
-
 def build() -> None:
-    perf = unreal.get_default_object(unreal.EditorPerformanceSettings)
-    perf.set_editor_property("throttle_cpu_when_not_foreground", False)
+    keep_awake()
     if not unreal.EditorAssetLibrary.does_asset_exist(LEVEL):
         les.new_level(LEVEL)
     else:
         les.load_level(LEVEL)
+        # From nothing each time: what an earlier build left is not built on.
+        for actor in eas.get_all_level_actors():
+            if type(actor).__name__ not in ("WorldSettings", "Brush", "WorldDataLayers"):
+                eas.destroy_actor(actor)
     st: dict = {}
+    storey = float(os.environ.get("FLAT02_STOREY_M", "2.86"))
+    plinth = float(os.environ.get("FLAT02_PLINTH_M", "0.3"))
 
     def setup():
-        st["geo"] = georeference()
-        st["frame"] = Frame(st["geo"])
-        st["tiles"] = tileset()
+        st["frame"] = Frame(georeference())
+        tileset()
         sun_sky(st["frame"])
         post_process()
+        import_flat()
+        materials()
+        les.save_current_level()
+        les.editor_play_simulate()
+        return 3
+
+    def aim():
+        game = ues.get_game_world()
+        if game is None:
+            raise Again
+        st["game"] = game
+        st["tiles"] = unreal.GameplayStatics.get_all_actors_of_class(
+            game, unreal.Cesium3DTileset)[0]
         f = st["frame"]
-        # From the street south-west of the balcony, looking at the building.
-        look("outside", f.at(-25, -45, 30), f.at(0, 0, 4))
+        cesium_camera(game, f.at(0, 0, 260), f.at(0.01, 0, 200))  # straight down on the plot
+        cesium_camera(game, f.at(-20, -35, 215), f.at(0, 0, 203))
         return 2
 
-    def tiles_loaded_outside():
-        return tiles_ready(st["tiles"])
+    def tiles_loaded():
+        return tiles_ready(st["tiles"], settle=4.0, timeout=120.0)
 
     def measure():
         f = st["frame"]
-        # Ground: around the building, outside its footprint; the balcony's slabs.
-        samples = {
-            "street-south": trace_down(f, -2, -14),
-            "garden-west": trace_down(f, -14, 4),
-            "north": trace_down(f, 0, 12),
-            "balcony": trace_down(f, *SCENE["balconyEastNorth"]) if "balconyEastNorth" in SCENE else None,
-            "roof": trace_down(f, 0, 0),
-        }
-        report["traces"] = samples
-        grounds = [s[-1] for k, s in samples.items() if s and k in ("street-south", "garden-west", "north")]
-        ground = sorted(grounds)[len(grounds) // 2] if grounds else 0.0
-        st["ground"] = ground
-        storey = float(os.environ.get("FLAT02_STOREY_M", "2.86"))
-        plinth = float(os.environ.get("FLAT02_PLINTH_M", "0.3"))
+        # The ground under the flat: the building is newer than Google's imagery, the plot
+        # is empty in the tiles. The median ignores the odd tree.
+        xs = [p[0] for p in SCENE["outlineEastNorth"]]
+        ys = [p[1] for p in SCENE["outlineEastNorth"]]
+        heights = []
+        for i in range(9):
+            for j in range(9):
+                e = min(xs) + (max(xs) - min(xs)) * i / 8
+                n = min(ys) + (max(ys) - min(ys)) * j / 8
+                h = top_height(st["game"], f, e, n)
+                if h is not None:
+                    heights.append(h)
+        if len(heights) < 20:
+            raise RuntimeError(f"only {len(heights)} ground hits in the tiles")
+        heights.sort()
+        ground = heights[len(heights) // 2]
         st["floor"] = ground + plinth + storey * SCENE["floorStorey"]
-        report["ground"] = {"aboveEllipsoidM": ground, "floorM": st["floor"], "storeyM": storey,
-                            "plinthM": plinth}
-        save_report()
-        screenshot("outside_before")
+        report["ground"] = {
+            "aboveEllipsoidM": round(ground, 2), "samples": len(heights),
+            "spreadM": [round(heights[0], 2), round(heights[-1], 2)],
+            "floorM": round(st["floor"], 2), "storeyM": storey, "plinthM": plinth,
+            "assumed": ("storey = the scan's 2.56 m ceiling + 0.30 m slab; plinth 0.30 m; "
+                        "not measured")}
+        les.editor_request_end_play()
         return 3
-
-    def flat():
-        import_flat()
-        return 5
 
     def place():
+        if les.is_in_play_in_editor():
+            raise Again
         place_flat(st["frame"], st["floor"])
-        materials()
-        clip(st["frame"], st["tiles"], st["ground"] - 5)
-        cam, eye, target = cameras(st["frame"], st["floor"])
-        st["still"] = (eye, target)
-        f = st["frame"]
-        look("outside", f.at(-25, -45, st["floor"] + 20), f.at(2, 0, st["floor"]))
-        return 3
-
-    def outside_shot():
-        screenshot("outside_after")
-        eye, target = st["still"]
-        look("still", eye, target)
-        return 3
-
-    def tiles_loaded_inside():
-        return tiles_ready(st["tiles"])
-
-    def inside_shot():
-        screenshot("still_preview")
-        return 6
+        lamps()
+        cameras(st["frame"], st["floor"])
+        return 1
 
     def done():
+        if les.is_in_play_in_editor():
+            les.editor_request_end_play()
+            raise Again
         les.save_current_level()
-        unreal.EditorAssetLibrary.save_directory("/Game/Flat02", only_if_is_dirty=True, recursive=True)
+        unreal.EditorAssetLibrary.save_directory(
+            "/Game/Flat02", only_if_is_dirty=True, recursive=True)
         report["built"] = time.strftime("%Y-%m-%d %H:%M")
         save_report()
         log("done")
         if os.environ.get("FLAT02_QUIT", "1") == "1":
             unreal.SystemLibrary.quit_editor()
 
-    Steps([setup, tiles_loaded_outside, measure, flat, place, outside_shot, tiles_loaded_inside,
-           inside_shot, done])
+    Steps([setup, aim, tiles_loaded, measure, place, done])
 
 
-if MODE == "build":
-    build()
-else:
-    import render  # noqa: F401  (scripts/unreal/render.py, same folder)
+def keep_awake() -> None:
+    """Realtime viewports. (That the editor works in the background is run.py's -ini switch.)"""
+    try:
+        les.editor_set_viewport_realtime(True)
+    except Exception as exc:  # noqa: BLE001
+        log("realtime:", exc)
+
+
+def dev_loop() -> None:
+    """
+    FLAT02_MODE=dev: run data/.../unreal/cmd.py whenever it changes and write what it
+    printed (or its traceback) to cmd.out, so a step can be tried in the open editor.
+    """
+    import contextlib
+    import io
+    import traceback
+
+    cmd, out = DATA / "cmd.py", DATA / "cmd.out"
+    state = {"mtime": cmd.stat().st_mtime if cmd.exists() else 0.0}
+    scope = dict(globals())
+
+    def tick(_dt) -> None:
+        if not cmd.exists() or cmd.stat().st_mtime == state["mtime"]:
+            return
+        state["mtime"] = cmd.stat().st_mtime
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            try:
+                exec(compile(cmd.read_text(encoding="utf-8"), str(cmd), "exec"), scope)  # noqa: S102
+            except Exception:  # noqa: BLE001
+                traceback.print_exc(file=buffer)
+        out.write_text(buffer.getvalue() + chr(10) + "#done " + str(state["mtime"]),
+                       encoding="utf-8")
+
+    keep_awake()
+    dev_loop.handle = unreal.register_slate_post_tick_callback(tick)
+    log("dev loop watching", cmd)
+
+
+if __name__ == "__main__":
+    if MODE == "build":
+        build()
+    elif MODE == "dev":
+        dev_loop()
+    else:
+        import render  # noqa: F401  (scripts/unreal/render.py, same folder)

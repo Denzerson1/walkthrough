@@ -5,10 +5,10 @@ and one scene file with everything the editor script places it by.
 - `flat.glb`: `scene/flat.glb` without the painted backdrop outside the
   windows (Google's tiles are the outside now) and without the baked light
   sets (`_LIGHT_*`): Unreal lights the flat itself.
-- `scene.json`: where the flat stands (site.json), the clip outline around it
-  in metres east/north, the sun's date and time, a few node centres in glTF
-  space (so the editor script can measure how its importer turned the axes),
-  and the cameras.
+- `scene.json`: where the flat stands (site.json), its outline in metres
+  east/north (the ground under it is measured there), the sun's date and
+  time, a few node centres in glTF space (so the editor script can measure
+  how its importer turned the axes), and the cameras.
 
 Run:  python scripts/unreal/prepare_flat.py [project]   (stdlib only)
 Out:  data/projects/<project>/unreal/
@@ -70,7 +70,8 @@ def node_centre(gltf: dict, node: dict) -> list[float]:
 
 def offset_outline(poly: list[list[float]], d: float) -> list[list[float]]:
     """A polygon grown by `d` (mitred corners)."""
-    area = sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(poly, poly[1:] + poly[:1])) / 2
+    area = sum(a[0] * b[1] - b[0] * a[1]
+               for a, b in zip(poly, poly[1:] + poly[:1], strict=True)) / 2
     sign = 1 if area > 0 else -1  # outward normal of a ccw edge (dx, dy) is (dy, -dx)
     n = len(poly)
     lines = []
@@ -108,10 +109,17 @@ def main(project: str = "flat-02") -> None:
     names = {i: n.get("name") for i, n in enumerate(gltf["nodes"])}
     pins = {names[i]: node_centre(gltf, n) for i, n in enumerate(gltf["nodes"])
             if names[i] in PINS and "mesh" in n}
-    gltf["scenes"][0]["nodes"] = [i for i in gltf["scenes"][0]["nodes"] if names[i] not in DROP_NODES]
+    gltf["scenes"][0]["nodes"] = [i for i in gltf["scenes"][0]["nodes"]
+                                  if names[i] not in DROP_NODES]
     for i, node in enumerate(gltf["nodes"]):
         if names[i] in DROP_NODES:
             node.pop("mesh", None)
+    for node in gltf["nodes"]:
+        # A sliding door is built shut (the web viewer slides it): here it stands open.
+        door = (node.get("extras") or {}).get("door", {})
+        if "slide" in door:
+            node["translation"] = [node["translation"][k] + door["slide"][k] * door["open"]
+                                   for k in range(3)]
     for mesh in gltf["meshes"]:
         for prim in mesh["primitives"]:
             prim["attributes"] = {k: v for k, v in prim["attributes"].items()
@@ -127,15 +135,27 @@ def main(project: str = "flat-02") -> None:
         "floorStorey": site["floor"]["storey"],
         "render": site["render"],
         "pins": pins,
-        "clipEastNorth": [to_east_north(x, z, bearings) for x, z in clip],
-        "balconyEastNorth": to_east_north(pins["balcony-floor"][0], pins["balcony-floor"][2], bearings),
+        "outlineEastNorth": [to_east_north(x, z, bearings) for x, z in clip],
         "cameras": {
-            # Scene metres (x, y up, z). The still looks from the kitchen side
-            # of the living room towards the balcony door and the west window.
-            "still": {"eye": [1.35, 1.45, 3.7], "target": [4.6, 0.75, -0.6], "focalMm": 18},
+            # Scene metres (x, y up, z). The still stands just inside the living room, by
+            # the passage from the hall, and looks along it to the west window, the
+            # balcony glazing on its left.
+            "still": {"eye": [1.25, 1.5, 1.0], "target": [5.8, 1.05, 0.75], "focalMm": 16},
+            # The walk: seconds, where the eye is, what it looks at. From the entry down
+            # the hall, into the living room, towards the west window and the dining
+            # table, then round to the balcony door and the street beyond it. Kept clear
+            # of the furniture's footprints (the web flat's manifest).
             "walk": [
-                [-4.5, 1.6, 0.4], [-2.6, 1.6, 0.55], [-0.6, 1.6, 0.6], [0.95, 1.6, 0.8],
-                [2.0, 1.6, 2.2], [3.6, 1.6, 2.6], [4.9, 1.6, 1.2], [3.4, 1.6, -0.2],
+                {"t": 0.0, "eye": [-4.5, 1.55, 0.35], "look": [0.6, 1.4, 0.8]},
+                {"t": 4.5, "eye": [-2.2, 1.55, 0.62], "look": [0.6, 1.4, 0.8]},
+                {"t": 8.5, "eye": [-0.2, 1.55, 0.75], "look": [3.0, 1.3, 0.9]},
+                {"t": 11.0, "eye": [1.0, 1.55, 0.8], "look": [5.5, 1.2, 0.6]},
+                {"t": 13.5, "eye": [2.1, 1.55, 0.95], "look": [5.9, 1.1, 1.6]},
+                {"t": 15.5, "eye": [2.6, 1.55, 1.75], "look": [6.2, 1.1, 2.4]},
+                {"t": 18.5, "eye": [3.9, 1.55, 1.8], "look": [6.2, 1.2, 3.2]},
+                {"t": 21.5, "eye": [3.9, 1.55, 1.8], "look": [3.5, 1.0, -1.3]},
+                {"t": 25.0, "eye": [2.65, 1.55, 1.3], "look": [2.75, 1.2, -3.0]},
+                {"t": 30.0, "eye": [2.7, 1.55, -0.6], "look": [2.6, 1.0, -6.0]},
             ],
         },
     }

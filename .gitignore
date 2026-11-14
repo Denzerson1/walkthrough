@@ -81,3 +81,7 @@ unreal/**/DerivedDataCache/
 unreal/**/Binaries/
 unreal/**/*.uasset
 unreal/**/*.umap
+# Cesium's own HTTP cache (it follows the tiles' cache headers); never shared
+unreal/**/cesium-request-cache.sqlite*
+# written by the editor on every start
+unreal/**/Config/DefaultInput.ini
