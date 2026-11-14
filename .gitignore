@@ -73,3 +73,11 @@ entities.json
 
 # Raw captures (photos, scans): large binaries, never in git.
 captures/
+
+# Unreal (docs/FLAT02_UNREAL.md): the project is kept, what the editor makes is not
+unreal/**/Saved/
+unreal/**/Intermediate/
+unreal/**/DerivedDataCache/
+unreal/**/Binaries/
+unreal/**/*.uasset
+unreal/**/*.umap

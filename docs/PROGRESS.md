@@ -7,6 +7,33 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-11-14 — flat-02: mirrors on the live site; where the flat stands; the Unreal plan
+
+- **Mirrors (viewer, tested):** on the published flat the reflecting copy of
+  every mirror was drawn metres from its wall: the entry mirror's low across
+  the hall–living passage, where it hid the wall ends and the floor (the
+  owner's two screenshots). The Pages build quantizes `flat.glb` to 16-bit
+  positions and `addMirrors` moved the glass into place on those integers,
+  which wrapped. The dev viewer loads the unquantized file, so no check
+  there ever showed it. The glass is copied to floats first
+  (`mirror.ts` `mirrorGlass`, `mirror.test.ts` on a quantized quad, which
+  fails by exactly the 4 m seen). Verified in a dev build served the Pages
+  data: the four mirrors' boxes equal their walls', and both screenshots'
+  views are whole (`var/evidence/hall/`).
+- **Where the flat stands:** the owner gave the address. The building is in
+  OpenStreetMap; the plan's outline fits its west end, so the balcony side
+  faces 191.5° (was assumed 180°), ±2°. Measured facts and the address are in
+  `data/projects/flat-02/input/site.json`, not in git. `dressing.json` is
+  unchanged until a bake is wanted.
+- **Unreal:** researched and decided in `docs/FLAT02_UNREAL.md`. **Nothing
+  is built**: the engine is not installed, and the floor, the date and time,
+  a Cesium ion token and a daylight photo to compare with are missing.
+- **Not done:** the fix is committed but not deployed; the live site still
+  shows the displaced mirrors. The window views in the browser flat are
+  still an invented facade. Thin door gaps on the small bedroom's wardrobe
+  alias into dotted lines at a grazing angle (seen while checking; in both
+  the quantized and the plain model).
+
 ## 2026-11-08 — the capture pipeline, audited and fixed; room3 rebaked
 
 The audit's list (defects A–D, reruns, preflight, helpers, experiments,
