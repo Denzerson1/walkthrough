@@ -1675,8 +1675,8 @@ def bath_vanity(w: float, h: float, d: float, opts: dict) -> list[Part]:
     crown = h - 0.05
     a, b, c = x0 + tall, x0 + tall + upright, x0 + tall + upright + shelf_w
     t = 0.018
-    # Three open compartments up to about the mirror's middle (0117, 0136).
-    roof = opts.get("roof", 1.55)
+    # Open compartments up to `roof` (0119, 0120: four, to 1.70 m).
+    roof, levels = opts.get("roof", 1.55), opts.get("compartments", 3)
     parts: list[Part] = [
         ("white", (x0, x1, y0 + FRONT_T, y1, low, top - 0.03)),
         *fronts(x0, x1, low + GAP, top - 0.03 - GAP, y0, [[c - x0, 2], [0, 2]], grips=False),
@@ -1686,7 +1686,7 @@ def bath_vanity(w: float, h: float, d: float, opts: dict) -> list[Part]:
         ("oak-warm", (a, b, yu, y1, top, h)),
         ("oak-warm", (b, c, y1 - 0.01, y1, top, roof)),
         *[("oak-warm", (b, c, yu + 0.01, y1 - 0.01, z, z + t))
-          for z in (top + (roof - top) / 3, top + 2 * (roof - top) / 3)],
+          for z in (top + (roof - top) * k / levels for k in range(1, levels))],
         ("oak-warm", (b, c, yu, y1, roof, roof + t)),
         ("white", (b, c, yu + FRONT_T, y1, roof + t, crown)),
         *fronts(b, c, roof + t + GAP, crown - GAP, yu, [[0, 1]], grips=False),
@@ -1737,13 +1737,17 @@ def roll_shelf(w: float, h: float, d: float, opts: dict) -> list[Part]:
     """
     x0, x1, y0, y1 = -w / 2, w / 2, -d / 2, d / 2
     t = 0.018
-    parts: list[Part] = [("oak-warm", (x0, x1, y1 - t, y1, 0, h))]
-    levels = [0.0, 0.25, 0.5, 0.75, h - t]
+    reach = opts.get("topReach", 0.0)  # the top board on past its side (0128, 0137)
+    parts: list[Part] = [("oak-warm", (x0, x1, y1 - t, y1, 0, h - t))]
+    levels = [0.0, 0.25, 0.5, 0.75]
     for z in levels:
         parts.append(("oak-warm", (x0, x1, y0, y1 - t, z, z + t)))
-    for z in levels[:-1]:  # a roll on each shelf
+    parts.append(("oak-warm", (x0, x1 + reach, y0 - 0.01, y1, h - t, h)))
+    for z in levels:  # a roll on each shelf
         parts.append(("paper", (-0.055, 0.055, -0.055, 0.055, z + t, z + t + 0.1)))
-    parts.append(("box-white", (x0 - 0.01, x1 + 0.01, y0 + 0.01, y1 - 0.01, h, h + 0.1)))
+    # On top: a lidded box at the far end, as photographed.
+    parts.append(("box-white", (x1 + reach - 0.25, x1 + reach - 0.01, y0 + 0.02, y1 - 0.02,
+                                h, h + 0.11)))
     return parts
 
 
@@ -3282,6 +3286,12 @@ def mirror(bm: bmesh.types.BMesh, w: float, h: float, d: float, slot, opts: dict
     glass = bm.faces.new([bm.verts.new((x, y0 - 0.002, z)) for x, z in outline(0.0)])
     glass.material_index = slot("mirror")
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    # The glass is a face on its own: which way "out" is, is anyone's guess. It looks
+    # into the room (-y, its front). Turned to the wall, the viewer took it as seen from
+    # behind and drew no reflection (flat-02's entry mirror showed its brass back).
+    glass.normal_update()
+    if glass.normal.y > 0:
+        glass.normal_flip()
 
 
 def glass_leaf(bm: bmesh.types.BMesh, w: float, h: float, slot, opts: dict) -> None:

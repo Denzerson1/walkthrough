@@ -202,3 +202,33 @@ Every room screenshotted against the photos; what was not clean:
   the black bedside table by its head with a lamp that is on (0054); the desk closed at its
   right end (0056); MARKUS black all over (scaled, its grey plastic went white), as is the
   study's JARVFJALLET: a black that still shows their form.
+
+## The owner's review (2026-11-14)
+- [x] 117. The hall–living passage: a wall end and the floor were missing (the owner's two
+  screenshots). The published model's 16-bit positions wrapped when the mirrors were moved into
+  place; every reflection was drawn metres from its wall.
+- [x] 118. The entry mirror showed its brass back plate, not a reflection: its glass faced the
+  wall. Mirror glass now always faces the room (`build_flat.mirror`).
+- [x] 119. The sofa the photographed taupe cord (0092), #877f6b, measured against the white wall
+  beside it (it was a lighter grey-green).
+- [x] 120. The big painting by the dining table larger, as in 0084: 1.48 x 1.72 m, from the
+  window's frame almost to the corner, from above the chairs' backs almost to the ceiling.
+- [x] 121. Four dining chairs, two a side, each with its place mat (the owner).
+- [x] 122. Daylight: where the flat stands is measured (OpenStreetMap, the address), so the sun
+  comes in where it really does; 15 October 15:45 and the evening at 18:45, on the slider.
+- [x] 123. Style kits as in flat-01 (Industrial, Mid-Century, Modern Minimal, Scandinavian) for
+  the living room and both bedrooms: the flat's own sofa, armchair, coffee table, rug, beds,
+  bedside tables give way to the kit's pieces.
+- [x] 124. Outside: the invented city-centre house front is gone; the 107 houses within 120 m
+  stand where OpenStreetMap has them, as plain blocks (heights assumed: no floor counts there).
+- [ ] 125. The real view out of each window and off the balcony: needs the owner's daylight
+  photos facing out (as flat-01 has), then they replace the blocks in the windows.
+- [ ] 126. A replaced bed leaves its baked shadow on the wall behind it (the light map is the
+  flat as built).
+- [x] 127. The kitchen peninsula as deep as a cabinet, 65 cm (0080, 0081): it stood 96 cm out
+  from the run's side; the hob with it.
+- [x] 128. No towels on the shower's wall (the owner): two flat panels there read as a heater.
+- [x] 129. The vanity's open shelves as photographed (0119, 0120): four compartments up to
+  1.70 m (were three, to 1.55).
+- [x] 130. The roll shelf's top board reaches on over the WC's pre-wall, the lidded box at its
+  far end (0128, 0137).

@@ -7,6 +7,34 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-11-15 — flat-02: the owner's review, daylight, style kits, the neighbours
+
+Items 117–130 of `docs/flat-02-punchlist.md`.
+
+- **The walkthrough is the web viewer** (the owner: a walkthrough, not a video).
+  Unreal stays for stills.
+- **Daylight:** the location and the window bearing are measured (site.json),
+  so the sun falls where it really does; two bakes on the slider, 15 October
+  15:45 and 18:45.
+- **As photographed:** the sofa's taupe cord (0092), the big painting by the
+  table (1.48 x 1.72 m, 0084), four dining chairs (the owner), the kitchen
+  peninsula 65 cm deep (was 96), no towels on the shower's wall, the
+  vanity's open shelves four compartments to 1.70 m, the roll shelf's top
+  board on over the WC's wall (0128, 0137).
+- **Mirrors:** the entry mirror's glass faced the wall, so the viewer drew
+  no reflection there (its brass back showed); glass now always faces the
+  room (`build_flat.mirror`). With the quantization fix, all four reflect.
+- **Style kits as in flat-01** (Industrial, Mid-Century, Modern Minimal,
+  Scandinavian) for the living room and both bedrooms: slots in the
+  dressing replace the flat's own sofa, armchair, coffee table, rug, beds
+  and bedside tables. Checked in the browser with Scandinavian.
+- **Outside:** the invented house front is gone; the 107 houses within
+  120 m stand where OpenStreetMap has them (`scripts/osm_neighbours.py`,
+  tested), as plain blocks of assumed height.
+- **Not done:** the real view out of the windows needs daylight photos facing
+  out (the owner's 89 are night shots indoors); a kit's bed leaves the
+  original bed's baked shadow on the wall; not deployed.
+
 ## 2026-11-14 — flat-02 in Unreal: built, a 4K still and a 30 s walk
 
 `docs/FLAT02_UNREAL.md` has the commands, the measurements and the list of
