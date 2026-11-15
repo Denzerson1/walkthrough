@@ -1675,8 +1675,11 @@ def bath_vanity(w: float, h: float, d: float, opts: dict) -> list[Part]:
     crown = h - 0.05
     a, b, c = x0 + tall, x0 + tall + upright, x0 + tall + upright + shelf_w
     t = 0.018
-    # Open compartments up to `roof` (0119, 0120: four, to 1.70 m).
-    roof, levels = opts.get("roof", 1.55), opts.get("compartments", 3)
+    # The open niche up to `roof` (0117, 0120, the owner): a taller
+    # compartment on the top, two thin sage shelves over it, and a cupboard
+    # with its own door above to the crown.
+    roof = opts.get("roof", 1.5)
+    shelves = [top + (roof - top) * f for f in (0.4, 0.7)]
     parts: list[Part] = [
         ("white", (x0, x1, y0 + FRONT_T, y1, low, top - 0.03)),
         *fronts(x0, x1, low + GAP, top - 0.03 - GAP, y0, [[c - x0, 2], [0, 2]], grips=False),
@@ -1685,16 +1688,17 @@ def bath_vanity(w: float, h: float, d: float, opts: dict) -> list[Part]:
         *fronts(x0, a, top + GAP, crown - GAP, yu, [[0, 1]], grips=False),
         ("oak-warm", (a, b, yu, y1, top, h)),
         ("oak-warm", (b, c, y1 - 0.01, y1, top, roof)),
-        *[("oak-warm", (b, c, yu + 0.01, y1 - 0.01, z, z + t))
-          for z in (top + (roof - top) * k / levels for k in range(1, levels))],
-        ("oak-warm", (b, c, yu, y1, roof, roof + t)),
-        ("white", (b, c, yu + FRONT_T, y1, roof + t, crown)),
-        *fronts(b, c, roof + t + GAP, crown - GAP, yu, [[0, 1]], grips=False),
-        ("oak-warm", (c, c + t, yu, y1, top, h)),
+        *[("white", (b, c, yu + 0.03, y1 - 0.01, z, z + 0.012)) for z in shelves],
+        ("oak-warm", (b, c + t, yu, y1, roof, roof + t)),
+        ("oak-warm", (c, c + t, yu, y1, top, roof)),
+        ("white", (b, c + t, yu + FRONT_T, y1, roof + t, crown)),
+        *fronts(b, c + t, roof + t + GAP, crown - GAP, yu, [[0, 1]], grips=False),
         ("oak-warm", (x0, a, yu - 0.01, y1, crown, h)),
-        ("oak-warm", (b, c, yu - 0.01, y1, crown, h))]
+        ("oak-warm", (b, c + t, yu - 0.01, y1, crown, h))]
+    # Frameless, 50 x 82 cm, centred over the basin between the shelves'
+    # side and the wall, a little over the tiles (0117, 0120).
     mx = (c + t + x1) / 2
-    parts.append(("mirror", (mx - 0.3, mx + 0.3, y1 - 0.01, y1 - 0.003, 1.22, 2.06)))
+    parts.append(("mirror", (mx - 0.25, mx + 0.25, y1 - 0.01, y1 - 0.003, 1.13, 1.95)))
     return parts
 
 
@@ -3398,7 +3402,7 @@ def vanity_basin(item: dict, piece: bpy.types.Object, surfaces: dict) -> bpy.typ
     # 50 x 38 cm and 11 cm tall, as photographed beside the shelves: at
     # 60 x 42 x 14 it read as a trough.
     hw, hd, n, deck, rise = 0.25, 0.19, 64, 0.055, 0.11
-    cx, cy, top = (right + x1) / 2 + 0.02, y1 - 0.24, 0.86
+    cx, cy, top = (right + x1) / 2, y1 - 0.24, 0.86
     # Outside up to the rim, then the bowl in front of a flat deck at the
     # back the mixer stands on (0119, 0120): its wall steep below the rim,
     # rounding into a flat floor. Rings close down it, so the light baked
