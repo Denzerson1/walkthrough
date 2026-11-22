@@ -158,6 +158,9 @@ class Lighting(BaseModel):
     colours: str | None = None
     #: The sky at this time, an equirectangular panorama (sky.py).
     sky: str | None = None
+    #: Multiplies the view out of the windows (photos, taken in one light):
+    #: the daylight at this time over the daylight they were taken in.
+    viewTint: list[float] | None = None
 
 
 class SunSample(BaseModel):
@@ -175,6 +178,12 @@ class ViewPhoto(BaseModel):
 
     model: str  # a .glb: the photo on the walls it shows, shown unlit
     time: str  # "15:38", when it was taken: the light it shows
+    #: A surround (surround.py): where its photos were taken, in scene
+    #: metres. From more than `reach` away, what stands within `near` of it
+    #: is not shown: it was photographed from there only.
+    centre: tuple[float, float, float] | None = None
+    reach: float | None = None
+    near: float | None = None
 
 
 class SceneAssets(BaseModel):

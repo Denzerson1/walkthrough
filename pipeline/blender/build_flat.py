@@ -1010,7 +1010,9 @@ FRONT_T, GAP, GRIP = 0.019, 0.003, 0.03  # front thickness, gap between fronts, 
 SOFTNESS = {"bed": (0.025, 3), "air-con": (0.09, 10), "tv": (0.003, 1),
             "bed-frame": (0.004, 1), "washer": (0.012, 2),
             "box-bed": (0.035, 4), "towels": (0.012, 2), "folding-bed": (0.018, 3),
-            "box-cushion": (0.07, 5), "lounge-chair": (0.02, 3)}
+            "box-cushion": (0.07, 5), "lounge-chair": (0.02, 3),
+            "wicker-seat": (0.022, 3), "wicker-table": (0.008, 2), "wicker-cube": (0.008, 2),
+            "grill-cover": (0.07, 4)}
 
 Part = tuple[str, tuple[float, float, float, float, float, float]]
 
@@ -2009,6 +2011,28 @@ def railing(w: float, h: float, d: float, opts: dict) -> list[Part]:
     balcony.
     """
     x0, x1, y0, y1 = -w / 2, w / 2, -d / 2, d / 2
+    if opts.get("style") == "bars":
+        # flat-02's (IMG_2056, 2076): a flat top rail, square posts, thin
+        # upright bars a hand apart between a rail under the top and one
+        # just above the deck. No glass.
+        post, top, bar, pitch = 0.05, 0.02, 0.012, 0.115
+        bays = max(1, round(w / 1.4))
+        span = (w - post) / bays
+        bars: list[Part] = [
+            ("anthracite", (x0, x1, y0 - 0.005, y1 + 0.005, h - top, h)),
+            ("anthracite", (x0, x1, -0.012, 0.012, h - top - 0.07, h - top - 0.045)),
+            ("anthracite", (x0, x1, -0.012, 0.012, 0.07, 0.095))]
+        for i in range(bays + 1):
+            xa = x0 + i * span
+            bars.append(("anthracite", (xa, xa + post, -post / 2, post / 2, 0, h - top)))
+        for i in range(bays):
+            xa, xb = x0 + i * span + post, x0 + (i + 1) * span
+            count = max(1, round((xb - xa) / pitch) - 1)
+            for k in range(count):
+                xc = xa + (k + 1) * (xb - xa) / (count + 1)
+                bars.append(("anthracite", (xc - bar / 2, xc + bar / 2, -bar / 2, bar / 2,
+                                            0.095, h - top - 0.07)))
+        return bars
     post, rail = 0.05, 0.05
     bays = max(1, round(w / 1.5))
     parts: list[Part] = [("anthracite", (x0, x1, y0, y1, h - rail, h))]
@@ -2069,6 +2093,198 @@ def lounge_chair(w: float, h: float, d: float, opts: dict) -> list[Part]:
             ("cushion-grey", (x0 + arm, x1 - arm, y0 + 0.02, y1 - 0.08, base, base + 0.16)),
             ("cushion-grey", (x0 + arm + 0.01, x1 - arm - 0.01, y1 - 0.24, y1 - 0.08,
                               base + 0.16, h))]
+
+
+def wicker_table(w: float, h: float, d: float, opts: dict) -> list[Part]:
+    """flat-02's balcony table (IMG_2054, 2076): woven resin, square legs, a dark slab let in."""
+    x0, x1, y0, y1 = -w / 2, w / 2, -d / 2, d / 2
+    leg, top, rim = 0.065, 0.06, 0.075
+    parts: list[Part] = [("wicker", (x0, x1, y0, y1, h - top, h - 0.004)),
+                         ("wicker-top", (x0 + rim, x1 - rim, y0 + rim, y1 - rim, h - 0.004, h))]
+    # The rim round the slab, level with it.
+    parts += [("wicker", (x0, x1, y0, y0 + rim, h - 0.004, h)),
+              ("wicker", (x0, x1, y1 - rim, y1, h - 0.004, h)),
+              ("wicker", (x0, x0 + rim, y0 + rim, y1 - rim, h - 0.004, h)),
+              ("wicker", (x1 - rim, x1, y0 + rim, y1 - rim, h - 0.004, h))]
+    for xa in (x0, x1 - leg):
+        for ya in (y0, y1 - leg):
+            parts.append(("wicker", (xa, xa + leg, ya, ya + leg, 0, h - top)))
+    return parts
+
+
+def wicker_seat(w: float, h: float, d: float, opts: dict) -> list[Part]:
+    """
+    flat-02's balcony armchair, or wider its bench (IMG_2054, 2056): a
+    woven tub on short metal legs, the arms rising into a low back (front y0).
+    """
+    x0, x1, y0, y1 = -w / 2, w / 2, -d / 2, d / 2
+    foot, seat, arm, side = 0.13, 0.4, 0.62, 0.075
+    parts: list[Part] = [("wicker", (x0 + side, x1 - side, y0, y1 - side, foot + 0.06, seat)),
+                         ("wicker", (x0, x0 + side, y0, y1, foot, arm)),
+                         ("wicker", (x1 - side, x1, y0, y1, foot, arm)),
+                         ("wicker", (x0 + side, x1 - side, y1 - side, y1, foot, h)),
+                         ("wicker", (x0, x0 + side, y1 - 0.2, y1, arm, h)),
+                         ("wicker", (x1 - side, x1, y1 - 0.2, y1, arm, h))]
+    for xa in (x0 + 0.02, x1 - 0.045):
+        for ya in (y0 + 0.02, y1 - 0.045):
+            parts.append(("alu", (xa, xa + 0.025, ya, ya + 0.025, 0, foot)))
+    return parts
+
+
+def wicker_cube(w: float, h: float, d: float, opts: dict) -> list[Part]:
+    """The low side table by the bench (IMG_2056): a woven cube on feet, a dark glass top."""
+    x0, x1, y0, y1 = -w / 2, w / 2, -d / 2, d / 2
+    parts: list[Part] = [("wicker", (x0, x1, y0, y1, 0.08, h - 0.006)),
+                         ("wicker-top", (x0 + 0.01, x1 - 0.01, y0 + 0.01, y1 - 0.01, h - 0.006, h))]
+    for xa in (x0 + 0.02, x1 - 0.045):
+        for ya in (y0 + 0.02, y1 - 0.045):
+            parts.append(("alu", (xa, xa + 0.025, ya, ya + 0.025, 0, 0.08)))
+    return parts
+
+
+def grill_cover(w: float, h: float, d: float, opts: dict) -> list[Part]:
+    """The gas grill under its cover (IMG_2054, 2055): dark cloth over cart, hood and shelves."""
+    x0, x1, y0, y1 = -w / 2, w / 2, -d / 2, d / 2
+    return [("cover", (x0 + 0.1, x1 - 0.1, y0, y1, 0.0, 0.88)),
+            ("cover", (x0, x1, y0 + 0.05, y1 - 0.03, 0.62, 0.9)),
+            ("cover", (x0 + 0.14, x1 - 0.14, y0 + 0.04, y1 - 0.02, 0.88, h))]
+
+
+def lantern(w: float, h: float, d: float, opts: dict) -> list[Part]:
+    """The balcony's ceiling light (IMG_2050): an opal box behind three square black louvres."""
+    x0, x1, y0, y1 = -w / 2, w / 2, -d / 2, d / 2
+    t = 0.012
+    parts: list[Part] = [
+        ("lantern-glass", (x0 + 0.035, x1 - 0.035, y0 + 0.035, y1 - 0.035, 0.0, h - 0.012)),
+        ("black-metal", (x0, x1, y0, y1, h - 0.012, h))]
+    for k in range(3):
+        za = 0.004 + k * (h - 0.03) / 3
+        inset = 0.012 * (2 - k)
+        xa, xb, ya, yb = x0 + inset, x1 - inset, y0 + inset, y1 - inset
+        parts += [("black-metal", (xa, xb, ya, ya + t, za, za + 0.016)),
+                  ("black-metal", (xa, xb, yb - t, yb, za, za + 0.016)),
+                  ("black-metal", (xa, xa + t, ya + t, yb - t, za, za + 0.016)),
+                  ("black-metal", (xb - t, xb, ya + t, yb - t, za, za + 0.016))]
+    return parts
+
+
+def plant_pot(bm: bmesh.types.BMesh, radius: float, height: float, surface: int, soil: int,
+              n: int = 28) -> None:
+    """A round pot from the floor, tapering down, its soil a finger below the rim."""
+    lathe = [(0.7, 0.0), (0.76, 0.03), (0.95, 0.7), (1.0, 0.94), (1.0, 1.0), (0.93, 1.0),
+             (0.92, 0.9)]
+    rings = [[bm.verts.new((radius * f * math.cos(a), radius * f * math.sin(a), height * z))
+              for a in (2 * math.pi * k / n for k in range(n))] for f, z in lathe]
+    for lower, upper in zip(rings, rings[1:], strict=False):
+        for k in range(n):
+            face = bm.faces.new((lower[k], lower[(k + 1) % n], upper[(k + 1) % n], upper[k]))
+            face.material_index, face.smooth = surface, True
+    bm.faces.new(list(reversed(rings[0]))).material_index = surface
+    bm.faces.new(rings[-1]).material_index = soil
+
+
+def thuja(bm: bmesh.types.BMesh, w: float, h: float, d: float, slot, seed: int = 0) -> None:
+    """
+    A potted thuja, as the five along the balcony's west rail (IMG_2052,
+    2076): a narrow column a little wider below the middle, built of flat
+    upright sprays round a dark core, some brown ones low down and inside.
+    """
+    import random
+
+    rng = random.Random(31 + seed)
+    pot_h, reach = 0.3, min(w, d) / 2
+    plant_pot(bm, reach * 0.8, pot_h, slot("pot-taupe"), slot("soil"))
+
+    def radius(t: float) -> float:  # t: 0 at the pot, 1 at the tip
+        swell = 0.62 + 0.38 * math.sin(math.pi * min(t / 0.3, 1.0) / 2)
+        return reach * swell * (1 - max(t - 0.3, 0) / 0.7) ** 0.75 * 0.98 + 0.012
+
+    rings = []
+    for i in range(11):
+        t = i / 10
+        z = pot_h * 0.9 + t * (h - pot_h * 0.9)
+        r = 0.62 * radius(t)
+        rings.append([bm.verts.new((r * math.cos(a), r * math.sin(a), z))
+                      for a in (2 * math.pi * k / 10 for k in range(10))])
+    for lower, upper in zip(rings, rings[1:], strict=False):
+        for k in range(10):
+            bm.faces.new((lower[k], lower[(k + 1) % 10], upper[(k + 1) % 10],
+                          upper[k])).material_index = slot("thuja-dark")
+    count = round(1700 * (h / 1.5) * (reach / 0.2))
+    for _ in range(count):
+        t = rng.random() ** 0.85
+        azimuth = rng.uniform(0, 2 * math.pi)
+        inside = rng.random()
+        r = radius(t) * (0.6 + 0.42 * inside + rng.uniform(-0.04, 0.06))
+        z = pot_h * 0.9 + t * (h - pot_h * 0.9 - 0.04)
+        out = Vector((math.cos(azimuth), math.sin(azimuth), 0.0))
+        around = Vector((-out.y, out.x, 0.0))
+        lean = math.radians(rng.uniform(8, 30))
+        up = (Vector((0, 0, 1)) * math.cos(lean) + out * math.sin(lean)).normalized()
+        twist = rng.uniform(-1.0, 1.0)
+        across = (around * math.cos(twist) + out * math.sin(twist)).normalized()
+        length, width = rng.uniform(0.06, 0.13), rng.uniform(0.022, 0.045)
+        centre = out * r + Vector((0, 0, z))
+        verts = [bm.verts.new(centre - up * length * 0.5),
+                 bm.verts.new(centre + across * width * 0.5 + up * length * 0.05),
+                 bm.verts.new(centre + up * length * 0.5),
+                 bm.verts.new(centre - across * width * 0.5 + up * length * 0.05)]
+        dry = t < 0.45 and inside < 0.35 and rng.random() < 0.5
+        shade = rng.random()
+        bm.faces.new(verts).material_index = slot(
+            "thuja-dry" if dry else "thuja-light" if shade > 0.72 else
+            "thuja-dark" if shade < 0.2 else "thuja")
+
+
+def flower_box(bm: bmesh.types.BMesh, w: float, h: float, d: float, slot, seed: int = 0) -> None:
+    """
+    A geranium box hung on the balcony rail (IMG_2056, 2072): an anthracite
+    trough, a mound of round leaves spilling over it, some turned yellow
+    and orange by November, red flower heads above on their stalks.
+    """
+    import random
+
+    rng = random.Random(53 + seed)
+    trough = 0.16
+    box = bmesh.ops.create_cube(bm, size=1.0)
+    bmesh.ops.scale(bm, verts=box["verts"], vec=(w, d, trough))
+    bmesh.ops.translate(bm, verts=box["verts"], vec=(0, 0, trough / 2))
+    for face in {f for v in box["verts"] for f in v.link_faces}:
+        face.material_index = slot("soil" if face.normal.z > 0.5 else "planter")
+
+    def mound(x: float, y: float) -> float:
+        lump = 0.7 + 0.3 * math.sin(9.0 * x + seed) * math.cos(3.1 * x + 1.3 * seed)
+        return max(0.0, 1 - (y / (d * 0.95)) ** 2) * lump
+
+    for _ in range(round(w * 620)):
+        x = rng.uniform(-w / 2, w / 2)
+        y = rng.uniform(-d * 0.85, d * 0.85)
+        z = trough + rng.random() ** 0.6 * (h - trough - 0.1) * mound(x, y)
+        if abs(y) > d / 2:
+            z -= 0.07 * rng.random()
+        normal = Vector((rng.uniform(-0.7, 0.7), rng.uniform(-0.7, 0.7) + (0.5 if y > 0 else -0.5),
+                         1.0)).normalized()
+        a = normal.orthogonal().normalized()
+        b = normal.cross(a)
+        size = rng.uniform(0.016, 0.03)
+        centre = Vector((x, y, z))
+        verts = [bm.verts.new(centre + (a * math.cos(t) + b * math.sin(t)) * size)
+                 for t in (2 * math.pi * k / 6 for k in range(6))]
+        tone = rng.random()
+        bm.faces.new(verts).material_index = slot(
+            "geranium-autumn" if tone > 0.93 else "geranium-leaf-2" if tone > 0.6 else
+            "geranium-leaf")
+    for _ in range(max(3, round(w * 20))):
+        # A flower head: a dozen small blooms in a loose ball.
+        x = rng.uniform(-w / 2 + 0.03, w / 2 - 0.03)
+        y = rng.uniform(-d * 0.7, d * 0.7)
+        z = trough + (h - trough - 0.04) * (0.6 + 0.4 * rng.random()) * max(mound(x, y), 0.55)
+        for _ in range(11):
+            off = Vector((rng.gauss(0, 0.014), rng.gauss(0, 0.014), rng.gauss(0, 0.011)))
+            bloom = bmesh.ops.create_icosphere(bm, subdivisions=1, radius=rng.uniform(0.009, 0.014))
+            bmesh.ops.translate(bm, verts=bloom["verts"], vec=Vector((x, y, z)) + off)
+            for face in {f for v in bloom["verts"] for f in v.link_faces}:
+                face.material_index = slot("geranium-red")
 
 
 def backdrop(w: float, h: float, d: float, opts: dict) -> list[Part]:
@@ -2149,6 +2365,8 @@ PIECES = {
     "floating-shelf": floating_shelf, "step-stool": step_stool, "towels": towels,
     "picture": picture, "box-cushion": box_cushion, "blinds": blinds, "railing": railing,
     "garden-table": garden_table, "garden-chair": garden_chair, "lounge-chair": lounge_chair,
+    "wicker-table": wicker_table, "wicker-seat": wicker_seat, "wicker-cube": wicker_cube,
+    "grill-cover": grill_cover, "lantern": lantern,
     "backdrop": backdrop,
 }
 
@@ -2916,6 +3134,10 @@ def finished(item: dict, surfaces: dict) -> bpy.types.Object:
         wall_wc(bm, w, h, d, slot, opts)
     elif item["finish"] == "yucca":
         yucca(bm, w, h, d, slot)
+    elif item["finish"] == "thuja":
+        thuja(bm, w, h, d, slot, opts.get("seed", 0))
+    elif item["finish"] == "flower-box":
+        flower_box(bm, w, h, d, slot, opts.get("seed", 0))
     elif item["finish"] == "placemat":
         placemat(bm, w, h, d, slot)
     elif item["finish"] == "curtain":
@@ -2988,7 +3210,7 @@ def finished(item: dict, surfaces: dict) -> bpy.types.Object:
         TRANSLUCENT.add(obj.name)
         # `bulb`: a bulb (a `lights` entry) inside it, whose light it lets out.
         obj.visible_shadow = not opts.get("bulb")
-    if item["finish"] in ("yucca", "backdrop"):
+    if item["finish"] in ("yucca", "backdrop", "thuja", "flower-box"):
         # Leaves too thin for the light map; house fronts too big for it.
         VERTEX_LIT.add(obj.name)
     if item["finish"] in ("barrel-chair", "wc"):
@@ -3896,10 +4118,26 @@ def strip_lights(spec: dict) -> list[bpy.types.Object]:
     return lamps
 
 
-def set_strips(lamps: list[bpy.types.Object], entry: dict | None) -> None:
-    """The strips' power at this time of day: off by day, on in the evening."""
+def set_strips(lamps: list[bpy.types.Object], entry: dict | None,
+               lamps_on: list[float] | None = None) -> None:
+    """
+    The strips' power at this time of day: off by day, on in the evening.
+    With `lamps_on` (sun elevations: on fully at or below the first, off at
+    or above the second) the ceiling lights follow too, as people switch
+    them: a winter day's low sun would otherwise leave the strips half on
+    at noon, and the ceiling lights burning beside a sunlit window.
+    """
     elevation = entry["elevation"] if entry else 0.0
-    on = min(max((STRIPS_ON + STRIPS_FADE - elevation) / STRIPS_FADE, 0.0), 1.0)
+    if lamps_on:
+        full, off = lamps_on
+        on = min(max((off - elevation) / (off - full), 0.0), 1.0)
+        for obj in bpy.data.objects:
+            if obj.name.startswith("lamp-light-"):
+                if "power" not in obj:
+                    obj["power"] = obj.data.energy
+                obj.data.energy = obj["power"] * on
+    else:
+        on = min(max((STRIPS_ON + STRIPS_FADE - elevation) / STRIPS_FADE, 0.0), 1.0)
     for obj in lamps:
         obj.data.energy = obj["power"] * on
 
@@ -4711,7 +4949,7 @@ def bake(objects: list[bpy.types.Object], size: int, path: str,
 
 
 def vertex_light(objects: list[bpy.types.Object], label: str, live_sun: bool,
-                 balance: list[float], scale: float) -> None:
+                 balance: list[float], scale: float) -> dict:
     """
     The light of the vertex-lit pieces at this time of day, into their
     light set (store_light), in the light map's units over its
@@ -4719,7 +4957,8 @@ def vertex_light(objects: list[bpy.types.Object], label: str, live_sun: bool,
     `live_sun`, without the sun's direct light on what is opaque. A vertex
     far darker than those round it (inside a fold that cuts through
     another) takes theirs, and each is smoothed with them a little: a
-    vertex's light is a single sample of the surface.
+    vertex's light is a single sample of the surface. Returns each piece's
+    light as baked and smoothed, before the time's gain.
     """
     import numpy as np
 
@@ -4734,8 +4973,68 @@ def vertex_light(objects: list[bpy.types.Object], label: str, live_sun: bool,
     if through:
         light |= bake_vertices(through, BAKING, live_sun=False, translucent=True)
     gain = np.array(balance, np.float32) / scale
+    light = {obj.name: smooth_vertices(obj.data, light[obj.name]) for obj in objects}
     for obj in objects:
-        store_light(obj.data, label, smooth_vertices(obj.data, light[obj.name]) * gain, "POINT")
+        store_light(obj.data, label, light[obj.name] * gain, "POINT")
+    return light
+
+
+#: Finishes that stand out in the open: the houses round the flat, a balcony's plants.
+OUTDOOR = ("backdrop", "thuja", "flower-box")
+
+
+def sky_probe(spec: dict) -> bpy.types.Object:
+    """
+    A small white ball high over the flat, seen by nothing and shading
+    nothing: what the open sky gives at each time of day (probe_light).
+    """
+    room = spec["rooms"][0]
+    cx = sum(p[0] for p in room["polygon"]) / len(room["polygon"])
+    cz = sum(p[1] for p in room["polygon"]) / len(room["polygon"])
+    mesh = bpy.data.meshes.new("sky-probe")
+    bm = bmesh.new()
+    bmesh.ops.create_icosphere(bm, subdivisions=2, radius=0.25)
+    bm.to_mesh(mesh)
+    bm.free()
+    mesh.materials.append(material("sky-probe", "#ffffff", 1.0))
+    obj = bpy.data.objects.new("sky-probe", mesh)
+    bpy.context.collection.objects.link(obj)
+    obj.location = P(cx, 16.0, cz)
+    obj.visible_camera = obj.visible_diffuse = obj.visible_glossy = False
+    obj.visible_shadow = obj.visible_transmission = False
+    return obj
+
+
+def probe_light(probe: bpy.types.Object, live_sun: bool):
+    """The light on the probe now, RGB, the mean over its vertices."""
+    import numpy as np
+
+    probe.data.color_attributes.active_color = probe.data.color_attributes.new(
+        BAKING, "FLOAT_COLOR", "POINT")
+    light = bake_vertices([probe], BAKING, live_sun)[probe.name].mean(axis=0)
+    probe.data.color_attributes.remove(probe.data.color_attributes[BAKING])
+    return np.maximum(light, 1e-6)
+
+
+def follow_sky(objects: list[bpy.types.Object], first: dict, label: str, ratio,
+               balance: list[float], scale: float) -> None:
+    """
+    The light of pieces out in the open at this time of day, from their
+    light at the first time (`first`, vertex_light's) and how the open
+    sky's has changed since (`ratio`, by the probe). With the sun drawn
+    live their baked light is the sky's and its bounces: it follows the
+    sky. Baked afresh at every time, each piece is its own bake, the whole
+    flat synced for each: half an hour a time for flat-02's hundred houses
+    and eleven plants.
+    """
+    import numpy as np
+
+    gain = np.array(balance, np.float32) / scale
+    for obj in objects:
+        obj.data.color_attributes.active_color = obj.data.color_attributes.new(
+            BAKING, "FLOAT_COLOR", "POINT")
+        store_light(obj.data, label, first[obj.name] * np.asarray(ratio, np.float32) * gain,
+                    "POINT")
 
 
 def bake_vertices(objects: list[bpy.types.Object], name: str, live_sun: bool,
@@ -4925,7 +5224,16 @@ def main() -> None:
                    or build_sink(item, piece, spec["surfaces"])
                    or vanity_basin(item, piece, spec["surfaces"])
                    or bedding(item, piece, spec["surfaces"]))]
-    vertex_lit = [o for o in pieces + clothes if o.name in VERTEX_LIT]
+    # Where the owner's photos stood in 3D show the surroundings, the
+    # generated houses only cast shadows: no light of their own to bake.
+    around = spec.get("photo_surround")
+    beyond = around.get("shown_beyond_z") if around else None
+    unseen = {piece.name for item, piece in zip(spec["items"], pieces, strict=True)
+              if around and item.get("finish") == "backdrop"
+              and (beyond is None or item["center"][2] < beyond)}
+    outdoors = {piece.name for item, piece in zip(spec["items"], pieces, strict=True)
+                if item.get("finish") in OUTDOOR}
+    vertex_lit = [o for o in pieces + clothes if o.name in VERTEX_LIT and o.name not in unseen]
     for obj in vertex_lit:
         # Exported as a glTF extra: the viewer lights it from its vertices,
         # and draws the sun on it when the bake left the sun out.
@@ -4957,14 +5265,18 @@ def main() -> None:
     # With a path for it, the sun's direct light is the viewer's to draw.
     live_sun = bool(spec.get("sun_path"))
     lighting, reference, site_scale = [], None, None
+    open_air = [o for o in vertex_lit if o.name in outdoors] if live_sun else []
+    probe = sky_probe(spec) if open_air else None
+    first_light, first_sky = {}, None
     for entry in times:
         if entry:
             set_sun(entry)
-        set_strips(strips, entry)
+        set_strips(strips, entry, spec.get("lamps_on"))
         # The first (the default) at full quality; the other times, lit by
-        # day and so less noisy, at half: five full bakes took hours.
+        # day and so less noisy, at half: five full bakes took hours. At a
+        # third without the sun's direct light, which is what is noisy.
         bpy.context.scene.cycles.samples = spec["samples"] if entry is times[0] else max(
-            16, spec["samples"] // 2)
+            16, spec["samples"] // (3 if live_sun else 2))
         label = entry["time"].replace(":", "") if entry else "default"
         path = out["lightmap"].replace(".jpg", f"-{label}.jpg")
         scale, auto, balance = bake(lit, spec["lightmap_size"], path, Path(out["meta"]).parent,
@@ -4977,8 +5289,16 @@ def main() -> None:
                          "sunGain": [c * exposure_t for c in balance],
                          "skyTint": entry.get("tint") if entry else None,
                          "colours": light_set(label) if site or vertex_lit else None})
-        if vertex_lit:
-            vertex_light(vertex_lit, label, live_sun, balance, scale)
+        if vertex_lit and probe and entry is not times[0]:
+            indoors = [o for o in vertex_lit if o.name not in outdoors]
+            if indoors:
+                vertex_light(indoors, label, live_sun, balance, scale)
+            follow_sky(open_air, first_light, label, probe_light(probe, live_sun) / first_sky,
+                       balance, scale)
+        elif vertex_lit:
+            first_light = vertex_light(vertex_lit, label, live_sun, balance, scale)
+            if probe:
+                first_sky = probe_light(probe, live_sun)
         if site:
             site_scale = bake_neighbourhood(site, label, site_scale)
     if default:
@@ -4998,6 +5318,14 @@ def main() -> None:
         obj.hide_render = False
     expose(exposure, views)
     preview(spec, windows, patch, out["preview"])
+    # The generated houses the owner's photos stand in for shaded the bake
+    # above. They stay in the glb unseen, to cast the live sun's shadows (a
+    # glTF extra the viewer reads).
+    for piece in pieces:
+        if piece.name in unseen:
+            piece["shadowOnly"] = True
+    if probe:
+        bpy.data.objects.remove(probe, do_unlink=True)
     bpy.ops.export_scene.gltf(filepath=out["glb"], export_format="GLB", export_apply=True,
                               export_lights=False, export_cameras=False, export_extras=True,
                               export_vertex_color="NONE", export_attributes=True)

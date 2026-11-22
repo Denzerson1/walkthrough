@@ -78,7 +78,13 @@ export interface BakedModel {
   /** The sun's path, when its direct light is drawn live rather than baked (sun.ts). */
   sunPath?: SunSample[];
   /** The view out of the windows from the owner's photos, and when they were taken. */
-  viewPhoto?: { url: string; minutes: number };
+  viewPhoto?: {
+    url: string;
+    minutes: number;
+    /** A surround: where its photos were taken; beyond `reach` of it, it is shown set back. */
+    centre?: [number, number, number];
+    reach?: number;
+  };
 }
 
 interface Props {
@@ -386,7 +392,9 @@ export function SplatScene({
       DEFAULT_FOV,
       mount.clientWidth / mount.clientHeight,
       0.05,
-      200,
+      // Far enough for what the windows look out on: the hills on the horizon
+      // of a view stood in 3D (pipeline surround.py) are most of a kilometre off.
+      1000,
     );
 
     let renderer: THREE.WebGLRenderer;
@@ -521,7 +529,7 @@ export function SplatScene({
       // largest of them, so how much of it has arrived is the progress shown.
       Promise.all([
         loadBakedModel(model, manifest.rooms, anisotropy, (fraction) => onProgress?.(fraction * 0.95)),
-        model.viewPhoto ? loadViewPhoto(model.viewPhoto.url) : null,
+        model.viewPhoto ? loadViewPhoto(model.viewPhoto) : null,
         lighting ? loadDaylightKey(lighting[opening], anisotropy) : null,
       ])
         .then(([group, view, first]) => {
@@ -2010,6 +2018,16 @@ async function loadBakedModel(
       material.lightMap = lightMap;
       decodeLightMaps(material, single);
     }
+    // The generated houses round a flat whose surroundings are photos stood
+    // in 3D: there to cast the sun's shadows, not to be seen (build_flat).
+    if (node.userData.shadowOnly ?? node.parent?.userData.shadowOnly) {
+      material.colorWrite = false;
+      material.depthWrite = false;
+      node.raycast = () => {};
+      source.dispose();
+      node.material = material;
+      return;
+    }
     // Lit from its vertices instead: the neighbourhood (light shown as is)
     // and the vertex-lit pieces (the generated models, clothes, the pendant:
     // light in the light map's units over its scale). Shown from an RGB copy
@@ -2038,23 +2056,72 @@ async function loadBakedModel(
   return gltf.scene;
 }
 
+/** The cosine to the line of sight below which a view photo's surface is edge-on. */
+const EDGE_ON = 0.1;
+/** Metres of walking out of a surround's reach over which it is set back, and how far back. */
+const REACH_FADE = 2;
+const SET_BACK = 150;
+
 /**
- * The view out of the windows as the owner photographed it (view_photo.py):
- * shown as the photo is, neither lit nor tone mapped nor hazed, as the
- * camera already saw all that.
+ * The view out of the windows as the owner photographed it (view_photo.py,
+ * or all round the flat: surround.py): shown as the photo is, neither lit
+ * nor tone mapped nor hazed, as the camera already saw all that.
  */
-async function loadViewPhoto(url: string): Promise<THREE.Object3D> {
-  const gltf = await gltfLoader().loadAsync(url);
+async function loadViewPhoto(view: NonNullable<BakedModel['viewPhoto']>): Promise<THREE.Object3D> {
+  const gltf = await gltfLoader().loadAsync(view.url);
+  const around = {
+    viewFrom: { value: new THREE.Vector3(...(view.centre ?? [0, 0, 0])) },
+    // Nought: shown from everywhere (a photo out of one window).
+    viewReach: { value: view.centre ? (view.reach ?? 0) : 0 },
+  };
   gltf.scene.traverse((node) => {
     if (!(node instanceof THREE.Mesh)) return;
     const source = node.material as THREE.MeshBasicMaterial;
-    node.material = new THREE.MeshBasicMaterial({
+    const material = new THREE.MeshBasicMaterial({
       name: 'view-photo',
       map: source.map,
       side: THREE.DoubleSide,
+      // A surround's texture is cut along its roofs and trees by its alpha.
+      alphaTest: 0.5,
       toneMapped: false,
       fog: false,
     });
+    // A photo stood at its measured depth is a picture of what its camera
+    // faced. Seen edge-on from across the flat, a surface of it is a smear
+    // of a few pixels: not drawn, so what stands behind shows instead. And
+    // a surround is true to where its photos were taken: from a room out of
+    // its reach every near surface of it is side-on. There it is set back
+    // along the photos' own rays, far enough to be their view as a picture
+    // at the horizon: sharp and whole, without the room's own parallax.
+    material.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, around);
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          '#include <common>',
+          '#include <common>\nvarying vec3 vViewAt;\nuniform vec3 viewFrom;\nuniform float viewReach;',
+        )
+        .replace(
+          '#include <project_vertex>',
+          'vec4 mvPosition = modelMatrix * vec4( transformed, 1.0 );\n' +
+            'if ( viewReach > 0.0 ) {\n' +
+            '  float back = smoothstep( viewReach, viewReach + ' +
+            `${REACH_FADE.toFixed(1)}, distance( cameraPosition, viewFrom ) );\n` +
+            `  mvPosition.xyz += normalize( mvPosition.xyz - viewFrom ) * back * ${SET_BACK.toFixed(1)};\n` +
+            '}\n' +
+            'mvPosition = viewMatrix * mvPosition;\n' +
+            'gl_Position = projectionMatrix * mvPosition;\nvViewAt = mvPosition.xyz;',
+        );
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vViewAt;')
+        .replace(
+          '#include <map_fragment>',
+          'vec3 faceNormal = normalize( cross( dFdx( vViewAt ), dFdy( vViewAt ) ) );\n' +
+            `if ( abs( dot( faceNormal, normalize( vViewAt ) ) ) < ${EDGE_ON.toFixed(2)} ) discard;\n` +
+            '#include <map_fragment>',
+        );
+    };
+    material.customProgramCacheKey = () => 'view-photo';
+    node.material = material;
     source.dispose();
   });
   return gltf.scene;

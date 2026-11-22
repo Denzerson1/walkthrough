@@ -554,6 +554,14 @@ cannot see; placed by hand from the capture photos):
   narrow area light, out of sight behind the front edge, a warm pool on the
   worktop. On in the evening, off by day: full once the sun is below 10
   degrees, fading in over the 20 above, so the slider fades them.
+- `surround`: the owner's photos all round a flat with a balcony, stood in
+  3D: see "The surroundings from photos" at the end. With it, `sun.live`
+  (the sun's direct light left out of the bakes and drawn by the viewer
+  along its path, as under a roof window, so its patch moves with the
+  slider) and `sun.lampsOn` (sun elevations: the lamps fully on at or below
+  the first, off at or above the second; without it the ceiling lights are
+  always on) make the slider a day: flat-02's runs from sunrise to night on
+  the day its photos were taken.
 - `viewPhotos`: the owner's photos out of two windows (`photo`, the
   `window` it was taken from, `keep`: the part to use, as fractions, to cut
   the window's own frame away). They are the view: see "The view out" below.
@@ -825,3 +833,104 @@ in the photos' colours.
 
 `work/rebuild_preview.png` is a Cycles still from the hero view. About 4
 minutes per room on the 2080 Super; `--preview-only` about 1 minute.
+
+## The surroundings from photos: `pipeline surround`
+
+```bash
+pnpm run pipeline surround --project flat-02          # then the view and the skies with it
+pnpm run pipeline surround --project flat-02 --fresh  # reconstruct again from the photos
+```
+
+A photo out of one window, laid on the street front across (`viewPhotos`,
+flat-01), is the view from that window. A flat with a balcony is looked out
+of from everywhere, in every direction. Its owner photographs it by turning
+on the spot, leaning over the rail and walking round the house; the dressing's
+`surround` names those photos, and this stage stands them in 3D round the
+flat (`surround*.py`):
+
+1. **Where each photo was taken** (`surround_recon.structure`): COLMAP by
+   pycolmap over all the photos at once, affine-covariant SIFT with guided
+   matching. Plain SIFT tied flat-02's 67 photos into three models of 25, 15
+   and 10; this ties 64 into one (0.95 px). About 55 minutes, most of it the
+   matching.
+2. **How far away things are**: PatchMatch stereo where two photos see the
+   same textured surface from different spots (exact, a tenth of each
+   photo), and for the rest a single-image depth network (Depth Anything V2
+   Small, Apache-2.0; `pipeline/depth/mono_depth.py`, run in the trainer's
+   venv) pinned to the stereo by a line in inverse depth and a smooth local
+   correction (`surround_recon.complete`). Typical disagreement with the
+   stereo afterwards: 2-4 %.
+3. **Up, north, metres** (`surround_register`). Up from the photos' vertical
+   lines (flat-02: they agree to 0.7 degrees). North from the sun where a
+   photo has it in frame: its bearing at the second the photo was taken is
+   known, and its height in the model against its known one checks the lot
+   (five suns within 0.4 degrees; three more, in photos the model holds
+   poorly, are four degrees out and are left out by that check). Metres and
+   position from the balcony the photos show and the plan has: deck, the
+   roof over it, the rail's top, a side wall. `work/surround/overlay.jpg`
+   draws the plan's balcony on the photos: **look at it**; the fit is
+   automatic, the check is by eye. The bearing the balcony faces comes out
+   measured (flat-02: 192.3, the map's footprint gave 191.5 +-2): the stage
+   says so when the dressing's `windowsFace` differs, since the sun of the
+   bake stands by it.
+4. **The photos as meshes** (`surround_mesh`): a grid of vertices pushed out
+   along their rays to the photo's depth; the sky cut away along the roofs
+   and trees by the texture's alpha; the flat's own balcony and house
+   (`own`, boxes in scene metres) cut away; lawn and paving laid flat on the
+   ground's levels; a quad across the edge of something near laid flat on
+   what is behind it. Each direction, seen from where most photos were
+   taken, is one photo's (the most central that shows it), so nothing is
+   blended and nothing doubled. A photo whose depth disagrees with the
+   others' (taken by turning on the spot, it has no second view) takes its
+   depth from theirs. Written as `scene/view_photo.glb` (WebP textures with
+   alpha), which the viewer shows as it shows a view photo.
+5. **For the skies** (`work/surround/surround_pano.npz`, read by
+   `outside.py`): the photos' own sky as a panorama, less a disc round the
+   sun (the viewer draws the sun where it stands at each time), and a soft
+   panorama of the ground and houses, laid under the skyline of every time's
+   sky: what shows through a gap when the viewer stands far from where the
+   photos were taken.
+
+From where a photo was taken the view is the photo. Walking about, near moves
+against far as it should. What it cannot do: show what no photo saw. From a
+room far from where the photos were taken (more than `REACH`, 8 m) the viewer
+sets the whole surround back along the photos' own rays (150 m), which makes
+it their view as a picture at the horizon: sharp, without the parallax that
+room would have. And where no photo looks at
+all (flat-02: north of the house; its street photos are in the model, at a
+scale of their own that the balcony does not fix), the generated houses stay
+(`housesShownBeyondZ`).
+
+**Light.** The photos show one light, the minute they were taken (`taken`).
+The dressing's `sun` is set to that day and time, so the bake's default is
+the photos' light; at the other baked times the viewer multiplies the photos
+by `viewTint` (manifest, per time): the sky's brightness then over the sky's
+when they were taken, cooled after sunset (`surround.daylight_tints`).
+
+**The dressing's `surround`:**
+
+| Key | |
+|---|---|
+| `photos`, `taken` | Folder under the project; "HH:MM" they were taken |
+| `balcony` | `photos` taken on it (stems), and the plan's `railZ`, `wallX`, `wallTowards` (-1 or 1), `railHeight` |
+| `use` | Photo stem to how gladly it is used where several see the same (0..1; low for the sun in frame) |
+| `veil` | Photo stem to the share of the sun's veil taken off it (lens flare; haze removal's dark channel, within 40 degrees of the sun) |
+| `centre` | The photos whose cameras' middle the rest is seen from |
+| `own`, `lean`, `air` | Boxes of the flat's own (x0, x1, y0, y1, z0, z1); which of them a photo may be taken leaning over; boxes of air (the balcony's, and just outside its rails) where nothing of the surroundings stands, so a photo's own rail and flowers at a wrong depth are left out |
+| `lay` | Where low growth is laid on the ground: x below, z below, z above, y below |
+| `housesShownBeyondZ` | The generated houses north of this line stay in view; the rest only cast the sun's shadows |
+
+**Setup, beyond the pipeline's:** `scripts/setup_pipeline_wsl.sh` puts
+`transformers` in `~/depth_pkgs` (beside the trainer's venv, not in it: its
+pins stay) and the network's three files in
+`data/cache/depth-anything-v2-small`. WSL here could not reach
+huggingface.co; then fetch `config.json`, `preprocessor_config.json` and
+`model.safetensors` (99 MB) of `depth-anything/Depth-Anything-V2-Small-hf`
+on the Windows side into that folder. `DEPTH_PACKAGES` and `DEPTH_MODEL`
+move them. The larger Depth Anything models are CC BY-NC: not used.
+
+**Measured, flat-02 (2026-11-22, RTX 2080 Super):** 67 photos (iPhone 13 Pro
+Max, 1x), 64 placed, 61 kept, 20 stood in 3D (the balcony's side: 2047-2075);
+structure from motion 56 min, stereo at 1200 px 11 min, the depth network
+7 s, everything after it 2 min; `view_photo.glb` 18 MB, 0.5 million
+triangles.

@@ -28,6 +28,8 @@ from . import provenance as prov
 from . import rebuild as rebuild_mod
 from . import roomplan as roomplan_mod
 from . import stray as stray_mod
+from . import surround as surround_mod
+from . import surround_recon as surround_recon_mod
 from . import train as train_mod
 from .manifest import (
     HeroView,
@@ -1051,6 +1053,33 @@ def outside(project: str = typer.Option(..., "--project", "-p")) -> None:
     spec = json.loads((paths.work / "rebuild_spec.json").read_text(encoding="utf-8"))
     _outside(paths, manifest, spec, dressing)
     manifest.write(paths.manifest)
+
+
+@app.command()
+def surround(
+    project: str = typer.Option(..., "--project", "-p"),
+    fresh: bool = typer.Option(False, help="Reconstruct again from the photos (1.5 hours)"),
+) -> None:
+    """
+    The flat's surroundings from its owner's photos of them, stood in 3D
+    (the dressing's `surround`), and the view and the skies with them.
+    """
+    paths = _paths(project)
+    dressing = json.loads((paths.input / "dressing.json").read_text(encoding="utf-8"))
+    if not dressing.get("surround"):
+        raise typer.BadParameter("The dressing has no `surround`.")
+    try:
+        report = surround_mod.build(paths, dressing, _pycolmap(), console.print, fresh)
+    except surround_recon_mod.DepthNetworkMissing as exc:
+        raise ToolMissing(str(exc)) from exc
+    console.print(f"  {report['used']} photos stood in 3D of {report['registered']} placed "
+                  f"({report['photos']} taken), {report['modelKB']} kB; "
+                  f"check {surround_mod.folder(paths) / 'overlay.jpg'}")
+    if paths.manifest.is_file() and (paths.work / "rebuild_spec.json").is_file():
+        manifest = Manifest.load(paths.manifest)
+        spec = json.loads((paths.work / "rebuild_spec.json").read_text(encoding="utf-8"))
+        _outside(paths, manifest, spec, dressing)
+        manifest.write(paths.manifest)
 
 
 @app.command(name="run-all")

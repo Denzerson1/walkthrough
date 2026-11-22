@@ -216,6 +216,10 @@ def site_spec(paths: ProjectPaths, dressing: dict, knee_wall_z: float) -> dict |
             "groundFloor": site.GROUND_FLOOR_M}
 
 
+#: The dome behind a surround, before the viewer skins it: ground, horizon, zenith.
+SURROUND_DOME = {"below": "#6f7466", "horizon": "#b9c7d6", "zenith": "#3f6fb5"}
+
+
 class BlenderMissing(RuntimeError):
     pass
 
@@ -678,6 +682,13 @@ def scene_spec(
     skylights = roof_windows(rooms[0]["ceilings"], wanted) if rooms else []
     surroundings = (site_spec(paths, dressing, max(p[1] for p in rooms[0]["polygon"]))
                     if rooms else None)
+    # The sky dome behind the windows: a view photo carries its own dome
+    # colours; a flat with its surroundings stood in 3D from photos
+    # (surround.py) gets a plain one, which the viewer skins with the sky
+    # panoramas of each time of day.
+    outside = outside_view(paths, wanted)
+    if outside is None and dressing.get("surround") and not surroundings:
+        outside = dict(SURROUND_DOME)
     light, suns, path, windows_face = None, [], [], None
     if skylights:
         n = skylights[0]["frame"]["n"]
@@ -697,6 +708,9 @@ def scene_spec(
         facing_dir = tuple(dressing["windowsDir"])
         light = sun(dressing, facing_dir)
         suns = [sun(dressing, facing_dir, None, t) for t in dressing["sun"].get("times", [])]
+        # `live`: the sun's direct light left out of the bakes and drawn by
+        # the viewer along its path, as under a roof window.
+        path = sun_path(dressing, facing_dir) if dressing["sun"].get("live") else []
         windows_face = {"dir": list(facing_dir), "bearing": None}
     return {
         "rooms": rooms,
@@ -705,7 +719,16 @@ def scene_spec(
         "skylights": skylights,
         "lights": dressing.get("lights", []),
         "strips": dressing.get("strips", []),
-        "outside": outside_view(paths, wanted),
+        "outside": outside,
+        # The surroundings are photos stood in 3D: the generated houses
+        # still shade the flat, in the bake and in the viewer, unseen. Where
+        # the photos do not look (`housesShownBeyondZ`: north of that line,
+        # for a balcony on the south side) they are still what there is.
+        "photo_surround": ({"shown_beyond_z": dressing["surround"].get("housesShownBeyondZ")}
+                           if dressing.get("surround") else None),
+        # Sun elevations (on fully at or below, off at or above) between
+        # which the flat's lamps come on; none: the ceiling lights always on.
+        "lamps_on": (dressing.get("sun") or {}).get("lampsOn"),
         # Open air outside the outline (a balcony): the walls facing it are baked.
         "outdoors": dressing.get("outdoors", []),
         "site": surroundings,

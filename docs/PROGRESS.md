@@ -7,6 +7,41 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-11-22 — flat-02: the real surroundings from the owner's photos, the balcony, the day
+
+Items 125, 131–135 of `docs/flat-02-punchlist.md`. `docs/PIPELINE.md`, "The
+surroundings from photos", has the method and the numbers.
+
+- **Tried and dropped first:** a stitched photo panorama as backdrop (seams,
+  no depth; the owner: no) and a generic HDRI (not the real place).
+- **`pipeline surround`** (new stage, `surround*.py`, 17 tests): the 67
+  photos of 21 November through COLMAP (64 in one model, 0.95 px), PatchMatch
+  stereo, Depth Anything V2 Small (Apache-2.0) pinned to the stereo, then
+  set in the flat's metres by the balcony itself. 20 photos stand as depth
+  meshes round the flat (`view_photo.glb`, 18 MB), their own sky is the
+  sky dome. Against OpenStreetMap the houses south and west stand within
+  1–2 m.
+- **Measured, not assumed:** the balcony faces 192.3 degrees (from the sun
+  in five photos; the map's footprint had given 191.5). The bake's sun is
+  the photos': 21 November 13:05.
+- **The day:** six baked times (07:30, 09:00, 13:05, 15:00, 16:15, 17:15),
+  the sun drawn live between them, the slider's names and colours by the
+  sun's height, the photos dimmed and cooled with the sky. Vertex-lit
+  pieces outdoors are baked once and follow a sky probe: baking each at
+  every time took half an hour a time.
+- **The balcony as photographed:** deck, bar railings, flower boxes,
+  thujas, wicker furniture, grill, lantern.
+- **Checked** in the browser on a quick test bake (24 samples): all six
+  times from the living room and the balcony door, 13:05 from the balcony
+  (five directions) and both bedrooms. **The full-quality bake was still
+  running when this was written: not yet looked at, not deployed.**
+- **Not done, plainly:** the street side (north) still shows generated
+  blocks: the street photos are in the model at a scale of their own, and
+  two tries to tie them to the map were not trustworthy. From the far
+  bedroom the view is the balcony's, as a picture at the horizon (no photo
+  was taken there). Toward the sun the photos keep some lens haze. Other
+  times of day are the midday photos tinted, not photos of that hour.
+
 ## 2026-11-15 — flat-02: the owner's review, daylight, style kits, the neighbours
 
 Items 117–130 of `docs/flat-02-punchlist.md`.

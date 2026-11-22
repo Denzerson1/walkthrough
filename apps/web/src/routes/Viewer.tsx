@@ -411,7 +411,12 @@ export function Viewer() {
 
   // Top right on a big screen; on a phone, at the bottom where a thumb reaches it.
   const daylightControl = manifest && ready && daylightKeys.length > 1 && daylight !== null && (
-    <DaylightControl keys={daylightKeys} value={daylight} onChange={setDaylight} />
+    <DaylightControl
+      keys={daylightKeys}
+      value={daylight}
+      onChange={setDaylight}
+      sun={manifest.assets?.sunPath}
+    />
   );
 
   if (error) {
@@ -447,6 +452,7 @@ export function Viewer() {
                     lightmapScale: l.lightmapScale,
                     skyTint: l.skyTint,
                     skyUrl: l.sky ? fileUrl(projectId, l.sky) : null,
+                    viewTint: l.viewTint,
                     // three lowercases a glTF custom attribute's name.
                     colours: l.colours?.toLowerCase() ?? null,
                   })),
@@ -455,6 +461,8 @@ export function Viewer() {
                     ? {
                         url: fileUrl(projectId, manifest.assets.viewPhoto.model),
                         minutes: toMinutes(manifest.assets.viewPhoto.time),
+                        centre: manifest.assets.viewPhoto.centre ?? undefined,
+                        reach: manifest.assets.viewPhoto.reach ?? undefined,
                       }
                     : undefined,
                 }

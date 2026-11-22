@@ -94,7 +94,7 @@ const REACH = 150;
 /** The layer of what casts the sun's shadow. */
 export const CASTS = 2;
 /** Not in the sun's way: what Cycles let the light through or did not have in the bake. */
-const SEE_THROUGH = new Set(['glass', 'sky', 'view-photo', 'lamp']);
+const SEE_THROUGH = new Set(['glass', 'door-glass', 'sky', 'view-photo', 'lamp']);
 
 /**
  * The sun's shadow map over the flat: an orthographic view along the
@@ -125,7 +125,11 @@ export class SunShadow {
     this.camera.layers.set(CASTS);
     model.traverse((node) => {
       if (!(node instanceof THREE.Mesh)) return;
-      if (!SEE_THROUGH.has((node.material as THREE.Material).name)) node.layers.enable(CASTS);
+      // A curtain or a lampshade let the sun through in the bake (vertexLight "baked").
+      const lets = (node.userData.vertexLight ?? node.parent?.userData.vertexLight) === 'baked';
+      if (!lets && !SEE_THROUGH.has((node.material as THREE.Material).name)) {
+        node.layers.enable(CASTS);
+      }
     });
     this.uniforms = {
       sunShadow: { value: depth },

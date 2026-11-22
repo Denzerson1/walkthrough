@@ -23,6 +23,8 @@ export interface DaylightKey {
   skyTint?: number[] | null;
   /** The sky at this time, an equirectangular panorama (pipeline sky.py). */
   skyUrl?: string | null;
+  /** Multiplies the photos out of the windows at this time (pipeline outside.py). */
+  viewTint?: number[] | null;
   /** The vertex attribute holding the light in vertices then (the neighbourhood's, vertex-lit pieces'). */
   colours?: string | null;
 }
@@ -68,6 +70,56 @@ export function mood(minutes: number): string {
   if (minutes < 19.5 * 60) return 'Evening';
   if (minutes < 20.5 * 60) return 'Golden hour';
   return 'Sunset';
+}
+
+/**
+ * The sun's height in degrees at `minutes`, and whether it is rising, from
+ * the path the viewer moves it along (between its samples linearly, held at
+ * its ends). In scene space y is up, so a direction's y is the sine of it.
+ */
+export function sunHeight(path: SunSample[], minutes: number): { degrees: number; rising: boolean } {
+  const height = (s: SunSample) => (Math.asin(Math.max(-1, Math.min(1, s.direction[1]))) * 180) / Math.PI;
+  let i = 0;
+  while (i < path.length - 2 && path[i + 1].minutes < minutes) i++;
+  const a = path[i];
+  const b = path[Math.min(i + 1, path.length - 1)];
+  const span = b.minutes - a.minutes;
+  const t = span > 0 ? Math.min(Math.max((minutes - a.minutes) / span, 0), 1) : 0;
+  return { degrees: height(a) + (height(b) - height(a)) * t, rising: height(b) > height(a) };
+}
+
+/**
+ * What a time of day is called where the sun's height is known: by the sun
+ * while it is low or down (a November afternoon is dusk by a quarter past
+ * four), by the clock while it is up.
+ */
+export function moodBySun(minutes: number, degrees: number, rising: boolean): string {
+  if (degrees < -6) return 'Night';
+  if (degrees < -0.8) return rising ? 'Dawn' : 'Dusk';
+  if (degrees < 6) return rising ? 'Sunrise' : 'Golden hour';
+  if (minutes < 10.5 * 60) return 'Morning';
+  if (minutes < 14 * 60) return 'Midday';
+  return 'Afternoon';
+}
+
+/** The sky's colour by the sun's height, for the track: night, dusk, amber, pale, blue. */
+const SKY_BY_SUN: Array<[number, [number, number, number]]> = [
+  [-10, [44, 46, 84]],
+  [-4, [111, 106, 160]],
+  [0, [240, 170, 102]],
+  [3, [243, 196, 141]],
+  [9, [214, 220, 214]],
+  [20, [168, 203, 233]],
+];
+
+/** The sky's colour with the sun `degrees` up, between the stops above. */
+export function skyColourBySun(degrees: number): string {
+  const i = SKY_BY_SUN.findIndex(([d]) => d >= degrees);
+  if (i <= 0) return `rgb(${SKY_BY_SUN[i === 0 ? 0 : SKY_BY_SUN.length - 1][1].join(',')})`;
+  const [d0, a] = SKY_BY_SUN[i - 1];
+  const [d1, b] = SKY_BY_SUN[i];
+  const f = (degrees - d0) / (d1 - d0);
+  return `rgb(${a.map((v, k) => Math.round(v + (b[k] - v) * f)).join(',')})`;
 }
 
 /**
@@ -292,8 +344,13 @@ export class Daylight {
     }
     model.traverse((node) => {
       if (!(node instanceof THREE.Mesh)) return;
+      // Houses that only cast the sun's shadow carry no light of their own.
+      if (node.userData.shadowOnly ?? node.parent?.userData.shadowOnly) return;
       const material = node.material as THREE.MeshBasicMaterial;
       if (material.name === 'sky') {
+        // Drawn first: it writes no depth, and what stands beyond its sphere
+        // (the far end of a view stood in 3D) must still be drawn over it.
+        node.renderOrder = -1;
         if (this.skyUniforms) {
           material.dispose();
           node.material = skyMaterial(this.skyUniforms);
@@ -312,9 +369,12 @@ export class Daylight {
       const colour = geometry.getAttribute('color') as THREE.BufferAttribute | undefined;
       if (colour) this.sites.push({ colour, sets: this.lightSets(geometry, 1) });
     });
-    // The photo out of the window was taken in one light; at other times it
-    // takes on the neighbourhood's change in light from then, as baked.
-    if (this.photos.length && this.sites.length) {
+    // The photos out of the windows were taken in one light. At other times
+    // they take the tint the pipeline worked out for each key; without one,
+    // the neighbourhood's change in light from then, as baked.
+    if (this.photos.length && this.keys.every((key) => key.viewTint)) {
+      this.photoTints = this.keys.map((key) => key.viewTint as number[]);
+    } else if (this.photos.length && this.sites.length) {
       const means = this.keys.map((_, k) => {
         const sum = [0, 0, 0];
         let n = 0;

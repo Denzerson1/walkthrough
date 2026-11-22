@@ -649,6 +649,39 @@ def surface_texture(kind: str, colour: str, px: int = 1024, seed: int = 0) -> Im
         spread = 0.32
     elif kind == "paisley":
         return _paisley(colour, px, rng)
+    elif kind == "deck":
+        # A hardwood deck (flat-02's balcony, IMG_2076): boards 14 cm wide,
+        # a dark gap between them, each its own tone and grain. They run
+        # along y: across a panel's length, as a balcony's are laid.
+        boards = 7
+        row = (np.arange(px) * boards // px)[:, None]
+        tone = rng.uniform(-1.0, 1.0, boards).astype(np.float32)[row]
+        fibres = (0.6 * _tiling_noise(rng, (220, 6), px) + 0.4 * _tiling_noise(rng, (64, 10), px))
+        figure = np.sin(2 * np.pi * (3 * _tiling_noise(rng, (3, boards), px)
+                                     + np.arange(px)[:, None] * boards / px))
+        within = (np.arange(px) * boards % px)[:, None] / px
+        gap = (np.minimum(within, 1 - within) < 0.022).astype(np.float32)
+        value = (0.9 * tone + 1.1 * (fibres - 0.5) / 0.15 * 0.3 + 0.25 * figure
+                 + np.zeros((px, px), np.float32))
+        value = (value - value.mean()) / max(float(value.std()), 1e-6)
+        hexcode = colour.lstrip("#")
+        base = srgb_to_linear(np.array([int(hexcode[i : i + 2], 16) / 255 for i in (0, 2, 4)]))
+        lin = base[None, None, :] * (1 + 0.16 * np.clip(value, -2.5, 2.5))[..., None]
+        lin = lin * (1 - 0.82 * gap)[..., None]
+        return Image.fromarray((linear_to_srgb(lin) * 255).astype(np.uint8)).transpose(
+            Image.Transpose.TRANSPOSE)
+    elif kind == "weave":
+        # Woven resin wicker (flat-02's balcony set, IMG_2054): flat strands
+        # over and under, eight to the decimetre, a highlight down each.
+        cells = 40
+        u = np.arange(px)[None, :] * cells / px
+        v = np.arange(px)[:, None] * cells / px
+        over = ((np.floor(u) + np.floor(v)) % 2 == 0)
+        fu, fv = u % 1, v % 1
+        along = np.where(over, np.sin(np.pi * fv), np.sin(np.pi * fu))  # each strand rounded
+        edge = np.where(over, np.minimum(fu, 1 - fu), np.minimum(fv, 1 - fv)) < 0.07
+        value = 1.6 * along - 2.2 * edge + 0.5 * (_tiling_noise(rng, (300, 300), px) - 0.5)
+        spread = 0.3
     else:
         raise ValueError(f"Unknown surface texture {kind!r}")
     value = (value - value.mean()) / max(float(value.std()), 1e-6)

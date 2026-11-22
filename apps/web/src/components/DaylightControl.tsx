@@ -8,13 +8,23 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { formatMinutes, mood, skyColour } from '../lib/daylight';
+import {
+  formatMinutes,
+  mood,
+  moodBySun,
+  skyColour,
+  skyColourBySun,
+  sunHeight,
+} from '../lib/daylight';
+import type { SunSample } from '../lib/manifest';
 
 interface Props {
   /** The baked times, minutes after midnight, earliest first: the track's span. */
   keys: number[];
   value: number;
   onChange: (minutes: number) => void;
+  /** The sun's path on the flat's day, where it is drawn live: names and colours follow it. */
+  sun?: SunSample[];
 }
 
 const THUMB = 22;
@@ -23,7 +33,7 @@ const MARKS = [8, 12, 16, 20].map((h) => h * 60);
 /** How far an arrow key moves the time, minutes. */
 const NUDGE = 15;
 
-export function DaylightControl({ keys, value, onChange }: Props) {
+export function DaylightControl({ keys, value, onChange, sun }: Props) {
   const [lo, hi] = [keys[0], keys[keys.length - 1]];
   // The latest value, for a glide that starts from wherever the last one left it.
   const latest = useRef(value);
@@ -48,9 +58,18 @@ export function DaylightControl({ keys, value, onChange }: Props) {
   };
 
   const at = (minutes: number) => (minutes - lo) / (hi - lo);
-  const stops = Array.from({ length: 9 }, (_, k) => lo + ((hi - lo) * k) / 8);
+  // By the sun where its path is known: a winter's day is short, and the
+  // clock's names and colours are a summer's.
+  const path = sun?.length ? sun : null;
+  const colour = (m: number) => (path ? skyColourBySun(sunHeight(path, m).degrees) : skyColour(m));
+  const name = (m: number) => {
+    if (!path) return mood(m);
+    const { degrees, rising } = sunHeight(path, m);
+    return moodBySun(m, degrees, rising);
+  };
+  const stops = Array.from({ length: 17 }, (_, k) => lo + ((hi - lo) * k) / 16);
   const track = `linear-gradient(to right, ${stops
-    .map((m) => `${skyColour(m)} ${(at(m) * 100).toFixed(1)}%`)
+    .map((m) => `${colour(m)} ${(at(m) * 100).toFixed(1)}%`)
     .join(', ')})`;
   const marks = MARKS.filter((m) => m >= lo && m <= hi);
 
@@ -59,7 +78,7 @@ export function DaylightControl({ keys, value, onChange }: Props) {
       <label className="flex items-baseline justify-between text-[11px]" htmlFor="daylight">
         <span>
           <span className="opacity-65">Daylight</span>
-          <span className="ml-1.5 font-medium">{mood(value)}</span>
+          <span className="ml-1.5 font-medium">{name(value)}</span>
         </span>
         <span className="font-medium tabular-nums" data-testid="daylight-time">
           {formatMinutes(value)}
@@ -74,7 +93,7 @@ export function DaylightControl({ keys, value, onChange }: Props) {
         max={hi}
         step={5}
         value={value}
-        aria-valuetext={`${mood(value)}, ${formatMinutes(value)}`}
+        aria-valuetext={`${name(value)}, ${formatMinutes(value)}`}
         onChange={(e) => {
           cancelAnimationFrame(glide.current);
           onChange(Number(e.target.value));

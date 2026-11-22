@@ -80,3 +80,15 @@ if [ ! -x /opt/blender/blender ]; then
   apt-get install -y -q libxi6 libxxf86vm1 libxfixes3 libxrender1 libsm6 libxkbcommon0 libegl1
 fi
 /opt/blender/blender -b --factory-startup --python-expr "import bpy; print('blender ok:', bpy.app.version_string)"
+
+# The depth network for `pipeline surround` (Depth Anything V2 Small,
+# Apache-2.0; its larger siblings are non-commercial). transformers goes
+# beside the trainer's venv, not into it, so its pins stay as they are; the
+# weights under data/cache (git-ignored). Where WSL cannot reach
+# huggingface.co, fetch the three files on the Windows side instead.
+uv pip install --python "$GS" --target "$HOME/depth_pkgs" "transformers==4.46.3"
+DEPTH_MODEL="$REPO/data/cache/depth-anything-v2-small"
+mkdir -p "$DEPTH_MODEL"
+for file in config.json preprocessor_config.json model.safetensors; do
+  [ -s "$DEPTH_MODEL/$file" ] || curl -sSfL --max-time 600 -o "$DEPTH_MODEL/$file"     "https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf/resolve/main/$file"     || echo "could not fetch $file: put it in $DEPTH_MODEL by hand (docs/PIPELINE.md)"
+done

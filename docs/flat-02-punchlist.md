@@ -221,8 +221,10 @@ Every room screenshotted against the photos; what was not clean:
   bedside tables give way to the kit's pieces.
 - [x] 124. Outside: the invented city-centre house front is gone; the 107 houses within 120 m
   stand where OpenStreetMap has them, as plain blocks (heights assumed: no floor counts there).
-- [ ] 125. The real view out of each window and off the balcony: needs the owner's daylight
-  photos facing out (as flat-01 has), then they replace the blocks in the windows.
+- [x] 125. The real view off the balcony and out of the south and west windows: the owner's
+  67 daylight photos stood in 3D round the flat (`pipeline surround`, 2026-11-22).
+  **Still open:** the street side (north windows) keeps the generated houses; the street
+  photos would not tie to the balcony's scale.
 - [ ] 126. A replaced bed leaves its baked shadow on the wall behind it (the light map is the
   flat as built).
 - [x] 127. The kitchen peninsula as deep as a cabinet, 65 cm (0080, 0081): it stood 96 cm out
@@ -232,3 +234,17 @@ Every room screenshotted against the photos; what was not clean:
   1.70 m (were three, to 1.55).
 - [x] 130. The roll shelf's top board reaches on over the WC's pre-wall, the lidded box at its
   far end (0128, 0137).
+
+## Seventh pass (2026-11-22): the real surroundings, the balcony, the day
+The owner: the views from the windows and the balcony 1:1 from the new photos, with depth; the
+balcony 1:1; the sun where it stood; a proper day-time slider.
+- [x] 131. The balcony as photographed: wooden deck, bar railings south and west (the west wall
+  was not there), flower boxes with geraniums on the rail, five thujas, wicker table, two
+  chairs, bench and cube, the covered grill, the lantern.
+- [x] 132. The sun is the photos' own: 21 November 13:05, bearing measured from the sun in
+  five photos; the balcony faces 192.3 degrees (was assumed 191.5). Drawn live along the day.
+- [x] 133. Six times of day on the slider (07:30 to 17:15), named and coloured by the sun's
+  height (a November dusk is at a quarter past four); the photos dim and cool with the sky.
+- [x] 134. From the far bedroom the surround shows as a picture at the horizon (sharp, no
+  parallax of the room's own): no photo was taken from there.
+- [ ] 135. The street side from photos: two photos out of each north window would do it.

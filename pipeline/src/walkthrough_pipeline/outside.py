@@ -1,6 +1,7 @@
 """
 What the windows look out on: the owner's photos out of them, stood in 3D
-(view_photo.py), and the sky at each baked time of day (sky.py).
+(view_photo.py, or all round the flat by surround.py), and the sky at each
+baked time of day (sky.py).
 
 Runs after the bake, or on its own (`pipeline outside`): neither needs
 Blender, so the view can be worked on without baking the flat again.
@@ -13,7 +14,7 @@ import numpy as np
 from PIL import Image
 from scipy.ndimage import median_filter
 
-from . import glb, rebuild, sky, view_photo
+from . import glb, rebuild, sky, surround, view_photo
 from .manifest import Manifest, ViewPhoto
 from .paths import ProjectPaths, repo_root
 from .photo_texture import srgb_to_linear
@@ -27,7 +28,8 @@ def build(paths: ProjectPaths, spec: dict, dressing: dict, times: list[str]) -> 
     """
     The view meshes (`VIEW_FILE`) and a sky panorama per time in `times`,
     written to the scene folder. Returns the manifest's part:
-    {"viewPhoto": {"model", "time"} | None, "skies": {time: file}}.
+    {"viewPhoto": {"model", "time"} | None, "skies": {time: file},
+    "viewTints": {time: rgb} (a surround's light at each time)}.
     """
     entries = dressing.get("viewPhotos") or []
     centres = [np.array(sk["centre"], float) for sk in spec["skylights"]]
@@ -50,6 +52,16 @@ def build(paths: ProjectPaths, spec: dict, dressing: dict, times: list[str]) -> 
 
     photo, photo_sun = None, None
     width, height = 2048, 1024
+    # The surroundings stood in 3D all round the flat (`pipeline surround`):
+    # their own model, their photos' sky, and what fills a gap between them.
+    around = surround.load(paths) if dressing.get("surround") and not views else None
+    ground = None
+    if around is not None:
+        when = (dressing["sun"]["date"], dressing["surround"]["taken"])
+        photo = surround.sky_photo(around, width, height)
+        photo_sun = np.array(rebuild.sun(dressing, tuple(facing["dir"]), facing["bearing"],
+                                         when[1])["direction"])
+        ground = surround.ground_fill(around, width, height)
     if views and when:
         colour = np.zeros((height, width, 3))
         weight = np.zeros((height, width))
@@ -68,18 +80,27 @@ def build(paths: ProjectPaths, spec: dict, dressing: dict, times: list[str]) -> 
         photo_sun = np.array(rebuild.sun(on_the_day, tuple(facing["dir"]), facing["bearing"],
                                          when[1])["direction"])
     suns = {s["time"]: s for s in [spec.get("sun"), *(spec.get("suns") or [])] if s}
-    skies, reference = {}, None
+    skies, images, reference = {}, {}, None
     for time in times:
         if time not in suns:
             continue
-        image, bright = sky.panorama(np.array(suns[time]["direction"]), photo_sun, photo,
-                                     width, height, reference=reference)
+        images[time], bright = sky.panorama(np.array(suns[time]["direction"]), photo_sun, photo,
+                                            width, height, reference=reference)
         reference = reference or bright
+    tints = surround.daylight_tints(images, when[1]) if around is not None and images else {}
+    for time, image in images.items():
+        if ground is not None:
+            image = surround.over_sky(image, *ground, tints[time])
         name = f"sky-{time.replace(':', '')}.jpg"
         Image.fromarray(image).save(paths.scene / name, quality=88)
         skies[time] = name
-    return {"viewPhoto": {"model": VIEW_FILE, "time": when[1]} if views and when else None,
-            "skies": skies, "views": [v.info for v in views]}
+    shown = (views or around is not None) and when
+    view = {"model": VIEW_FILE, "time": when[1]} if shown else None
+    if view and around is not None:
+        view.update(centre=[round(float(v), 3) for v in around.centre],
+                    reach=surround.REACH, near=surround.NEAR_FIELD)
+    return {"viewPhoto": view,
+            "skies": skies, "views": [v.info for v in views], "viewTints": tints}
 
 
 def apply(manifest: Manifest, result: dict) -> None:
@@ -87,3 +108,4 @@ def apply(manifest: Manifest, result: dict) -> None:
     manifest.assets.viewPhoto = ViewPhoto(**result["viewPhoto"]) if result["viewPhoto"] else None
     for entry in manifest.assets.lighting:
         entry.sky = result["skies"].get(entry.time)
+        entry.viewTint = result.get("viewTints", {}).get(entry.time)

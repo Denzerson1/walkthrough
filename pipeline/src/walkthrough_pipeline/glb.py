@@ -24,8 +24,8 @@ def write_textured_meshes(path: Path, meshes: list[Mesh], name: str) -> None:
     """
     Meshes, each: positions (n, 3) in scene metres, texture coordinates
     (n, 2) with v running down the image (glTF's convention), triangle
-    indices (m, 3), and the JPEG its material shows unlit. Nodes and
-    materials are called `name`.
+    indices (m, 3), and the JPEG (or WebP, with alpha) its material shows
+    unlit. Nodes and materials are called `name`.
     """
     chunks: list[bytes] = []
     views: list[dict] = []
@@ -64,7 +64,9 @@ def write_textured_meshes(path: Path, meshes: list[Mesh], name: str) -> None:
             "extensions": {"KHR_materials_unlit": {}},
             "doubleSided": True,
         })
-        images.append({"bufferView": add(jpeg), "mimeType": "image/jpeg"})
+        # A WebP where the texture carries alpha (a surround's sky cut out).
+        webp = jpeg[:4] == b"RIFF" and jpeg[8:12] == b"WEBP"
+        images.append({"bufferView": add(jpeg), "mimeType": "image/webp" if webp else "image/jpeg"})
     doc = {
         "asset": {"version": "2.0", "generator": "walkthrough pipeline"},
         "extensionsUsed": ["KHR_materials_unlit"],

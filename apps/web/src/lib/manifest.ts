@@ -126,6 +126,8 @@ export interface Lighting {
   colours?: string | null;
   /** The sky at this time: an equirectangular panorama, u = 0.5 along -z, zenith at the top. */
   sky?: string | null;
+  /** Multiplies the view out of the windows: the daylight now over the daylight its photos were taken in. */
+  viewTint?: number[] | null;
 }
 
 export interface ItemBox {
@@ -213,7 +215,13 @@ export interface Manifest {
      */
     sunPath?: SunSample[];
     /** The view out of the windows from the owner's photos: a .glb, and when it was taken. */
-    viewPhoto?: { model: string; time: string } | null;
+    viewPhoto?: {
+      model: string;
+      time: string;
+      /** A surround: where its photos were taken; beyond `reach` of it, it is shown set back, as a picture. */
+      centre?: [number, number, number] | null;
+      reach?: number | null;
+    } | null;
   };
 }
 
