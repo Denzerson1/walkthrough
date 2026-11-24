@@ -1,0 +1,37 @@
+{
+  "id": "henrik-open-back-dining-chair-4j7q",
+  "name": "Henrik Open-Back Dining Chair",
+  "category": "dining_chair",
+  "styles": [
+    "scandinavian"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.47,
+    0.79,
+    0.556
+  ],
+  "glb": "/files/assets/furniture/henrik-open-back-dining-chair-4j7q/desktop.glb",
+  "glbPhone": "/files/assets/furniture/henrik-open-back-dining-chair-4j7q/phone.glb",
+  "thumbnail": "/files/assets/furniture/henrik-open-back-dining-chair-4j7q/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/Q/B085554J7Q.glb",
+  "productId": "B085554J7Q",
+  "measuredM": [
+    0.47,
+    0.795,
+    0.556
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 3295760,
+      "triangles": 10412
+    },
+    "phone": {
+      "bytes": 348916,
+      "triangles": 10412
+    }
+  }
+}

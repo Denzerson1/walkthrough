@@ -15,13 +15,24 @@
       "coffee_table": "round-coffee-table-with-solid-wood-f3mr",
       "side_table": "walnut-drawer-side-table-c6lx",
       "rug": "modern-geometric-wool-area-rug-hvqh",
-      "floor_lamp": "adjustable-arm-mid-century-modern-living-room-sbfl"
+      "floor_lamp": "adjustable-arm-mid-century-modern-living-room-sbfl",
+      "dining_table": "mid-century-walnut-dining-table-xrjm",
+      "dining_chair": "eli-curved-back-dining-chair-tr7m"
     },
     "bedroom": {
       "bed": "catelyn-brushed-brass-queen-bed-with-cph1",
       "nightstand": "mid-century-wood-nightstand-5tqz",
       "table_lamp": "modern-ceramic-table-lamp-2gy1",
-      "rug": "modern-geometric-wool-area-rug-hvqh"
+      "rug": "modern-geometric-wool-area-rug-hvqh",
+      "dresser": "stark-six-drawer-dresser-16v7",
+      "desk": "ventura-mid-century-writing-desk-w1sn",
+      "desk_chair": "bertha-velvet-swivel-office-chair-4g1j"
+    },
+    "office": {
+      "desk": "ventura-mid-century-writing-desk-w1sn",
+      "desk_chair": "bertha-velvet-swivel-office-chair-4g1j",
+      "shelf": "five-tier-open-bookcase-walnut-hdnk",
+      "armchair": "theresa-accent-chair-berry-7ykr"
     }
   }
 }

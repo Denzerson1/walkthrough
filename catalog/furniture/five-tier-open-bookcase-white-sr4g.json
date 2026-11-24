@@ -1,0 +1,37 @@
+{
+  "id": "five-tier-open-bookcase-white-sr4g",
+  "name": "Five-Tier Open Bookcase White",
+  "category": "shelf",
+  "styles": [
+    "modern-minimal"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.66,
+    1.892,
+    0.382
+  ],
+  "glb": "/files/assets/furniture/five-tier-open-bookcase-white-sr4g/desktop.glb",
+  "glbPhone": "/files/assets/furniture/five-tier-open-bookcase-white-sr4g/phone.glb",
+  "thumbnail": "/files/assets/furniture/five-tier-open-bookcase-white-sr4g/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/G/B07PNHSR4G.glb",
+  "productId": "B07PNHSR4G",
+  "measuredM": [
+    0.66,
+    1.892,
+    0.381
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 461028,
+      "triangles": 31196
+    },
+    "phone": {
+      "bytes": 350984,
+      "triangles": 31196
+    }
+  }
+}

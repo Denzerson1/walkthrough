@@ -1,0 +1,37 @@
+{
+  "id": "ventura-mid-century-writing-desk-w1sn",
+  "name": "Ventura Mid-Century Writing Desk",
+  "category": "desk",
+  "styles": [
+    "mid-century"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    1.27,
+    0.762,
+    0.61
+  ],
+  "glb": "/files/assets/furniture/ventura-mid-century-writing-desk-w1sn/desktop.glb",
+  "glbPhone": "/files/assets/furniture/ventura-mid-century-writing-desk-w1sn/phone.glb",
+  "thumbnail": "/files/assets/furniture/ventura-mid-century-writing-desk-w1sn/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/N/B075ZBW1SN.glb",
+  "productId": "B075ZBW1SN",
+  "measuredM": [
+    1.277,
+    0.758,
+    0.612
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 1486720,
+      "triangles": 5494
+    },
+    "phone": {
+      "bytes": 315504,
+      "triangles": 5494
+    }
+  }
+}

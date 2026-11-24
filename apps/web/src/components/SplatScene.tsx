@@ -2074,8 +2074,11 @@ async function loadViewPhoto(view: NonNullable<BakedModel['viewPhoto']>): Promis
     // Nought: shown from everywhere (a photo out of one window).
     viewReach: { value: view.centre ? (view.reach ?? 0) : 0 },
   };
+  // The street side stands where it was photographed, from everywhere.
+  const fixed = { viewFrom: around.viewFrom, viewReach: { value: 0 } };
   gltf.scene.traverse((node) => {
     if (!(node instanceof THREE.Mesh)) return;
+    const street = node.name.startsWith('view-street');
     const source = node.material as THREE.MeshBasicMaterial;
     const material = new THREE.MeshBasicMaterial({
       name: 'view-photo',
@@ -2094,7 +2097,7 @@ async function loadViewPhoto(view: NonNullable<BakedModel['viewPhoto']>): Promis
     // along the photos' own rays, far enough to be their view as a picture
     // at the horizon: sharp and whole, without the room's own parallax.
     material.onBeforeCompile = (shader) => {
-      Object.assign(shader.uniforms, around);
+      Object.assign(shader.uniforms, street ? fixed : around);
       shader.vertexShader = shader.vertexShader
         .replace(
           '#include <common>',

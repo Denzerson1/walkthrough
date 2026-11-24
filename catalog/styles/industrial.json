@@ -15,13 +15,24 @@
       "coffee_table": "larson-industrial-wood-metal-round-kxdt",
       "side_table": "industrial-hexagonal-side-table-with-solid-v6mp",
       "rug": "distressed-medallion-area-rug-v63q",
-      "floor_lamp": "globe-stick-floor-lamp-black-mfby2"
+      "floor_lamp": "globe-stick-floor-lamp-black-mfby2",
+      "dining_table": "mid-century-walnut-dining-table-xrjm",
+      "dining_chair": "curved-back-dining-chair-64w7"
     },
     "bedroom": {
       "bed": "fisher-rustic-wood-queen-bed-frame-h7b1",
       "nightstand": "marble-metal-nightstand-hvcmb",
       "table_lamp": "modern-mesh-table-lamp-6jz4",
-      "rug": "distressed-medallion-area-rug-v63q"
+      "rug": "distressed-medallion-area-rug-v63q",
+      "dresser": "classic-six-drawer-dresser-espresso-j7x8",
+      "desk": "wooden-study-desk-black-by26",
+      "desk_chair": "mesh-swivel-office-chair-v5fg"
+    },
+    "office": {
+      "desk": "wooden-study-desk-black-by26",
+      "desk_chair": "mesh-swivel-office-chair-v5fg",
+      "shelf": "larson-wood-and-metal-bookcase-ys1z",
+      "armchair": "zane-leather-swivel-chair-ptqv"
     }
   }
 }

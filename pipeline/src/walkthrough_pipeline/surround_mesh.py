@@ -61,6 +61,9 @@ class Layout:
     centre: list[str] = field(default_factory=list)
     #: x below, z below, z above, y below: what stands there is laid flat.
     lay: tuple[float, float, float, float] | None = None
+    #: Where the photos are seen from, if not from where they were taken (a
+    #: window over the street they were taken in).
+    seen_from: tuple[float, float, float] | None = None
 
 
 def box_hits(start: np.ndarray, dirs: np.ndarray, boxes: list, lean: list[int]) -> np.ndarray:
@@ -100,41 +103,69 @@ def sky_mask(bgr: np.ndarray, mono: np.ndarray) -> np.ndarray:
     cloud) where the depth network sees nothing (nought for sky and cloud;
     a little more already for hills and pale blocks on the horizon), in
     stretches of at least a 250th of the photo (pale window frames are
-    small), the specks the colour test misses inside them filled.
+    small; blue ones of a tenth of that), the specks the colour test misses
+    inside them filled.
     """
     hsv = cv2.cvtColor(bgr.astype(np.float32) / 255, cv2.COLOR_BGR2HSV)
     hue, sat, val = hsv[..., 0], hsv[..., 1], hsv[..., 2]
-    coloured = ((hue > 185) & (hue < 250) & (val > 0.4)) | ((sat < 0.16) & (val > 0.72))
+    blue = (hue > 185) & (hue < 250) & (val > 0.4)
+    coloured = blue | ((sat < 0.16) & (val > 0.72))
     coloured = cv2.erode(coloured.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
     empty = mono < 0.004 * np.percentile(mono, 99)
     count, labels, stats, _ = cv2.connectedComponentsWithStats(
         (coloured & empty).astype(np.uint8), connectivity=4)
     big = np.flatnonzero(stats[:, cv2.CC_STAT_AREA] >= 0.004 * mono.size)
     sky = np.isin(labels, big[big > 0])
+    # A pocket of blue between a tree and the photo's edge is sky at a tenth of that size.
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(
+        (coloured & blue & empty & ~sky).astype(np.uint8), connectivity=4)
+    pockets = np.flatnonzero(stats[:, cv2.CC_STAT_AREA] >= 0.0004 * mono.size)
+    sky |= np.isin(labels, pockets[pockets > 0])
     count, labels, stats, _ = cv2.connectedComponentsWithStats((~sky).astype(np.uint8),
                                                                connectivity=4)
     return sky | np.isin(labels, np.flatnonzero(stats[:, cv2.CC_STAT_AREA] < 40))
 
 
-def unveil(bgr: np.ndarray, rays: np.ndarray, sun: np.ndarray, strength: float) -> np.ndarray:
+def guided(guide: np.ndarray, src: np.ndarray, radius: int, eps: float) -> np.ndarray:
+    """`src` smoothed, but not across the edges of `guide` (He's guided filter)."""
+    size = (2 * radius + 1, 2 * radius + 1)
+    mean_g, mean_s = cv2.blur(guide, size), cv2.blur(src, size)
+    a = (cv2.blur(guide * src, size) - mean_g * mean_s) / (
+        cv2.blur(guide * guide, size) - mean_g * mean_g + eps)
+    return cv2.blur(a, size) * guide + cv2.blur(mean_s - a * mean_g, size)
+
+
+def sun_veil(bgr: np.ndarray, rays: np.ndarray, sun: np.ndarray) -> np.ndarray:
     """
-    A photo without the sun's veil. Towards the sun a lens lays a wash of
-    light over the picture: what is darkest in each neighbourhood shows
-    how much (haze removal's dark channel), and `strength` of that is taken
-    off within 40 degrees of the sun and the rest stretched back. `rays`:
-    each pixel's unit direction, `sun`: towards the sun, in the same frame.
+    The sun's veil over a photo, 0..1 of full white per pixel. Towards the
+    sun a lens lays a wash of light over the picture, and streaks across
+    it: what is darkest in each small neighbourhood shows how much (haze
+    removal's dark channel), kept to the picture's own edges by a guided
+    filter, so a streak over a dark tree is found and the pale glasshouse
+    beside it is not. Counted within 40 degrees of the sun. `rays`: each
+    pixel's unit direction, `sun`: towards the sun, in the same frame.
     """
-    if strength <= 0:
-        return bgr
     off = np.degrees(np.arccos(np.clip(rays @ sun, -1, 1)))
     near = np.clip((40 - off) / 20, 0, 1).astype(np.float32)
     if near.max() <= 0:
-        return bgr
+        return np.zeros(bgr.shape[:2], np.float32)
     h, w = bgr.shape[:2]
     lin = srgb_to_linear(bgr.astype(np.float32) / 255)
-    k = max(15, int(0.03 * max(h, w)) | 1)
-    dark = cv2.erode(lin.min(axis=2), np.ones((k, k), np.uint8))
-    veil = np.minimum(cv2.GaussianBlur(dark, (0, 0), 0.06 * max(h, w)) * strength * near, 0.6)
+    k = max(7, int(0.012 * max(h, w)) | 1)
+    low = lin.min(axis=2)
+    dark = cv2.erode(low, np.ones((k, k), np.uint8))
+    return np.clip(guided(lin.mean(axis=2), dark, int(0.03 * max(h, w)), 1e-3), 0, low) * near
+
+
+def unveil(bgr: np.ndarray, rays: np.ndarray, sun: np.ndarray, strength: float) -> np.ndarray:
+    """A photo with `strength` of the sun's veil (sun_veil) taken off, the rest stretched back."""
+    if strength <= 0:
+        return bgr
+    veil = sun_veil(bgr, rays, sun)
+    if veil.max() <= 0:
+        return bgr
+    veil = np.minimum(veil * strength, 0.75)
+    lin = srgb_to_linear(bgr.astype(np.float32) / 255)
     out = (lin - veil[..., None]) / (1 - veil[..., None])
     return (linear_to_srgb(np.clip(out, 0, 1)) * 255).astype(np.uint8)
 
@@ -168,6 +199,7 @@ class Photo:
         self.veil = layout.veil.get(view.name, 0.0)
         rays = view.rays()
         rays /= np.linalg.norm(rays, axis=-1, keepdims=True)
+        self.taken = bgr
         self.bgr = unveil(bgr, rays, self.to_camera @ layout.sun, self.veil)
         self.centre = matrix @ view.centre + origin
         ys, xs = np.mgrid[0:h:STEP, 0:w:STEP]
@@ -179,7 +211,8 @@ class Photo:
         ray = points - self.centre
         self.dist = np.linalg.norm(ray, axis=1)
         self.dirs = ray / self.dist[:, None]
-        self.sky_full = sky_mask(self.bgr, mono)
+        # As taken: without its veil a sun's rim is no sky's colour.
+        self.sky_full = sky_mask(bgr, mono)
         sky = self.sky_full[ys, xs].ravel() & (self.dirs[:, 1] > -0.02)
         # Its own: near, inside the building or the balcony, or on a wall of
         # theirs give or take the depth's error (0.6 m before it, or beyond).
@@ -448,7 +481,8 @@ def sky_panorama(photos: list[Photo], sun: np.ndarray, directions: np.ndarray
         inside = (z > 0.05) & (px >= 0) & (px <= w - 1) & (py >= 0) & (py <= h - 1)
         mx = np.where(inside, px, -1).astype(np.float32)
         my = np.where(inside, py, -1).astype(np.float32)
-        filled = cv2.inpaint(p.bgr, (~p.sky_full).astype(np.uint8), 5, cv2.INPAINT_TELEA)
+        # As taken: haze removal would take the sky's own light for a veil.
+        filled = cv2.inpaint(p.taken, (~p.sky_full).astype(np.uint8), 5, cv2.INPAINT_TELEA)
         lin = srgb_to_linear(filled[..., ::-1].astype(np.float32) / 255) * p.gain
         seen = cv2.remap(lin.astype(np.float32), mx, my, cv2.INTER_LINEAR,
                          borderMode=cv2.BORDER_CONSTANT)
@@ -484,7 +518,7 @@ def build(photos: list[Photo], layout: Layout, frames: dict[str, Path],
     them), or None.
     """
     central = [p.centre for p in photos if p.name in layout.centre] or [p.centre for p in photos]
-    centre = np.median(central, axis=0)
+    centre = np.array(layout.seen_from) if layout.seen_from else np.median(central, axis=0)
     score, depth = splat(photos, centre)
     off = disagreement(depth)
     report = {"depthOffBefore": {p.name: round(float(o), 3)

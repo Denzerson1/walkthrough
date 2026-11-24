@@ -179,11 +179,10 @@ class ViewPhoto(BaseModel):
     model: str  # a .glb: the photo on the walls it shows, shown unlit
     time: str  # "15:38", when it was taken: the light it shows
     #: A surround (surround.py): where its photos were taken, in scene
-    #: metres. From more than `reach` away, what stands within `near` of it
-    #: is not shown: it was photographed from there only.
+    #: metres. From more than `reach` away the viewer shows it set back, as
+    #: a picture: it was photographed from there only.
     centre: tuple[float, float, float] | None = None
     reach: float | None = None
-    near: float | None = None
 
 
 class SceneAssets(BaseModel):

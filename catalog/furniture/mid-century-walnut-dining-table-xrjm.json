@@ -1,0 +1,38 @@
+{
+  "id": "mid-century-walnut-dining-table-xrjm",
+  "name": "Mid-Century Walnut Dining Table",
+  "category": "dining_table",
+  "styles": [
+    "mid-century",
+    "industrial"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    1.349,
+    0.724,
+    0.8
+  ],
+  "glb": "/files/assets/furniture/mid-century-walnut-dining-table-xrjm/desktop.glb",
+  "glbPhone": "/files/assets/furniture/mid-century-walnut-dining-table-xrjm/phone.glb",
+  "thumbnail": "/files/assets/furniture/mid-century-walnut-dining-table-xrjm/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/M/B075YQXRJM.glb",
+  "productId": "B075YQXRJM",
+  "measuredM": [
+    1.349,
+    0.724,
+    0.801
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 2929584,
+      "triangles": 772
+    },
+    "phone": {
+      "bytes": 365040,
+      "triangles": 772
+    }
+  }
+}

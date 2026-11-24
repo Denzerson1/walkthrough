@@ -1,0 +1,37 @@
+{
+  "id": "eli-curved-back-dining-chair-tr7m",
+  "name": "Eli Curved-Back Dining Chair",
+  "category": "dining_chair",
+  "styles": [
+    "mid-century"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.49,
+    0.84,
+    0.59
+  ],
+  "glb": "/files/assets/furniture/eli-curved-back-dining-chair-tr7m/desktop.glb",
+  "glbPhone": "/files/assets/furniture/eli-curved-back-dining-chair-tr7m/phone.glb",
+  "thumbnail": "/files/assets/furniture/eli-curved-back-dining-chair-tr7m/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/M/B0853KTR7M.glb",
+  "productId": "B0853KTR7M",
+  "measuredM": [
+    0.491,
+    0.839,
+    0.589
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 4260256,
+      "triangles": 6328
+    },
+    "phone": {
+      "bytes": 564688,
+      "triangles": 6328
+    }
+  }
+}

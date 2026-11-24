@@ -239,3 +239,17 @@ def test_the_view_dims_with_the_sky_and_cools_at_dusk():
     assert tints["15:30"][0] > tints["15:30"][2]                      # warmer in the afternoon
     assert 0.5 < sum(tints["15:30"]) / 3 < 0.95
     assert max(tints["17:15"]) < 0.06 and tints["17:15"][2] > tints["17:15"][0]  # dark, and blue
+
+
+def test_a_pocket_of_blue_is_sky_and_a_pale_patch_that_size_is_not():
+    bgr = np.full((400, 600, 3), (40, 90, 50), np.uint8)   # a tree all over
+    bgr[:150, :300] = (230, 150, 60)                       # open sky
+    bgr[250:270, 400:420] = (230, 150, 60)                 # a pocket of sky in the tree
+    bgr[250:270, 500:520] = (245, 245, 245)                # a pale patch: a window frame
+    mono = np.full((400, 600), 3.0, np.float32)
+    mono[:150, :300] = 0
+    mono[250:270, 400:420] = 0
+    mono[250:270, 500:520] = 0
+    sky = surround_mesh.sky_mask(bgr, mono)
+    assert sky[260, 410] and not sky[260, 510]
+

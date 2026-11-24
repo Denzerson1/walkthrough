@@ -1,0 +1,38 @@
+{
+  "id": "noah-round-ash-dining-table-3z93",
+  "name": "Noah Round Ash Dining Table",
+  "category": "dining_table",
+  "styles": [
+    "modern-minimal",
+    "scandinavian"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.899,
+    0.762,
+    0.899
+  ],
+  "glb": "/files/assets/furniture/noah-round-ash-dining-table-3z93/desktop.glb",
+  "glbPhone": "/files/assets/furniture/noah-round-ash-dining-table-3z93/phone.glb",
+  "thumbnail": "/files/assets/furniture/noah-round-ash-dining-table-3z93/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/3/B0853Q3Z93.glb",
+  "productId": "B0853Q3Z93",
+  "measuredM": [
+    0.896,
+    0.762,
+    0.896
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 3752596,
+      "triangles": 4864
+    },
+    "phone": {
+      "bytes": 354260,
+      "triangles": 4864
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "id": "martin-oak-bookcase-45s5",
+  "name": "Martin Oak Bookcase",
+  "category": "shelf",
+  "styles": [
+    "scandinavian"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.77,
+    1.85,
+    0.35
+  ],
+  "glb": "/files/assets/furniture/martin-oak-bookcase-45s5/desktop.glb",
+  "glbPhone": "/files/assets/furniture/martin-oak-bookcase-45s5/phone.glb",
+  "thumbnail": "/files/assets/furniture/martin-oak-bookcase-45s5/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/5/B07QTB45S5.glb",
+  "productId": "B07QTB45S5",
+  "measuredM": [
+    0.77,
+    1.85,
+    0.35
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 2422316,
+      "triangles": 79872
+    },
+    "phone": {
+      "bytes": 757696,
+      "triangles": 49999
+    }
+  }
+}

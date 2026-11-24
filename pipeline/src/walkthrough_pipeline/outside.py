@@ -98,7 +98,7 @@ def build(paths: ProjectPaths, spec: dict, dressing: dict, times: list[str]) -> 
     view = {"model": VIEW_FILE, "time": when[1]} if shown else None
     if view and around is not None:
         view.update(centre=[round(float(v), 3) for v in around.centre],
-                    reach=surround.REACH, near=surround.NEAR_FIELD)
+                    reach=surround.REACH)
     return {"viewPhoto": view,
             "skies": skies, "views": [v.info for v in views], "viewTints": tints}
 

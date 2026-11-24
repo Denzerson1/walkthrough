@@ -1,0 +1,37 @@
+{
+  "id": "wooden-study-desk-black-by26",
+  "name": "Wooden Study Desk Black",
+  "category": "desk",
+  "styles": [
+    "industrial"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.991,
+    0.762,
+    0.499
+  ],
+  "glb": "/files/assets/furniture/wooden-study-desk-black-by26/desktop.glb",
+  "glbPhone": "/files/assets/furniture/wooden-study-desk-black-by26/phone.glb",
+  "thumbnail": "/files/assets/furniture/wooden-study-desk-black-by26/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/6/B07Q1SBY26.glb",
+  "productId": "B07Q1SBY26",
+  "measuredM": [
+    0.991,
+    0.762,
+    0.499
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 4746524,
+      "triangles": 3000
+    },
+    "phone": {
+      "bytes": 435820,
+      "triangles": 3000
+    }
+  }
+}

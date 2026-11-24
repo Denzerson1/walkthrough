@@ -15,13 +15,24 @@
       "coffee_table": "hayes-square-solid-wood-coffee-table-r4wl",
       "side_table": "modern-rustic-reclaimed-elm-round-accent-tdq6",
       "rug": "textured-zen-hand-woven-jute-area-rug-vx9c",
-      "floor_lamp": "globe-stick-floor-lamp-b716"
+      "floor_lamp": "globe-stick-floor-lamp-b716",
+      "dining_table": "noah-round-ash-dining-table-3z93",
+      "dining_chair": "henrik-open-back-dining-chair-4j7q"
     },
     "bedroom": {
       "bed": "storage-double-bed-x4wz",
       "nightstand": "bedside-table-5ps1",
       "table_lamp": "farmhouse-table-lamp-t4zs",
-      "rug": "textured-zen-hand-woven-jute-area-rug-vx9c"
+      "rug": "textured-zen-hand-woven-jute-area-rug-vx9c",
+      "dresser": "classic-five-drawer-dresser-vnxr",
+      "desk": "inari-one-drawer-desk-oak-lss4",
+      "desk_chair": "upholstered-swivel-task-chair-2bc1"
+    },
+    "office": {
+      "desk": "inari-one-drawer-desk-oak-lss4",
+      "desk_chair": "upholstered-swivel-task-chair-2bc1",
+      "shelf": "martin-oak-bookcase-45s5",
+      "armchair": "theresa-accent-chair-cream-zb1q"
     }
   }
 }

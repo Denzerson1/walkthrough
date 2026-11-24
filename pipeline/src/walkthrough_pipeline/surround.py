@@ -31,11 +31,11 @@ VIEW_FILE = "view_photo.glb"
 PANORAMAS = "surround_pano.npz"
 #: Degrees above the horizon the ground fill reaches at most.
 HORIZON_DEG = 2.0
-#: Metres from where the photos were taken within which the viewer shows all
-#: of them, and metres from there that count as near: from farther off (a
-#: room at the flat's other end) what stands near was only seen side-on, and
-#: is left to the ground fill.
-REACH, NEAR_FIELD = 8.0, 30.0
+#: Metres from where the photos were taken within which the viewer shows
+#: them where they stand: from farther off (a room at the flat's other end)
+#: what stands near was only seen side-on, and the viewer sets the lot back,
+#: a picture at the horizon.
+REACH = 8.0
 
 
 @dataclass
@@ -189,6 +189,15 @@ def build(paths: ProjectPaths, dressing: dict, pycolmap, say=print, fresh: bool 
         veil      {photo stem: share of the sun's veil taken off it}
         centre    [stems]: the photos compete as seen from these' middle
         own, lean, air, lay: see surround_mesh.Layout
+        street    the photos of the side the balcony is not on, taken down
+                  in the street: {photos: [stems they are levelled and set
+                  north by], suns: [more stems with the sun in frame],
+                  use: {stem: how gladly}, scale: metres to the
+                  model's unit there, at: [x, y, z] of their cameras' middle
+                  in the scene, seenFrom: [x, y, z] of the window they are
+                  for}. A reconstruction this long drifts in scale: the
+                  balcony fixes its own end only, and this end is set on
+                  the map's footprints (docs/PIPELINE.md).
     """
     import json
     import shutil
@@ -229,7 +238,7 @@ def build(paths: ProjectPaths, dressing: dict, pycolmap, say=print, fresh: bool 
     names = sorted(views)
     up, spread = register.up_direction([views[n] for n in names], [images[n] for n in names])
     place = dressing["location"]
-    suns = []
+    suns, sun_names = [], []
     for name in names:
         at, when = register.sun_in_frame(images[name]), _taken(originals[Path(name).stem])
         if at is None or when is None:
@@ -239,6 +248,7 @@ def build(paths: ProjectPaths, dressing: dict, pycolmap, say=print, fresh: bool 
         bearing, elevation = flat_geometry.sun_position(*when, place["utcOffset"],
                                                         place["latitude"], place["longitude"])
         suns.append((view.rotation.T @ (ray / np.linalg.norm(ray)), bearing, elevation))
+        sun_names.append(name)
     north, said = register.north_direction(up, suns)
     enu = np.array([np.cross(north, up), north, up])
     plan = spec["balcony"]
@@ -300,10 +310,42 @@ def build(paths: ProjectPaths, dressing: dict, pycolmap, say=print, fresh: bool 
         if depth is not None:
             photos.append(photo(name, depth))
     camera = next(iter(pycolmap.Reconstruction(str(work / "sparse")).cameras.values()))
-    built = mesh.build(photos, layout, {n: frame_dir / n for n in views},
-                       tuple(float(v) for v in camera.params), redo)
+    distortion = tuple(float(v) for v in camera.params)
+    frames = {n: frame_dir / n for n in views}
+    built = mesh.build(photos, layout, frames, distortion, redo)
+    meshes, called = list(built.meshes), ["view-photo"] * len(built.meshes)
+
+    # The street side: its own level, north and scale, its place from the dressing.
+    street, beside = spec.get("street"), None
+    if street:
+        group = [f"{stem}.jpg" for stem in street["photos"] if f"{stem}.jpg" in views]
+        extra = [f"{stem}.jpg" for stem in street.get("suns", [])]
+        level, _ = register.up_direction([views[n] for n in group], [images[n] for n in group])
+        there, _ = register.north_direction(level, [s for s, n in zip(suns, sun_names, strict=True)
+                                                    if n in group or n in extra])
+        frame = np.array([np.cross(there, level), there, level])
+        middle = np.median(np.array([views[n].centre for n in group]) @ frame.T, axis=0)
+        matrix = register.scene_axes(fit.facing) @ frame * street["scale"]
+        origin = np.array(street["at"], float) - matrix @ (frame.T @ middle)
+        plain = mesh.Layout(
+            own=layout.own, lean=[], air=[], sun=sun,
+            quality={f"{stem}.jpg": q for stem, q in street["use"].items()},
+            veil=layout.veil, seen_from=tuple(street["seenFrom"]))
+        stood = []
+        for name in plain.quality:
+            if name not in views:
+                continue
+            depth = recon.complete(views[name], mono[name], recon.measured(dense, views[name]),
+                                   everything)
+            if depth is not None:
+                stood.append(mesh.Photo(views[name], images[name], mono[name], depth, matrix,
+                                        origin, plain))
+        # Each photo by its own stereo: down a street they agree too little to correct one another.
+        beside = mesh.build(stood, plain, frames, distortion)
+        meshes += beside.meshes
+        called += ["view-street"] * len(beside.meshes)
     paths.scene.mkdir(parents=True, exist_ok=True)
-    glb.write_textured_meshes(paths.scene / VIEW_FILE, built.meshes, "view-photo")
+    glb.write_textured_meshes(paths.scene / VIEW_FILE, meshes, "view-photo", called)
     sky_colour, sky_weight = mesh.sky_panorama(built.photos, sun, sky.directions(2048, 1024))
     np.savez_compressed(work / PANORAMAS, sky=sky_colour.astype(np.float16),
                         sky_weight=sky_weight.astype(np.float16),
@@ -311,6 +353,7 @@ def build(paths: ProjectPaths, dressing: dict, pycolmap, say=print, fresh: bool 
                         centre=built.centre)
     report = {
         "photos": len(originals), "registered": len(views), "used": len(built.meshes),
+        "street": beside.report if beside else None,
         "upSpreadDeg": round(spread, 2), "suns": said, "facing": round(fit.facing, 2),
         "scale": round(fit.scale, 4), "balconyFit": fit.found,
         "centre": [round(float(v), 3) for v in built.centre],

@@ -1,0 +1,37 @@
+{
+  "id": "classic-four-drawer-dresser-lxgb",
+  "name": "Classic Four-Drawer Dresser",
+  "category": "dresser",
+  "styles": [
+    "modern-minimal"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.704,
+    1.02,
+    0.398
+  ],
+  "glb": "/files/assets/furniture/classic-four-drawer-dresser-lxgb/desktop.glb",
+  "glbPhone": "/files/assets/furniture/classic-four-drawer-dresser-lxgb/phone.glb",
+  "thumbnail": "/files/assets/furniture/classic-four-drawer-dresser-lxgb/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/B/B07PYKLXGB.glb",
+  "productId": "B07PYKLXGB",
+  "measuredM": [
+    0.704,
+    1.021,
+    0.401
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 62420,
+      "triangles": 5628
+    },
+    "phone": {
+      "bytes": 61324,
+      "triangles": 5628
+    }
+  }
+}

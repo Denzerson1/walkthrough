@@ -1,0 +1,37 @@
+{
+  "id": "mesh-swivel-office-chair-v5fg",
+  "name": "Mesh Swivel Office Chair",
+  "category": "desk_chair",
+  "styles": [
+    "industrial"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.74,
+    1.03,
+    0.715
+  ],
+  "glb": "/files/assets/furniture/mesh-swivel-office-chair-v5fg/desktop.glb",
+  "glbPhone": "/files/assets/furniture/mesh-swivel-office-chair-v5fg/phone.glb",
+  "thumbnail": "/files/assets/furniture/mesh-swivel-office-chair-v5fg/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/G/B0758HV5FG.glb",
+  "productId": "B0758HV5FG",
+  "measuredM": [
+    0.739,
+    1.029,
+    0.714
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 2750056,
+      "triangles": 68818
+    },
+    "phone": {
+      "bytes": 687692,
+      "triangles": 49999
+    }
+  }
+}

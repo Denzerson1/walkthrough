@@ -1,0 +1,37 @@
+{
+  "id": "inari-one-drawer-desk-oak-lss4",
+  "name": "Inari One-Drawer Desk Oak",
+  "category": "desk",
+  "styles": [
+    "scandinavian"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.9,
+    0.73,
+    0.5
+  ],
+  "glb": "/files/assets/furniture/inari-one-drawer-desk-oak-lss4/desktop.glb",
+  "glbPhone": "/files/assets/furniture/inari-one-drawer-desk-oak-lss4/phone.glb",
+  "thumbnail": "/files/assets/furniture/inari-one-drawer-desk-oak-lss4/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/4/B07GFWLSS4.glb",
+  "productId": "B07GFWLSS4",
+  "measuredM": [
+    0.893,
+    0.724,
+    0.498
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 4231328,
+      "triangles": 768
+    },
+    "phone": {
+      "bytes": 509440,
+      "triangles": 768
+    }
+  }
+}

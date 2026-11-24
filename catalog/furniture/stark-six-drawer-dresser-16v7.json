@@ -1,0 +1,37 @@
+{
+  "id": "stark-six-drawer-dresser-16v7",
+  "name": "Stark Six-Drawer Dresser",
+  "category": "dresser",
+  "styles": [
+    "mid-century"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    1.549,
+    0.813,
+    0.457
+  ],
+  "glb": "/files/assets/furniture/stark-six-drawer-dresser-16v7/desktop.glb",
+  "glbPhone": "/files/assets/furniture/stark-six-drawer-dresser-16v7/phone.glb",
+  "thumbnail": "/files/assets/furniture/stark-six-drawer-dresser-16v7/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/7/B075YZ16V7.glb",
+  "productId": "B075YZ16V7",
+  "measuredM": [
+    1.536,
+    0.81,
+    0.464
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 5194856,
+      "triangles": 25064
+    },
+    "phone": {
+      "bytes": 705200,
+      "triangles": 25064
+    }
+  }
+}

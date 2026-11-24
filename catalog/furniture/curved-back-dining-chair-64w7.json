@@ -1,0 +1,37 @@
+{
+  "id": "curved-back-dining-chair-64w7",
+  "name": "Curved Back Dining Chair",
+  "category": "dining_chair",
+  "styles": [
+    "industrial"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.559,
+    0.759,
+    0.526
+  ],
+  "glb": "/files/assets/furniture/curved-back-dining-chair-64w7/desktop.glb",
+  "glbPhone": "/files/assets/furniture/curved-back-dining-chair-64w7/phone.glb",
+  "thumbnail": "/files/assets/furniture/curved-back-dining-chair-64w7/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/7/B0856G64W7.glb",
+  "productId": "B0856G64W7",
+  "measuredM": [
+    0.559,
+    0.761,
+    0.527
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 4062260,
+      "triangles": 16540
+    },
+    "phone": {
+      "bytes": 485124,
+      "triangles": 16540
+    }
+  }
+}

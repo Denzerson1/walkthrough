@@ -20,12 +20,14 @@ _ARRAY_BUFFER, _ELEMENT_ARRAY_BUFFER = 34962, 34963
 Mesh = tuple[np.ndarray, np.ndarray, np.ndarray, bytes]
 
 
-def write_textured_meshes(path: Path, meshes: list[Mesh], name: str) -> None:
+def write_textured_meshes(path: Path, meshes: list[Mesh], name: str,
+                          names: list[str] | None = None) -> None:
     """
     Meshes, each: positions (n, 3) in scene metres, texture coordinates
     (n, 2) with v running down the image (glTF's convention), triangle
     indices (m, 3), and the JPEG (or WebP, with alpha) its material shows
-    unlit. Nodes and materials are called `name`.
+    unlit. Nodes and materials are called `name`, or each mesh's nodes by
+    its own of `names`.
     """
     chunks: list[bytes] = []
     views: list[dict] = []
@@ -72,7 +74,8 @@ def write_textured_meshes(path: Path, meshes: list[Mesh], name: str) -> None:
         "extensionsUsed": ["KHR_materials_unlit"],
         "scene": 0,
         "scenes": [{"nodes": list(range(len(meshes)))}],
-        "nodes": [{"mesh": k, "name": name} for k in range(len(meshes))],
+        "nodes": [{"mesh": k, "name": names[k] if names else name}
+                  for k in range(len(meshes))],
         "meshes": doc_meshes,
         "materials": materials,
         "textures": [{"source": k, "sampler": 0} for k in range(len(meshes))],

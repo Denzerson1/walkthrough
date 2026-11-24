@@ -22,6 +22,14 @@ def test_glb_holds_each_photo_mesh_with_its_texture(tmp_path):
     assert (tmp_path / "v.glb").stat().st_size % 4 == 0
 
 
+def test_glb_nodes_take_their_own_names_where_given(tmp_path):
+    mesh = (np.eye(3), np.array([[0, 0], [1, 0], [0, 1]]), np.array([[0, 1, 2]]), b"jpeg")
+    glb.write_textured_meshes(tmp_path / "v.glb", [mesh, mesh], "view-photo",
+                              ["view-photo", "view-street"])
+    assert [n["name"] for n in glb.read_json(tmp_path / "v.glb")["nodes"]] == [
+        "view-photo", "view-street"]
+
+
 def test_walls_are_where_the_features_cluster():
     rng = np.random.default_rng(0)
     d = np.concatenate([rng.normal(12, 0.3, 200), rng.normal(50, 1.0, 300), rng.uniform(0, 80, 20)])
