@@ -158,7 +158,7 @@ def main(project_ids: list[str]) -> None:
     # The API's default page size, so the lists match what the viewer gets there.
     cat = catalog_mod.load_catalog(settings.catalog_root)
     for kind in catalog_mod.KINDS:
-        items = catalog_mod.search(cat, kind, limit=50)
+        items = catalog_mod.search(cat, kind, limit=200)
         write_json(DIST / "api" / "catalog" / f"{kind}.json", items)
         for url in sorted(catalog_files(items)):
             if url.startswith("/catalog/"):

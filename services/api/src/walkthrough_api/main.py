@@ -134,7 +134,7 @@ def get_file(key: str, settings: Settings = Depends(get_settings)) -> FileRespon
 def get_catalog(
     kind: str,
     q: str = "",
-    limit: int = 50,
+    limit: int = 200,
     cat: catalog_mod.Catalog = Depends(catalog_dep),
 ) -> list[dict[str, Any]]:
     if kind not in catalog_mod.KINDS:

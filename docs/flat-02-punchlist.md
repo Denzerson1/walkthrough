@@ -247,4 +247,11 @@ balcony 1:1; the sun where it stood; a proper day-time slider.
   height (a November dusk is at a quarter past four); the photos dim and cool with the sky.
 - [x] 134. From the far bedroom the surround shows as a picture at the horizon (sharp, no
   parallax of the room's own): no photo was taken from there.
-- [ ] 135. The street side from photos: two photos out of each north window would do it.
+- [x] 135. The street side from the owner's street photos, laid on the map's house outlines and
+  seen from first-floor height; rougher than the south. Both north windows are curtained.
+- [x] 136. Lens haze toward the sun taken off along the photos' own edges; a faint streak over
+  the spruce stays.
+- [x] 137. Six more furniture types (dining table and chair, desk, desk chair, dresser, bookcase),
+  22 pieces from Amazon Berkeley Objects (CC BY 4.0), in all four kits and flat-02's rooms.
+- [x] 138. The bathroom and hall lamps stay on by day (no window); bathroom light neutral white;
+  headboard and placemats get a cloth texture.

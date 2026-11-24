@@ -7,6 +7,37 @@ verified, it says so.** A milestone is not "done" because its code exists.
 
 ---
 
+## 2026-11-24 — flat-02: the street side, haze, six more furniture types, lamps by day
+
+Items 135–138 of `docs/flat-02-punchlist.md`.
+
+- **The full bake of 22 November** finished (238 min, exit 0) and was looked
+  at in the browser: every room at 13:05, key rooms at 07:30, 16:15, 17:15.
+- **Street side:** the owner's street photos stand north of the house as a
+  group of their own, laid on OpenStreetMap's house outlines (scale 1.47
+  m/unit, eye 1.8 m over the street). Rougher than the south side: stray
+  fragments. Both north windows are curtained in the flat, as in the
+  owner's indoor photos, so little of it shows from inside. The generated
+  houses no longer show (shadows only).
+- **Haze toward the sun:** the veil is refined along the photo's own edges
+  (guided filter) and taken off in full; a faint streak over the spruce
+  stays.
+- **Furniture:** 22 pieces in six new types from Amazon Berkeley Objects
+  (CC BY 4.0, credited in the menu): dining table and chair, desk, desk
+  chair, dresser, bookcase; in all four kits and flat-02's rooms. ABO has
+  only two usable dining tables, so two kits share each. Seen in the
+  browser with the Mid-Century and Scandinavian kits.
+- **Found on the way:** the catalog endpoint and the site export stopped at
+  50 entries; with 58 pieces eight would have been missing. Now 200.
+- **Indoor materials:** judged room by room on the full bake. Changed: the
+  bathroom and hall lamps stay on by day (no window: the bathroom was
+  black at noon), the bathroom's light is neutral white as photographed,
+  the headboard and placemats get a cloth texture. The rest was left: it
+  already follows the photos.
+- **Checked** on a quick test bake (24 samples). **The full-quality bake
+  with these changes was running when this was written: not yet looked at,
+  not deployed.**
+
 ## 2026-11-22 — flat-02: the real surroundings from the owner's photos, the balcony, the day
 
 Items 125, 131–135 of `docs/flat-02-punchlist.md`. `docs/PIPELINE.md`, "The

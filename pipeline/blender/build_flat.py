@@ -4066,6 +4066,7 @@ def ceiling_lights(spec: dict) -> list[bpy.types.Object]:
         area.color = lamp.get("colour", (1.0, 0.86, 0.72))
         obj = bpy.data.objects.new(area.name, area)
         bpy.context.collection.objects.link(obj)
+        obj["always"] = bool(lamp.get("always"))
         obj.location = P(x, y - 0.012, z)  # an area light shines down its -Z: down
         bm = bmesh.new()
         h = size / 2
@@ -4125,14 +4126,15 @@ def set_strips(lamps: list[bpy.types.Object], entry: dict | None,
     With `lamps_on` (sun elevations: on fully at or below the first, off at
     or above the second) the ceiling lights follow too, as people switch
     them: a winter day's low sun would otherwise leave the strips half on
-    at noon, and the ceiling lights burning beside a sunlit window.
+    at noon, and the ceiling lights burning beside a sunlit window. A light
+    marked `always` stays on: a room with no window is dark at noon too.
     """
     elevation = entry["elevation"] if entry else 0.0
     if lamps_on:
         full, off = lamps_on
         on = min(max((off - elevation) / (off - full), 0.0), 1.0)
         for obj in bpy.data.objects:
-            if obj.name.startswith("lamp-light-"):
+            if obj.name.startswith("lamp-light-") and not obj.get("always"):
                 if "power" not in obj:
                     obj["power"] = obj.data.energy
                 obj.data.energy = obj["power"] * on

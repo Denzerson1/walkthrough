@@ -560,7 +560,8 @@ cannot see; placed by hand from the capture photos):
   along its path, as under a roof window, so its patch moves with the
   slider) and `sun.lampsOn` (sun elevations: the lamps fully on at or below
   the first, off at or above the second; without it the ceiling lights are
-  always on) make the slider a day: flat-02's runs from sunrise to night on
+  always on; a light marked `always` stays on, for a room with no window)
+  make the slider a day: flat-02's runs from sunrise to night on
   the day its photos were taken.
 - `viewPhotos`: the owner's photos out of two windows (`photo`, the
   `window` it was taken from, `keep`: the part to use, as fractions, to cut
@@ -896,10 +897,17 @@ against far as it should. What it cannot do: show what no photo saw. From a
 room far from where the photos were taken (more than `REACH`, 8 m) the viewer
 sets the whole surround back along the photos' own rays (150 m), which makes
 it their view as a picture at the horizon: sharp, without the parallax that
-room would have. And where no photo looks at
-all (flat-02: north of the house; its street photos are in the model, at a
-scale of their own that the balcony does not fix), the generated houses stay
-(`housesShownBeyondZ`).
+room would have.
+
+**The street side** (`street`). Photos taken down in the street register
+among themselves but share nothing with the balcony's, so their scale and
+place are not fixed by it. They are stood as a group of their own: up and
+north from their own photos, then one scale and one shift, found by laying
+their walls on the map's house outlines (walls on outline edges, no points
+deep inside a house, no camera inside one), written into the dressing. Only
+photos whose own stereo depth is good are used, and the group is never set
+back. Where no photo looks at all, generated houses can stay in view
+(`housesShownBeyondZ`); without the key they only cast shadows.
 
 **Light.** The photos show one light, the minute they were taken (`taken`).
 The dressing's `sun` is set to that day and time, so the bake's default is
@@ -914,7 +922,8 @@ when they were taken, cooled after sunset (`surround.daylight_tints`).
 | `photos`, `taken` | Folder under the project; "HH:MM" they were taken |
 | `balcony` | `photos` taken on it (stems), and the plan's `railZ`, `wallX`, `wallTowards` (-1 or 1), `railHeight` |
 | `use` | Photo stem to how gladly it is used where several see the same (0..1; low for the sun in frame) |
-| `veil` | Photo stem to the share of the sun's veil taken off it (lens flare; haze removal's dark channel, within 40 degrees of the sun) |
+| `veil` | Photo stem to the share of the sun's veil taken off it (lens flare: haze removal's dark channel, refined along the photo's edges by a guided filter, within 40 degrees of the sun). The sky is still found and filled from the photo as taken |
+| `street` | A group stood on its own: `photos`, `suns` (extra photos with the sun in frame, for north), `use`, `scale` (m per unit), `at` (where the cameras' middle stands), `seenFrom` (the window it is looked at from) |
 | `centre` | The photos whose cameras' middle the rest is seen from |
 | `own`, `lean`, `air` | Boxes of the flat's own (x0, x1, y0, y1, z0, z1); which of them a photo may be taken leaning over; boxes of air (the balcony's, and just outside its rails) where nothing of the surroundings stands, so a photo's own rail and flowers at a wrong depth are left out |
 | `lay` | Where low growth is laid on the ground: x below, z below, z above, y below |
