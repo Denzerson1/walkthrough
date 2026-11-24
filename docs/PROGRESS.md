@@ -42,8 +42,9 @@ Items 135–138 of `docs/flat-02-punchlist.md`.
   the baked manifest by a local script, and are in the dressing for the
   next rebuild.
 - **The full-quality bake** (227 min, exit 0) was looked at in the browser:
-  every room at all six times, and the four newer themes at 13:05. Not
-  pushed, not deployed.
+  every room at all six times, and the four newer themes at 13:05.
+  Pushed and deployed the same day; the built site was checked in every
+  room at three times and in all eight themes, the live site with one.
 - **Left open:** several catalog floor textures do not match their names
   (light oak herringbone, limestone, terracotta, both painted boards are
   dark or wrong). No theme uses them now.
