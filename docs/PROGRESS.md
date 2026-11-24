@@ -34,9 +34,19 @@ Items 135–138 of `docs/flat-02-punchlist.md`.
   black at noon), the bathroom's light is neutral white as photographed,
   the headboard and placemats get a cloth texture. The rest was left: it
   already follows the photos.
-- **Checked** on a quick test bake (24 samples). **The full-quality bake
-  with these changes was running when this was written: not yet looked at,
-  not deployed.**
+- **Eight style themes** (item 139): Japandi and Mediterranean filled,
+  Classic Leather and Navy and Brass new, 46 more Amazon pieces. The spots
+  for study armchair, desk chair, bed, nightstands and sofa were resized so
+  that no theme's pieces stand in each other;
+  `scripts/check_kits_stand.py` checks it. The spot changes were applied to
+  the baked manifest by a local script, and are in the dressing for the
+  next rebuild.
+- **The full-quality bake** (227 min, exit 0) was looked at in the browser:
+  every room at all six times, and the four newer themes at 13:05. Not
+  pushed, not deployed.
+- **Left open:** several catalog floor textures do not match their names
+  (light oak herringbone, limestone, terracotta, both painted boards are
+  dark or wrong). No theme uses them now.
 
 ## 2026-11-22 — flat-02: the real surroundings from the owner's photos, the balcony, the day
 
