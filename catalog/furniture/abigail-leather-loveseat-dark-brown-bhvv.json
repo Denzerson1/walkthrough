@@ -1,0 +1,38 @@
+{
+  "id": "abigail-leather-loveseat-dark-brown-bhvv",
+  "name": "Abigail Leather Loveseat Dark Brown",
+  "category": "sofa",
+  "styles": [
+    "modern-minimal",
+    "classic"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    1.626,
+    0.889,
+    1.041
+  ],
+  "glb": "/files/assets/furniture/abigail-leather-loveseat-dark-brown-bhvv/desktop.glb",
+  "glbPhone": "/files/assets/furniture/abigail-leather-loveseat-dark-brown-bhvv/phone.glb",
+  "thumbnail": "/files/assets/furniture/abigail-leather-loveseat-dark-brown-bhvv/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/V/B07QCMBHVV.glb",
+  "productId": "B07QCMBHVV",
+  "measuredM": [
+    1.616,
+    0.873,
+    1.016
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 4888572,
+      "triangles": 32264
+    },
+    "phone": {
+      "bytes": 710916,
+      "triangles": 32264
+    }
+  }
+}

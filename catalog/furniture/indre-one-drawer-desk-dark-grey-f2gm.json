@@ -1,0 +1,38 @@
+{
+  "id": "indre-one-drawer-desk-dark-grey-f2gm",
+  "name": "Indre One-Drawer Desk Dark Grey",
+  "category": "desk",
+  "styles": [
+    "modern-minimal",
+    "glam"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    1.1,
+    0.73,
+    0.56
+  ],
+  "glb": "/files/assets/furniture/indre-one-drawer-desk-dark-grey-f2gm/desktop.glb",
+  "glbPhone": "/files/assets/furniture/indre-one-drawer-desk-dark-grey-f2gm/phone.glb",
+  "thumbnail": "/files/assets/furniture/indre-one-drawer-desk-dark-grey-f2gm/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/M/B07GFWF2GM.glb",
+  "productId": "B07GFWF2GM",
+  "measuredM": [
+    1.099,
+    0.729,
+    0.557
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 2954504,
+      "triangles": 660
+    },
+    "phone": {
+      "bytes": 364384,
+      "triangles": 660
+    }
+  }
+}

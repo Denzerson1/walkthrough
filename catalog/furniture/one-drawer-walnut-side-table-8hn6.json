@@ -1,0 +1,39 @@
+{
+  "id": "one-drawer-walnut-side-table-8hn6",
+  "name": "One-Drawer Walnut Side Table",
+  "category": "side_table",
+  "styles": [
+    "modern-minimal",
+    "industrial",
+    "classic"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.43,
+    0.515,
+    0.43
+  ],
+  "glb": "/files/assets/furniture/one-drawer-walnut-side-table-8hn6/desktop.glb",
+  "glbPhone": "/files/assets/furniture/one-drawer-walnut-side-table-8hn6/phone.glb",
+  "thumbnail": "/files/assets/furniture/one-drawer-walnut-side-table-8hn6/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/6/B07GDZ8HN6.glb",
+  "productId": "B07GDZ8HN6",
+  "measuredM": [
+    0.43,
+    0.515,
+    0.43
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 1216376,
+      "triangles": 1860
+    },
+    "phone": {
+      "bytes": 223152,
+      "triangles": 1860
+    }
+  }
+}

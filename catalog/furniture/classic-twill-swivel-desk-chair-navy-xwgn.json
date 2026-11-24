@@ -1,0 +1,38 @@
+{
+  "id": "classic-twill-swivel-desk-chair-navy-xwgn",
+  "name": "Classic Twill Swivel Desk Chair Navy",
+  "category": "desk_chair",
+  "styles": [
+    "modern-minimal",
+    "mediterranean"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.6,
+    0.82,
+    0.655
+  ],
+  "glb": "/files/assets/furniture/classic-twill-swivel-desk-chair-navy-xwgn/desktop.glb",
+  "glbPhone": "/files/assets/furniture/classic-twill-swivel-desk-chair-navy-xwgn/phone.glb",
+  "thumbnail": "/files/assets/furniture/classic-twill-swivel-desk-chair-navy-xwgn/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/N/B07MDJXWGN.glb",
+  "productId": "B07MDJXWGN",
+  "measuredM": [
+    0.599,
+    0.82,
+    0.655
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 3456260,
+      "triangles": 43052
+    },
+    "phone": {
+      "bytes": 720180,
+      "triangles": 43052
+    }
+  }
+}

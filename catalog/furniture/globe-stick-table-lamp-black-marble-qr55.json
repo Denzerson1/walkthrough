@@ -1,0 +1,38 @@
+{
+  "id": "globe-stick-table-lamp-black-marble-qr55",
+  "name": "Globe Stick Table Lamp Black Marble",
+  "category": "table_lamp",
+  "styles": [
+    "modern-minimal",
+    "glam"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.152,
+    0.483,
+    0.152
+  ],
+  "glb": "/files/assets/furniture/globe-stick-table-lamp-black-marble-qr55/desktop.glb",
+  "glbPhone": "/files/assets/furniture/globe-stick-table-lamp-black-marble-qr55/phone.glb",
+  "thumbnail": "/files/assets/furniture/globe-stick-table-lamp-black-marble-qr55/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/5/B082XMQR55.glb",
+  "productId": "B082XMQR55",
+  "measuredM": [
+    0.153,
+    0.48,
+    0.153
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 258536,
+      "triangles": 15432
+    },
+    "phone": {
+      "bytes": 173452,
+      "triangles": 15432
+    }
+  }
+}

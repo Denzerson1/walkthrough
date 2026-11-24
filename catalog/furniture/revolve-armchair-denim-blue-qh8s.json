@@ -1,0 +1,38 @@
+{
+  "id": "revolve-armchair-denim-blue-qh8s",
+  "name": "Revolve Armchair Denim Blue",
+  "category": "armchair",
+  "styles": [
+    "mid-century",
+    "mediterranean"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.879,
+    0.899,
+    0.831
+  ],
+  "glb": "/files/assets/furniture/revolve-armchair-denim-blue-qh8s/desktop.glb",
+  "glbPhone": "/files/assets/furniture/revolve-armchair-denim-blue-qh8s/phone.glb",
+  "thumbnail": "/files/assets/furniture/revolve-armchair-denim-blue-qh8s/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/S/B0719WQH8S.glb",
+  "productId": "B0719WQH8S",
+  "measuredM": [
+    0.855,
+    0.922,
+    0.82
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 5609092,
+      "triangles": 34363
+    },
+    "phone": {
+      "bytes": 882524,
+      "triangles": 34363
+    }
+  }
+}

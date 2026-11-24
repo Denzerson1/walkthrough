@@ -1,0 +1,38 @@
+{
+  "id": "parker-marble-and-gold-coffee-table-qv23",
+  "name": "Parker Marble and Gold Coffee Table",
+  "category": "coffee_table",
+  "styles": [
+    "modern-minimal",
+    "glam"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    1.199,
+    0.399,
+    0.579
+  ],
+  "glb": "/files/assets/furniture/parker-marble-and-gold-coffee-table-qv23/desktop.glb",
+  "glbPhone": "/files/assets/furniture/parker-marble-and-gold-coffee-table-qv23/phone.glb",
+  "thumbnail": "/files/assets/furniture/parker-marble-and-gold-coffee-table-qv23/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/3/B07DBFQV23.glb",
+  "productId": "B07DBFQV23",
+  "measuredM": [
+    1.197,
+    0.405,
+    0.577
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 694052,
+      "triangles": 7712
+    },
+    "phone": {
+      "bytes": 268000,
+      "triangles": 7712
+    }
+  }
+}

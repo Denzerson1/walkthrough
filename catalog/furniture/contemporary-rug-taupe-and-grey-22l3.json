@@ -1,0 +1,37 @@
+{
+  "id": "contemporary-rug-taupe-and-grey-22l3",
+  "name": "Contemporary Rug Taupe and Grey",
+  "category": "rug",
+  "styles": [
+    "modern-minimal"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    2.459,
+    0.023,
+    1.575
+  ],
+  "glb": "/files/assets/furniture/contemporary-rug-taupe-and-grey-22l3/desktop.glb",
+  "glbPhone": "/files/assets/furniture/contemporary-rug-taupe-and-grey-22l3/phone.glb",
+  "thumbnail": "/files/assets/furniture/contemporary-rug-taupe-and-grey-22l3/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/3/B07HSF22L3.glb",
+  "productId": "B07HSF22L3",
+  "measuredM": [
+    2.459,
+    0.023,
+    1.575
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 4057916,
+      "triangles": 1928
+    },
+    "phone": {
+      "bytes": 501932,
+      "triangles": 1928
+    }
+  }
+}

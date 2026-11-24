@@ -1,0 +1,38 @@
+{
+  "id": "alonzo-leather-accent-chair-cognac-p26l",
+  "name": "Alonzo Leather Accent Chair Cognac",
+  "category": "armchair",
+  "styles": [
+    "modern-minimal",
+    "classic"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.96,
+    0.9,
+    0.99
+  ],
+  "glb": "/files/assets/furniture/alonzo-leather-accent-chair-cognac-p26l/desktop.glb",
+  "glbPhone": "/files/assets/furniture/alonzo-leather-accent-chair-cognac-p26l/phone.glb",
+  "thumbnail": "/files/assets/furniture/alonzo-leather-accent-chair-cognac-p26l/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/L/B082VLP26L.glb",
+  "productId": "B082VLP26L",
+  "measuredM": [
+    0.988,
+    0.895,
+    0.963
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 5585124,
+      "triangles": 37980
+    },
+    "phone": {
+      "bytes": 830252,
+      "triangles": 37980
+    }
+  }
+}

@@ -8,5 +8,31 @@
     "#2e2b28"
   ],
   "floorId": "oak-plank-natural",
-  "slots": {}
+  "slots": {
+    "living": {
+      "sofa": "aiden-velvet-loveseat-otter-grey-d52q",
+      "coffee_table": "round-coffee-table-with-solid-wood-f3mr",
+      "rug": "textured-jute-rug-natural-lflm",
+      "armchair": "theresa-accent-chair-cream-zb1q",
+      "side_table": "modern-rustic-reclaimed-elm-round-accent-tdq6",
+      "floor_lamp": "globe-stick-floor-lamp-b716",
+      "dining_table": "mid-century-walnut-dining-table-xrjm",
+      "dining_chair": "woodley-dining-chair-grey-x7yw"
+    },
+    "bedroom": {
+      "bed": "imogene-oiled-bronze-queen-bed-h792",
+      "nightstand": "bedside-table-5ps1",
+      "table_lamp": "leland-textured-table-lamp-s2z1",
+      "rug": "textured-jute-rug-natural-lflm",
+      "dresser": "classic-six-drawer-dresser-espresso-j7x8",
+      "desk": "wooden-study-desk-black-by26",
+      "desk_chair": "classic-twill-swivel-desk-chair-sygt"
+    },
+    "office": {
+      "desk": "wooden-study-desk-black-by26",
+      "desk_chair": "classic-twill-swivel-desk-chair-sygt",
+      "shelf": "five-tier-open-bookcase-walnut-hdnk",
+      "armchair": "theresa-accent-chair-cream-zb1q"
+    }
+  }
 }

@@ -1,0 +1,38 @@
+{
+  "id": "classic",
+  "name": "Classic Leather",
+  "description": "Brown leather, dark wood and a patterned rug: a study you could read in all day.",
+  "swatches": [
+    "#5a3a26",
+    "#1f2a3c",
+    "#c9b89a"
+  ],
+  "floorId": "vintage-parquet-chevron",
+  "slots": {
+    "living": {
+      "sofa": "abigail-leather-loveseat-dark-brown-bhvv",
+      "coffee_table": "reclaimed-fir-storage-coffee-table-ymql",
+      "rug": "motion-wool-rug-denim-blue-jl1t",
+      "armchair": "alonzo-leather-accent-chair-cognac-p26l",
+      "side_table": "one-drawer-walnut-side-table-8hn6",
+      "floor_lamp": "adjustable-arm-mid-century-modern-living-room-sbfl",
+      "dining_table": "mid-century-walnut-dining-table-xrjm",
+      "dining_chair": "eli-curved-back-dining-chair-graphite-xqx1"
+    },
+    "bedroom": {
+      "bed": "fisher-rustic-wood-queen-bed-frame-h7b1",
+      "nightstand": "gloss-two-drawer-bedside-black-and-walnut-52wz",
+      "table_lamp": "mesh-table-lamp-antique-brass-zgkk",
+      "rug": "motion-wool-rug-denim-blue-jl1t",
+      "dresser": "stark-six-drawer-dresser-16v7",
+      "desk": "ventura-mid-century-writing-desk-w1sn",
+      "desk_chair": "celine-task-chair-beige-fmrc"
+    },
+    "office": {
+      "desk": "ventura-mid-century-writing-desk-w1sn",
+      "desk_chair": "celine-task-chair-beige-fmrc",
+      "shelf": "five-tier-open-bookcase-walnut-hdnk",
+      "armchair": "zane-leather-swivel-chair-ptqv"
+    }
+  }
+}

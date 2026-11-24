@@ -1,0 +1,38 @@
+{
+  "id": "leland-textured-table-lamp-s2z1",
+  "name": "Leland Textured Table Lamp",
+  "category": "table_lamp",
+  "styles": [
+    "modern-minimal",
+    "japandi"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.254,
+    0.432,
+    0.254
+  ],
+  "glb": "/files/assets/furniture/leland-textured-table-lamp-s2z1/desktop.glb",
+  "glbPhone": "/files/assets/furniture/leland-textured-table-lamp-s2z1/phone.glb",
+  "thumbnail": "/files/assets/furniture/leland-textured-table-lamp-s2z1/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/1/B075X3S2Z1.glb",
+  "productId": "B075X3S2Z1",
+  "measuredM": [
+    0.251,
+    0.429,
+    0.251
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 4607496,
+      "triangles": 8780
+    },
+    "phone": {
+      "bytes": 594592,
+      "triangles": 8780
+    }
+  }
+}

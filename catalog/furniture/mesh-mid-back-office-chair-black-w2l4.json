@@ -1,0 +1,38 @@
+{
+  "id": "mesh-mid-back-office-chair-black-w2l4",
+  "name": "Mesh Mid-Back Office Chair Black",
+  "category": "desk_chair",
+  "styles": [
+    "modern-minimal",
+    "industrial"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.61,
+    1.025,
+    0.64
+  ],
+  "glb": "/files/assets/furniture/mesh-mid-back-office-chair-black-w2l4/desktop.glb",
+  "glbPhone": "/files/assets/furniture/mesh-mid-back-office-chair-black-w2l4/phone.glb",
+  "thumbnail": "/files/assets/furniture/mesh-mid-back-office-chair-black-w2l4/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/4/B00IIFW2L4.glb",
+  "productId": "B00IIFW2L4",
+  "measuredM": [
+    0.61,
+    1.026,
+    0.64
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 4101396,
+      "triangles": 22120
+    },
+    "phone": {
+      "bytes": 556308,
+      "triangles": 22120
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "id": "eva-tufted-velvet-chair-navy-jb42",
+  "name": "Eva Tufted Velvet Chair Navy",
+  "category": "armchair",
+  "styles": [
+    "mid-century",
+    "glam"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.851,
+    0.768,
+    0.895
+  ],
+  "glb": "/files/assets/furniture/eva-tufted-velvet-chair-navy-jb42/desktop.glb",
+  "glbPhone": "/files/assets/furniture/eva-tufted-velvet-chair-navy-jb42/phone.glb",
+  "thumbnail": "/files/assets/furniture/eva-tufted-velvet-chair-navy-jb42/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/2/B075X4JB42.glb",
+  "productId": "B075X4JB42",
+  "measuredM": [
+    0.868,
+    0.771,
+    0.877
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 6096516,
+      "triangles": 95586
+    },
+    "phone": {
+      "bytes": 912612,
+      "triangles": 49999
+    }
+  }
+}

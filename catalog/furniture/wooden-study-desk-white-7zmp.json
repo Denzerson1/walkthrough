@@ -1,0 +1,39 @@
+{
+  "id": "wooden-study-desk-white-7zmp",
+  "name": "Wooden Study Desk White",
+  "category": "desk",
+  "styles": [
+    "modern-minimal",
+    "scandinavian",
+    "mediterranean"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.991,
+    0.762,
+    0.499
+  ],
+  "glb": "/files/assets/furniture/wooden-study-desk-white-7zmp/desktop.glb",
+  "glbPhone": "/files/assets/furniture/wooden-study-desk-white-7zmp/phone.glb",
+  "thumbnail": "/files/assets/furniture/wooden-study-desk-white-7zmp/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/P/B07R7W7ZMP.glb",
+  "productId": "B07R7W7ZMP",
+  "measuredM": [
+    0.99,
+    0.762,
+    0.497
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 154740,
+      "triangles": 2972
+    },
+    "phone": {
+      "bytes": 79280,
+      "triangles": 2972
+    }
+  }
+}

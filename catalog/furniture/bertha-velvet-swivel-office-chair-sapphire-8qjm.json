@@ -1,0 +1,38 @@
+{
+  "id": "bertha-velvet-swivel-office-chair-sapphire-8qjm",
+  "name": "Bertha Velvet Swivel Office Chair Sapphire",
+  "category": "desk_chair",
+  "styles": [
+    "mid-century",
+    "industrial"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.641,
+    0.908,
+    0.635
+  ],
+  "glb": "/files/assets/furniture/bertha-velvet-swivel-office-chair-sapphire-8qjm/desktop.glb",
+  "glbPhone": "/files/assets/furniture/bertha-velvet-swivel-office-chair-sapphire-8qjm/phone.glb",
+  "thumbnail": "/files/assets/furniture/bertha-velvet-swivel-office-chair-sapphire-8qjm/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/M/B082BL8QJM.glb",
+  "productId": "B082BL8QJM",
+  "measuredM": [
+    0.641,
+    0.908,
+    0.635
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 5594608,
+      "triangles": 108508
+    },
+    "phone": {
+      "bytes": 864400,
+      "triangles": 49999
+    }
+  }
+}

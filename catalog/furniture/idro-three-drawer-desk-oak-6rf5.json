@@ -1,0 +1,37 @@
+{
+  "id": "idro-three-drawer-desk-oak-6rf5",
+  "name": "Idro Three-Drawer Desk Oak",
+  "category": "desk",
+  "styles": [
+    "scandinavian"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    1.1,
+    0.735,
+    0.56
+  ],
+  "glb": "/files/assets/furniture/idro-three-drawer-desk-oak-6rf5/desktop.glb",
+  "glbPhone": "/files/assets/furniture/idro-three-drawer-desk-oak-6rf5/phone.glb",
+  "thumbnail": "/files/assets/furniture/idro-three-drawer-desk-oak-6rf5/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/5/B07GFL6RF5.glb",
+  "productId": "B07GFL6RF5",
+  "measuredM": [
+    1.097,
+    0.735,
+    0.56
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 3113952,
+      "triangles": 3564
+    },
+    "phone": {
+      "bytes": 278552,
+      "triangles": 3564
+    }
+  }
+}

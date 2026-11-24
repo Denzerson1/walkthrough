@@ -255,3 +255,6 @@ balcony 1:1; the sun where it stood; a proper day-time slider.
   22 pieces from Amazon Berkeley Objects (CC BY 4.0), in all four kits and flat-02's rooms.
 - [x] 138. The bathroom and hall lamps stay on by day (no window); bathroom light neutral white;
   headboard and placemats get a cloth texture.
+- [x] 139. Eight themes (new: Japandi, Mediterranean, Classic Leather, Navy and Brass), 46 more
+  pieces chosen to fit the flat's spots; the spots resized so nothing stands in anything else
+  (`scripts/check_kits_stand.py`); placemats leave with the dining table.

@@ -1,0 +1,38 @@
+{
+  "id": "glam",
+  "name": "Navy and Brass",
+  "description": "Navy velvet, marble and brass, black gloss beside it: dressed for the evening.",
+  "swatches": [
+    "#1f2f4f",
+    "#c9a55a",
+    "#efece6"
+  ],
+  "floorId": "marble-carrara",
+  "slots": {
+    "living": {
+      "sofa": "lawson-angled-sofa-blue-f5dg",
+      "coffee_table": "parker-marble-and-gold-coffee-table-qv23",
+      "rug": "distressed-medallion-area-rug-v63q",
+      "armchair": "eva-tufted-velvet-chair-navy-jb42",
+      "side_table": "mid-century-modern-white-marble-and-metal-v4p3",
+      "floor_lamp": "drum-shade-floor-lamp-xtzh",
+      "dining_table": "noah-round-ash-dining-table-3z93",
+      "dining_chair": "dunford-dining-chair-ivory-j5d6"
+    },
+    "bedroom": {
+      "bed": "catelyn-brushed-brass-queen-bed-with-cph1",
+      "nightstand": "havel-2-drawer-bedside-table-knnh",
+      "table_lamp": "globe-stick-table-lamp-black-marble-qr55",
+      "rug": "distressed-medallion-area-rug-v63q",
+      "dresser": "hulio-four-drawer-chest-black-and-walnut-cp3f",
+      "desk": "indre-one-drawer-desk-dark-grey-f2gm",
+      "desk_chair": "bertha-velvet-swivel-office-chair-4g1j"
+    },
+    "office": {
+      "desk": "indre-one-drawer-desk-dark-grey-f2gm",
+      "desk_chair": "bertha-velvet-swivel-office-chair-4g1j",
+      "shelf": "martin-oak-bookcase-45s5",
+      "armchair": "theresa-accent-chair-gray-h69w"
+    }
+  }
+}

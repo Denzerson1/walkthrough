@@ -1,0 +1,38 @@
+{
+  "id": "jaxon-round-side-table-txxy",
+  "name": "Jaxon Round Side Table",
+  "category": "side_table",
+  "styles": [
+    "modern-minimal",
+    "industrial"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.406,
+    0.673,
+    0.406
+  ],
+  "glb": "/files/assets/furniture/jaxon-round-side-table-txxy/desktop.glb",
+  "glbPhone": "/files/assets/furniture/jaxon-round-side-table-txxy/phone.glb",
+  "thumbnail": "/files/assets/furniture/jaxon-round-side-table-txxy/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/Y/B07QD6TXXY.glb",
+  "productId": "B07QD6TXXY",
+  "measuredM": [
+    0.406,
+    0.686,
+    0.406
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 4169316,
+      "triangles": 14796
+    },
+    "phone": {
+      "bytes": 479724,
+      "triangles": 14796
+    }
+  }
+}

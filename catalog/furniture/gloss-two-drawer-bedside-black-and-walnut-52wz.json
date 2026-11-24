@@ -1,0 +1,40 @@
+{
+  "id": "gloss-two-drawer-bedside-black-and-walnut-52wz",
+  "name": "Gloss Two-Drawer Bedside Black and Walnut",
+  "category": "nightstand",
+  "styles": [
+    "modern-minimal",
+    "mid-century",
+    "industrial",
+    "classic"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.4,
+    0.47,
+    0.36
+  ],
+  "glb": "/files/assets/furniture/gloss-two-drawer-bedside-black-and-walnut-52wz/desktop.glb",
+  "glbPhone": "/files/assets/furniture/gloss-two-drawer-bedside-black-and-walnut-52wz/phone.glb",
+  "thumbnail": "/files/assets/furniture/gloss-two-drawer-bedside-black-and-walnut-52wz/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/Z/B079VK52WZ.glb",
+  "productId": "B079VK52WZ",
+  "measuredM": [
+    0.4,
+    0.47,
+    0.36
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 419268,
+      "triangles": 11740
+    },
+    "phone": {
+      "bytes": 189392,
+      "triangles": 11740
+    }
+  }
+}

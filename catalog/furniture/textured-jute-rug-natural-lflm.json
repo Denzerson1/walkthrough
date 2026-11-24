@@ -1,0 +1,38 @@
+{
+  "id": "textured-jute-rug-natural-lflm",
+  "name": "Textured Jute Rug Natural",
+  "category": "rug",
+  "styles": [
+    "modern-minimal",
+    "japandi"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    2.141,
+    0.013,
+    1.566
+  ],
+  "glb": "/files/assets/furniture/textured-jute-rug-natural-lflm/desktop.glb",
+  "glbPhone": "/files/assets/furniture/textured-jute-rug-natural-lflm/phone.glb",
+  "thumbnail": "/files/assets/furniture/textured-jute-rug-natural-lflm/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/M/B071SHLFLM.glb",
+  "productId": "B071SHLFLM",
+  "measuredM": [
+    2.141,
+    0.013,
+    1.566
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 4703424,
+      "triangles": 2416
+    },
+    "phone": {
+      "bytes": 511956,
+      "triangles": 2416
+    }
+  }
+}

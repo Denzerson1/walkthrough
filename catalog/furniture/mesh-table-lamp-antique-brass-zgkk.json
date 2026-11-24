@@ -1,0 +1,39 @@
+{
+  "id": "mesh-table-lamp-antique-brass-zgkk",
+  "name": "Mesh Table Lamp Antique Brass",
+  "category": "table_lamp",
+  "styles": [
+    "modern-minimal",
+    "industrial",
+    "classic"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.356,
+    0.584,
+    0.356
+  ],
+  "glb": "/files/assets/furniture/mesh-table-lamp-antique-brass-zgkk/desktop.glb",
+  "glbPhone": "/files/assets/furniture/mesh-table-lamp-antique-brass-zgkk/phone.glb",
+  "thumbnail": "/files/assets/furniture/mesh-table-lamp-antique-brass-zgkk/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/K/B07B4ZZGKK.glb",
+  "productId": "B07B4ZZGKK",
+  "measuredM": [
+    0.353,
+    0.578,
+    0.353
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 2966900,
+      "triangles": 52272
+    },
+    "phone": {
+      "bytes": 1233808,
+      "triangles": 49999
+    }
+  }
+}

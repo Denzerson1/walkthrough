@@ -1,0 +1,39 @@
+{
+  "id": "one-drawer-bedside-table-beige-sm4w",
+  "name": "One-Drawer Bedside Table Beige",
+  "category": "nightstand",
+  "styles": [
+    "modern-minimal",
+    "mediterranean",
+    "mid-century"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.45,
+    0.53,
+    0.38
+  ],
+  "glb": "/files/assets/furniture/one-drawer-bedside-table-beige-sm4w/desktop.glb",
+  "glbPhone": "/files/assets/furniture/one-drawer-bedside-table-beige-sm4w/phone.glb",
+  "thumbnail": "/files/assets/furniture/one-drawer-bedside-table-beige-sm4w/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/W/B07RPZSM4W.glb",
+  "productId": "B07RPZSM4W",
+  "measuredM": [
+    0.45,
+    0.53,
+    0.38
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 583268,
+      "triangles": 13504
+    },
+    "phone": {
+      "bytes": 253812,
+      "triangles": 13504
+    }
+  }
+}

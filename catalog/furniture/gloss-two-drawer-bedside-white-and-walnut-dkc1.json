@@ -1,0 +1,39 @@
+{
+  "id": "gloss-two-drawer-bedside-white-and-walnut-dkc1",
+  "name": "Gloss Two-Drawer Bedside White and Walnut",
+  "category": "nightstand",
+  "styles": [
+    "modern-minimal",
+    "scandinavian",
+    "mid-century"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.4,
+    0.47,
+    0.36
+  ],
+  "glb": "/files/assets/furniture/gloss-two-drawer-bedside-white-and-walnut-dkc1/desktop.glb",
+  "glbPhone": "/files/assets/furniture/gloss-two-drawer-bedside-white-and-walnut-dkc1/phone.glb",
+  "thumbnail": "/files/assets/furniture/gloss-two-drawer-bedside-white-and-walnut-dkc1/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/1/B079VKDKC1.glb",
+  "productId": "B079VKDKC1",
+  "measuredM": [
+    0.4,
+    0.47,
+    0.36
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 3524792,
+      "triangles": 8248
+    },
+    "phone": {
+      "bytes": 340428,
+      "triangles": 8248
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "id": "lawson-angled-sofa-blue-f5dg",
+  "name": "Lawson Angled Sofa Blue",
+  "category": "sofa",
+  "styles": [
+    "modern-minimal",
+    "mid-century",
+    "industrial",
+    "glam"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    1.981,
+    0.864,
+    0.864
+  ],
+  "glb": "/files/assets/furniture/lawson-angled-sofa-blue-f5dg/desktop.glb",
+  "glbPhone": "/files/assets/furniture/lawson-angled-sofa-blue-f5dg/phone.glb",
+  "thumbnail": "/files/assets/furniture/lawson-angled-sofa-blue-f5dg/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/G/B075X4F5DG.glb",
+  "productId": "B075X4F5DG",
+  "measuredM": [
+    1.976,
+    0.846,
+    0.875
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 5922144,
+      "triangles": 16324
+    },
+    "phone": {
+      "bytes": 692024,
+      "triangles": 16324
+    }
+  }
+}

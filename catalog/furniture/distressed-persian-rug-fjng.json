@@ -1,0 +1,38 @@
+{
+  "id": "distressed-persian-rug-fjng",
+  "name": "Distressed Persian Rug",
+  "category": "rug",
+  "styles": [
+    "modern-minimal",
+    "mediterranean"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    2.464,
+    0.023,
+    1.521
+  ],
+  "glb": "/files/assets/furniture/distressed-persian-rug-fjng/desktop.glb",
+  "glbPhone": "/files/assets/furniture/distressed-persian-rug-fjng/phone.glb",
+  "thumbnail": "/files/assets/furniture/distressed-persian-rug-fjng/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/G/B07HSNFJNG.glb",
+  "productId": "B07HSNFJNG",
+  "measuredM": [
+    2.464,
+    0.023,
+    1.521
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 3847888,
+      "triangles": 1504
+    },
+    "phone": {
+      "bytes": 469020,
+      "triangles": 1504
+    }
+  }
+}

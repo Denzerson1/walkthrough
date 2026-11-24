@@ -1,0 +1,37 @@
+{
+  "id": "aggol-lift-top-coffee-table-white-r0vz",
+  "name": "Aggol Lift-Top Coffee Table White",
+  "category": "coffee_table",
+  "styles": [
+    "modern-minimal"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    1,
+    0.44,
+    0.5
+  ],
+  "glb": "/files/assets/furniture/aggol-lift-top-coffee-table-white-r0vz/desktop.glb",
+  "glbPhone": "/files/assets/furniture/aggol-lift-top-coffee-table-white-r0vz/phone.glb",
+  "thumbnail": "/files/assets/furniture/aggol-lift-top-coffee-table-white-r0vz/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/Z/B01NCOR0VZ.glb",
+  "productId": "B01NCOR0VZ",
+  "measuredM": [
+    1,
+    0.441,
+    0.5
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 1912172,
+      "triangles": 652
+    },
+    "phone": {
+      "bytes": 77200,
+      "triangles": 652
+    }
+  }
+}

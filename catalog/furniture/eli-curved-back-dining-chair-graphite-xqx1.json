@@ -1,0 +1,38 @@
+{
+  "id": "eli-curved-back-dining-chair-graphite-xqx1",
+  "name": "Eli Curved-Back Dining Chair Graphite",
+  "category": "dining_chair",
+  "styles": [
+    "modern-minimal",
+    "classic"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.49,
+    0.84,
+    0.59
+  ],
+  "glb": "/files/assets/furniture/eli-curved-back-dining-chair-graphite-xqx1/desktop.glb",
+  "glbPhone": "/files/assets/furniture/eli-curved-back-dining-chair-graphite-xqx1/phone.glb",
+  "thumbnail": "/files/assets/furniture/eli-curved-back-dining-chair-graphite-xqx1/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/1/B0853KXQX1.glb",
+  "productId": "B0853KXQX1",
+  "measuredM": [
+    0.491,
+    0.839,
+    0.592
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 4130920,
+      "triangles": 6328
+    },
+    "phone": {
+      "bytes": 427904,
+      "triangles": 6328
+    }
+  }
+}

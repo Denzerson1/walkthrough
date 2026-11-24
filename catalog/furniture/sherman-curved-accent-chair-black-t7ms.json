@@ -1,0 +1,38 @@
+{
+  "id": "sherman-curved-accent-chair-black-t7ms",
+  "name": "Sherman Curved Accent Chair Black",
+  "category": "armchair",
+  "styles": [
+    "industrial",
+    "classic"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.775,
+    0.762,
+    0.724
+  ],
+  "glb": "/files/assets/furniture/sherman-curved-accent-chair-black-t7ms/desktop.glb",
+  "glbPhone": "/files/assets/furniture/sherman-curved-accent-chair-black-t7ms/phone.glb",
+  "thumbnail": "/files/assets/furniture/sherman-curved-accent-chair-black-t7ms/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/S/B07DBFT7MS.glb",
+  "productId": "B07DBFT7MS",
+  "measuredM": [
+    0.793,
+    0.756,
+    0.727
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 3836144,
+      "triangles": 17714
+    },
+    "phone": {
+      "bytes": 523732,
+      "triangles": 17714
+    }
+  }
+}

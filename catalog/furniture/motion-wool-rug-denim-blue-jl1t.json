@@ -1,0 +1,40 @@
+{
+  "id": "motion-wool-rug-denim-blue-jl1t",
+  "name": "Motion Wool Rug Denim Blue",
+  "category": "rug",
+  "styles": [
+    "modern-minimal",
+    "scandinavian",
+    "mid-century",
+    "classic"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    2.33,
+    0.017,
+    1.478
+  ],
+  "glb": "/files/assets/furniture/motion-wool-rug-denim-blue-jl1t/desktop.glb",
+  "glbPhone": "/files/assets/furniture/motion-wool-rug-denim-blue-jl1t/phone.glb",
+  "thumbnail": "/files/assets/furniture/motion-wool-rug-denim-blue-jl1t/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/T/B075ZBJL1T.glb",
+  "productId": "B075ZBJL1T",
+  "measuredM": [
+    2.33,
+    0.017,
+    1.478
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 3343732,
+      "triangles": 84
+    },
+    "phone": {
+      "bytes": 463604,
+      "triangles": 84
+    }
+  }
+}

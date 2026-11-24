@@ -1,0 +1,38 @@
+{
+  "id": "celine-task-chair-beige-fmrc",
+  "name": "Celine Task Chair Beige",
+  "category": "desk_chair",
+  "styles": [
+    "industrial",
+    "classic"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.565,
+    0.953,
+    0.667
+  ],
+  "glb": "/files/assets/furniture/celine-task-chair-beige-fmrc/desktop.glb",
+  "glbPhone": "/files/assets/furniture/celine-task-chair-beige-fmrc/phone.glb",
+  "thumbnail": "/files/assets/furniture/celine-task-chair-beige-fmrc/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/C/B082BLFMRC.glb",
+  "productId": "B082BLFMRC",
+  "measuredM": [
+    0.564,
+    0.952,
+    0.668
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 5252636,
+      "triangles": 80560
+    },
+    "phone": {
+      "bytes": 931116,
+      "triangles": 50000
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "id": "dunford-dining-chair-ivory-j5d6",
+  "name": "Dunford Dining Chair Ivory",
+  "category": "dining_chair",
+  "styles": [
+    "modern-minimal",
+    "glam"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.61,
+    0.838,
+    0.61
+  ],
+  "glb": "/files/assets/furniture/dunford-dining-chair-ivory-j5d6/desktop.glb",
+  "glbPhone": "/files/assets/furniture/dunford-dining-chair-ivory-j5d6/phone.glb",
+  "thumbnail": "/files/assets/furniture/dunford-dining-chair-ivory-j5d6/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/6/B07HSBJ5D6.glb",
+  "productId": "B07HSBJ5D6",
+  "measuredM": [
+    0.611,
+    0.824,
+    0.617
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 4790972,
+      "triangles": 12898
+    },
+    "phone": {
+      "bytes": 673588,
+      "triangles": 12898
+    }
+  }
+}

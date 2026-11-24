@@ -1,0 +1,38 @@
+{
+  "id": "vega-storage-queen-bed-espresso-y95w",
+  "name": "Vega Storage Queen Bed Espresso",
+  "category": "bed",
+  "styles": [
+    "modern-minimal",
+    "mid-century"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    1.632,
+    0.808,
+    2.103
+  ],
+  "glb": "/files/assets/furniture/vega-storage-queen-bed-espresso-y95w/desktop.glb",
+  "glbPhone": "/files/assets/furniture/vega-storage-queen-bed-espresso-y95w/phone.glb",
+  "thumbnail": "/files/assets/furniture/vega-storage-queen-bed-espresso-y95w/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/W/B07LC5Y95W.glb",
+  "productId": "B07LC5Y95W",
+  "measuredM": [
+    1.634,
+    0.808,
+    2.103
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 242864,
+      "triangles": 13174
+    },
+    "phone": {
+      "bytes": 150420,
+      "triangles": 13174
+    }
+  }
+}

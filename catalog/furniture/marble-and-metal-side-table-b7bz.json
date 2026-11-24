@@ -1,0 +1,37 @@
+{
+  "id": "marble-and-metal-side-table-b7bz",
+  "name": "Marble and Metal Side Table",
+  "category": "side_table",
+  "styles": [
+    "modern-minimal"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.454,
+    0.432,
+    0.454
+  ],
+  "glb": "/files/assets/furniture/marble-and-metal-side-table-b7bz/desktop.glb",
+  "glbPhone": "/files/assets/furniture/marble-and-metal-side-table-b7bz/phone.glb",
+  "thumbnail": "/files/assets/furniture/marble-and-metal-side-table-b7bz/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/Z/B07B7GB7BZ.glb",
+  "productId": "B07B7GB7BZ",
+  "measuredM": [
+    0.455,
+    0.431,
+    0.455
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 1122868,
+      "triangles": 16168
+    },
+    "phone": {
+      "bytes": 288296,
+      "triangles": 16168
+    }
+  }
+}

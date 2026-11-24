@@ -1,0 +1,38 @@
+{
+  "id": "gloss-three-drawer-bedside-white-lvh5",
+  "name": "Gloss Three-Drawer Bedside White",
+  "category": "nightstand",
+  "styles": [
+    "modern-minimal",
+    "scandinavian"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.4,
+    0.56,
+    0.36
+  ],
+  "glb": "/files/assets/furniture/gloss-three-drawer-bedside-white-lvh5/desktop.glb",
+  "glbPhone": "/files/assets/furniture/gloss-three-drawer-bedside-white-lvh5/phone.glb",
+  "thumbnail": "/files/assets/furniture/gloss-three-drawer-bedside-white-lvh5/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/5/B079VPLVH5.glb",
+  "productId": "B079VPLVH5",
+  "measuredM": [
+    0.4,
+    0.56,
+    0.36
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 3097648,
+      "triangles": 5736
+    },
+    "phone": {
+      "bytes": 236648,
+      "triangles": 5736
+    }
+  }
+}

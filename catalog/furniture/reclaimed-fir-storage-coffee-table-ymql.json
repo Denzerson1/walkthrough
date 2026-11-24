@@ -1,0 +1,38 @@
+{
+  "id": "reclaimed-fir-storage-coffee-table-ymql",
+  "name": "Reclaimed Fir Storage Coffee Table",
+  "category": "coffee_table",
+  "styles": [
+    "industrial",
+    "classic"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    1.1,
+    0.399,
+    0.65
+  ],
+  "glb": "/files/assets/furniture/reclaimed-fir-storage-coffee-table-ymql/desktop.glb",
+  "glbPhone": "/files/assets/furniture/reclaimed-fir-storage-coffee-table-ymql/phone.glb",
+  "thumbnail": "/files/assets/furniture/reclaimed-fir-storage-coffee-table-ymql/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/L/B07B7GYMQL.glb",
+  "productId": "B07B7GYMQL",
+  "measuredM": [
+    1.101,
+    0.395,
+    0.655
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 4389388,
+      "triangles": 29984
+    },
+    "phone": {
+      "bytes": 765436,
+      "triangles": 29984
+    }
+  }
+}

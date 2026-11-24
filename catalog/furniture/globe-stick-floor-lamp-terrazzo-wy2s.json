@@ -1,0 +1,38 @@
+{
+  "id": "globe-stick-floor-lamp-terrazzo-wy2s",
+  "name": "Globe Stick Floor Lamp Terrazzo",
+  "category": "floor_lamp",
+  "styles": [
+    "modern-minimal",
+    "mediterranean"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.229,
+    1.753,
+    0.229
+  ],
+  "glb": "/files/assets/furniture/globe-stick-floor-lamp-terrazzo-wy2s/desktop.glb",
+  "glbPhone": "/files/assets/furniture/globe-stick-floor-lamp-terrazzo-wy2s/phone.glb",
+  "thumbnail": "/files/assets/furniture/globe-stick-floor-lamp-terrazzo-wy2s/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/S/B082XLWY2S.glb",
+  "productId": "B082XLWY2S",
+  "measuredM": [
+    0.229,
+    1.748,
+    0.229
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 3594180,
+      "triangles": 15784
+    },
+    "phone": {
+      "bytes": 366616,
+      "triangles": 15784
+    }
+  }
+}

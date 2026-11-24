@@ -1,12 +1,38 @@
 {
   "id": "mediterranean",
   "name": "Mediterranean",
-  "description": "Whitewashed wood, rattan and terracotta, warm as a summer house.",
+  "description": "White and pale wood, terracotta reds and sea blue, warm as a summer house.",
   "swatches": [
     "#f4efe6",
     "#c46a3c",
     "#3d6f8e"
   ],
-  "floorId": "terracotta-rustic",
-  "slots": {}
+  "floorId": "oak-herringbone-light",
+  "slots": {
+    "living": {
+      "sofa": "lawson-modern-angled-sofa-3fd2",
+      "coffee_table": "adour-oval-coffee-table-yboi",
+      "rug": "distressed-persian-rug-fjng",
+      "armchair": "revolve-armchair-denim-blue-qh8s",
+      "side_table": "walnut-drawer-side-table-c6lx",
+      "floor_lamp": "globe-stick-floor-lamp-terrazzo-wy2s",
+      "dining_table": "noah-round-ash-dining-table-3z93",
+      "dining_chair": "eli-curved-back-dining-chair-tr7m"
+    },
+    "bedroom": {
+      "bed": "optima-storage-queen-bed-cherry-4zyv",
+      "nightstand": "one-drawer-bedside-table-beige-sm4w",
+      "table_lamp": "modern-ceramic-table-lamp-2gy1",
+      "rug": "distressed-persian-rug-fjng",
+      "dresser": "classic-five-drawer-dresser-vnxr",
+      "desk": "wooden-study-desk-white-7zmp",
+      "desk_chair": "classic-twill-swivel-desk-chair-navy-xwgn"
+    },
+    "office": {
+      "desk": "wooden-study-desk-white-7zmp",
+      "desk_chair": "classic-twill-swivel-desk-chair-navy-xwgn",
+      "shelf": "five-tier-open-bookcase-white-sr4g",
+      "armchair": "theresa-accent-chair-cream-zb1q"
+    }
+  }
 }

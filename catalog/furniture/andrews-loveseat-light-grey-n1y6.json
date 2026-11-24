@@ -1,0 +1,37 @@
+{
+  "id": "andrews-loveseat-light-grey-n1y6",
+  "name": "Andrews Loveseat Light Grey",
+  "category": "sofa",
+  "styles": [
+    "modern-minimal"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    1.702,
+    0.914,
+    0.94
+  ],
+  "glb": "/files/assets/furniture/andrews-loveseat-light-grey-n1y6/desktop.glb",
+  "glbPhone": "/files/assets/furniture/andrews-loveseat-light-grey-n1y6/phone.glb",
+  "thumbnail": "/files/assets/furniture/andrews-loveseat-light-grey-n1y6/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/6/B07P5LN1Y6.glb",
+  "productId": "B07P5LN1Y6",
+  "measuredM": [
+    1.706,
+    0.915,
+    0.945
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 5533432,
+      "triangles": 35212
+    },
+    "phone": {
+      "bytes": 888232,
+      "triangles": 35212
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "id": "aiden-velvet-loveseat-otter-grey-d52q",
+  "name": "Aiden Velvet Loveseat Otter Grey",
+  "category": "sofa",
+  "styles": [
+    "mid-century",
+    "japandi"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    1.88,
+    0.77,
+    0.919
+  ],
+  "glb": "/files/assets/furniture/aiden-velvet-loveseat-otter-grey-d52q/desktop.glb",
+  "glbPhone": "/files/assets/furniture/aiden-velvet-loveseat-otter-grey-d52q/phone.glb",
+  "thumbnail": "/files/assets/furniture/aiden-velvet-loveseat-otter-grey-d52q/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/Q/B07BKKD52Q.glb",
+  "productId": "B07BKKD52Q",
+  "measuredM": [
+    1.883,
+    0.769,
+    0.92
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 3239160,
+      "triangles": 39844
+    },
+    "phone": {
+      "bytes": 612664,
+      "triangles": 39844
+    }
+  }
+}

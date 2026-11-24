@@ -1,0 +1,37 @@
+{
+  "id": "plaid-flatweave-rug-grey-and-yellow-jjl6",
+  "name": "Plaid Flatweave Rug Grey and Yellow",
+  "category": "rug",
+  "styles": [
+    "modern-minimal"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    2.442,
+    0.016,
+    1.527
+  ],
+  "glb": "/files/assets/furniture/plaid-flatweave-rug-grey-and-yellow-jjl6/desktop.glb",
+  "glbPhone": "/files/assets/furniture/plaid-flatweave-rug-grey-and-yellow-jjl6/phone.glb",
+  "thumbnail": "/files/assets/furniture/plaid-flatweave-rug-grey-and-yellow-jjl6/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/6/B07B51JJL6.glb",
+  "productId": "B07B51JJL6",
+  "measuredM": [
+    2.442,
+    0.016,
+    1.527
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 5427868,
+      "triangles": 2072
+    },
+    "phone": {
+      "bytes": 490676,
+      "triangles": 2072
+    }
+  }
+}

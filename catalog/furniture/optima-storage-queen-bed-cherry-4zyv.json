@@ -1,0 +1,38 @@
+{
+  "id": "optima-storage-queen-bed-cherry-4zyv",
+  "name": "Optima Storage Queen Bed Cherry",
+  "category": "bed",
+  "styles": [
+    "modern-minimal",
+    "mediterranean"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    1.683,
+    0.848,
+    2.053
+  ],
+  "glb": "/files/assets/furniture/optima-storage-queen-bed-cherry-4zyv/desktop.glb",
+  "glbPhone": "/files/assets/furniture/optima-storage-queen-bed-cherry-4zyv/phone.glb",
+  "thumbnail": "/files/assets/furniture/optima-storage-queen-bed-cherry-4zyv/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/V/B07LC84ZYV.glb",
+  "productId": "B07LC84ZYV",
+  "measuredM": [
+    1.683,
+    0.848,
+    2.053
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 2414536,
+      "triangles": 20002
+    },
+    "phone": {
+      "bytes": 353588,
+      "triangles": 20002
+    }
+  }
+}

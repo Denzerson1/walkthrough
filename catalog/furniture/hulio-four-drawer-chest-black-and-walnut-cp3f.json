@@ -1,0 +1,39 @@
+{
+  "id": "hulio-four-drawer-chest-black-and-walnut-cp3f",
+  "name": "Hulio Four-Drawer Chest Black and Walnut",
+  "category": "dresser",
+  "styles": [
+    "modern-minimal",
+    "industrial",
+    "glam"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.75,
+    0.72,
+    0.36
+  ],
+  "glb": "/files/assets/furniture/hulio-four-drawer-chest-black-and-walnut-cp3f/desktop.glb",
+  "glbPhone": "/files/assets/furniture/hulio-four-drawer-chest-black-and-walnut-cp3f/phone.glb",
+  "thumbnail": "/files/assets/furniture/hulio-four-drawer-chest-black-and-walnut-cp3f/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/F/B079X4CP3F.glb",
+  "productId": "B079X4CP3F",
+  "measuredM": [
+    0.75,
+    0.72,
+    0.36
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 2760556,
+      "triangles": 3152
+    },
+    "phone": {
+      "bytes": 208992,
+      "triangles": 3152
+    }
+  }
+}

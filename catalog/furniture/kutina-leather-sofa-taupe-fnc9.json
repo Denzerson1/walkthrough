@@ -1,0 +1,38 @@
+{
+  "id": "kutina-leather-sofa-taupe-fnc9",
+  "name": "Kutina Leather Sofa Taupe",
+  "category": "sofa",
+  "styles": [
+    "modern-minimal",
+    "industrial"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    2.03,
+    0.87,
+    0.94
+  ],
+  "glb": "/files/assets/furniture/kutina-leather-sofa-taupe-fnc9/desktop.glb",
+  "glbPhone": "/files/assets/furniture/kutina-leather-sofa-taupe-fnc9/phone.glb",
+  "thumbnail": "/files/assets/furniture/kutina-leather-sofa-taupe-fnc9/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/9/B07HPQFNC9.glb",
+  "productId": "B07HPQFNC9",
+  "measuredM": [
+    2.017,
+    0.875,
+    0.953
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 4982412,
+      "triangles": 25440
+    },
+    "phone": {
+      "bytes": 663684,
+      "triangles": 25440
+    }
+  }
+}

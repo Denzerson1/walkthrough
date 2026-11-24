@@ -1,0 +1,38 @@
+{
+  "id": "woodley-dining-chair-grey-x7yw",
+  "name": "Woodley Dining Chair Grey",
+  "category": "dining_chair",
+  "styles": [
+    "modern-minimal",
+    "japandi"
+  ],
+  "colors": [],
+  "dimensionsM": [
+    0.445,
+    1.016,
+    0.61
+  ],
+  "glb": "/files/assets/furniture/woodley-dining-chair-grey-x7yw/desktop.glb",
+  "glbPhone": "/files/assets/furniture/woodley-dining-chair-grey-x7yw/phone.glb",
+  "thumbnail": "/files/assets/furniture/woodley-dining-chair-grey-x7yw/thumb.webp",
+  "assetStatus": "ready",
+  "license": "CC-BY-4.0",
+  "attribution": "Amazon.com, Amazon Berkeley Objects",
+  "source": "https://amazon-berkeley-objects.s3.amazonaws.com/3dmodels/original/W/B07HSJX7YW.glb",
+  "productId": "B07HSJX7YW",
+  "measuredM": [
+    0.45,
+    1.033,
+    0.611
+  ],
+  "models": {
+    "desktop": {
+      "bytes": 4470100,
+      "triangles": 3936
+    },
+    "phone": {
+      "bytes": 514780,
+      "triangles": 3936
+    }
+  }
+}
