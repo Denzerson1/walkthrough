@@ -97,6 +97,12 @@ SURFACES: dict[str, tuple[str, float, str | None]] = {
     "puffer": ("#1b1c1f", 0.5, None),
     "brass": ("#b08d4f", 0.3, None),
     "mat-white": ("#f4f2ee", 0.9, None),
+    "mirror-edge": ("#a2a6a7", 0.3, None),   # a mirror's edges and back
+    "appliance": ("#f1f1ef", 0.35, None),    # a washer: white whatever its cupboard is
+    "roll-core": ("#b9a58c", 0.9, None),     # a toilet roll's cardboard
+    "grill-black": ("#101112", 0.25, None),  # a kettle grill's enamel
+    "pot-yucca": ("#e9e4d8", 0.35, None),    # the yucca's glazed pot,
+    "pot-band": ("#b08d4f", 0.3, None),      # its saucer and band
 }
 
 #: A picture whose photo has not been cut out yet: a neutral canvas.

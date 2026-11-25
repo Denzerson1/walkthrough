@@ -77,12 +77,16 @@ export function mirrorGlass(
  * A mirror of `geometry`, its glass in its local xy plane looking along +z,
  * reflecting the scene into `target` each time it is drawn.
  */
+/** The mirrors drawing into each target: none of them is drawn into another's reflection. */
+const sharing = new WeakMap<THREE.WebGLRenderTarget, THREE.Mesh[]>();
+
 export function createMirror(
   geometry: THREE.BufferGeometry,
   target: THREE.WebGLRenderTarget,
   color: THREE.Color,
   clipBias: number,
   maxSide: number,
+  minRatio = 1,
 ): THREE.Mesh {
   const textureMatrix = new THREE.Matrix4();
   const material = new THREE.ShaderMaterial({
@@ -94,8 +98,16 @@ export function createMirror(
     },
     vertexShader: SHADER.vertexShader,
     fragmentShader: SHADER.fragmentShader,
+    // In front of the dark glass it lies on, which stays in the model: what
+    // another mirror's reflection shows in its place.
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
   });
   const mirror = new THREE.Mesh(geometry, material);
+  const peers = sharing.get(target) ?? [];
+  sharing.set(target, peers);
+  peers.push(mirror);
   const plane = new THREE.Plane();
   const normal = new THREE.Vector3();
   const position = new THREE.Vector3();
@@ -153,10 +165,15 @@ export function createMirror(
     m[10] = clip.z + 1 - clipBias;
     m[14] = clip.w;
 
-    mirror.visible = false;
-    // The reflection as sharp as the screen it is seen on, up to `maxSide`.
-    renderer.getDrawingBufferSize(screen);
-    const scale = Math.min(1, maxSide / Math.max(screen.x, screen.y));
+    // No mirror in a reflection: one drawn there would read the buffer being
+    // drawn into, which flickered (the bathroom's, facing the hall's).
+    for (const peer of peers) peer.visible = false;
+    // The reflection at least as sharp as the screen it is seen on, and never
+    // below `minRatio` device pixels a CSS pixel (a slow frame lowers the
+    // screen's ratio, and the mirrors went soft with it), up to `maxSide`.
+    renderer.getSize(screen);
+    const ratio = Math.max(renderer.getPixelRatio(), minRatio);
+    const scale = Math.min(ratio, maxSide / Math.max(screen.x, screen.y));
     const width = Math.round(screen.x * scale);
     const height = Math.round(screen.y * scale);
     if (target.width !== width || target.height !== height) target.setSize(width, height);
@@ -165,7 +182,7 @@ export function createMirror(
     if (renderer.autoClear === false) renderer.clear();
     renderer.render(scene, reflected);
     renderer.setRenderTarget(null);
-    mirror.visible = true;
+    for (const peer of peers) peer.visible = true;
   };
   return mirror;
 }

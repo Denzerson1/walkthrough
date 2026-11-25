@@ -896,7 +896,8 @@ def leaf_objects(leaves: list[dict], mats: dict[str, bpy.types.Material]) -> lis
         obj = bpy.data.objects.new(f"door-{i}", mesh)
         bpy.context.collection.objects.link(obj)
         obj.location = origin
-        tag = {"open": round(leaf["open"], 5), "close": round(leaf["close"], 5)}
+        tag = {"open": round(leaf["open"], 5), "close": round(leaf["close"], 5),
+               "pivot": [round(px, 4), round(pz, 4)]}
         if leaf.get("at"):
             tag.update(at=[round(c, 4) for c in leaf["at"]], width=round(leaf["width"], 4))
         obj["door"] = tag
@@ -1684,7 +1685,9 @@ def bath_vanity(w: float, h: float, d: float, opts: dict) -> list[Part]:
     shelves = [top + (roof - top) * f for f in (0.4, 0.7)]
     parts: list[Part] = [
         ("white", (x0, x1, y0 + FRONT_T, y1, low, top - 0.03)),
-        *fronts(x0, x1, low + GAP, top - 0.03 - GAP, y0, [[c - x0, 2], [0, 2]], grips=False),
+        # Under the tall cupboard one door; the two drawers under the
+        # shelves and the basin, as wide as both (0117, 0120).
+        *fronts(x0, x1, low + GAP, top - 0.03 - GAP, y0, [[a - x0, 1], [0, 2]], grips=False),
         ("oak-warm", (x0, x1, y0 - 0.015, y1, top - 0.03, top)),
         ("white", (x0, a, yu + FRONT_T, y1, top, crown)),
         *fronts(x0, a, top + GAP, crown - GAP, yu, [[0, 1]], grips=False),
@@ -1728,11 +1731,18 @@ def washer_column(w: float, h: float, d: float, opts: dict) -> list[Part]:
     # The washer, 85 cm tall, on the shelf.
     wz, ww = base + t, xb - xa - 0.01
     cz, r = wz + 0.47, 0.17
-    parts += [("white", (-ww / 2, ww / 2, y0 + 0.03, y1 - 0.02, wz, wz + 0.85)),
-              ("steel", (-r - 0.03, r + 0.03, y0 + 0.018, y0 + 0.03, cz - r - 0.03, cz + r + 0.03)),
-              ("black", (-r, r, y0 + 0.012, y0 + 0.018, cz - r, cz + r)),
-              ("vent", (-ww / 2 + 0.02, ww / 2 - 0.02, y0 + 0.025, y0 + 0.03,
-                        wz + 0.74, wz + 0.82))]
+    # `appliance`, not the cupboards' `white`: recoloured sage with them, the
+    # washer came out sage (the owner: it is white, 0126-0128). Its door round.
+    parts += [("appliance", (-ww / 2, ww / 2, y0 + 0.03, y1 - 0.02, wz, wz + 0.85)),
+              ("oy:appliance", (-r - 0.05, r + 0.05, y0 + 0.016, y0 + 0.03,
+                                cz - r - 0.05, cz + r + 0.05)),
+              ("oy:steel", (-r - 0.012, r + 0.012, y0 + 0.011, y0 + 0.03,
+                            cz - r - 0.012, cz + r + 0.012)),
+              ("oy:black", (-r, r, y0 + 0.008, y0 + 0.03, cz - r, cz + r)),
+              ("black", (-ww / 2 + 0.05, -ww / 2 + 0.2, y0 + 0.027, y0 + 0.03,
+                         wz + 0.755, wz + 0.815)),
+              ("oy:steel", (ww / 2 - 0.16, ww / 2 - 0.1, y0 + 0.02, y0 + 0.03,
+                            wz + 0.755, wz + 0.815))]
     return parts
 
 
@@ -1745,12 +1755,14 @@ def roll_shelf(w: float, h: float, d: float, opts: dict) -> list[Part]:
     t = 0.018
     reach = opts.get("topReach", 0.0)  # the top board on past its side (0128, 0137)
     parts: list[Part] = [("oak-warm", (x0, x1, y1 - t, y1, 0, h - t))]
-    levels = [0.0, 0.25, 0.5, 0.75]
+    # Four compartments of one height (the owner): the top one was lower.
+    levels = [(h - t) * k / 4 for k in range(4)]
     for z in levels:
         parts.append(("oak-warm", (x0, x1, y0, y1 - t, z, z + t)))
     parts.append(("oak-warm", (x0, x1 + reach, y0 - 0.01, y1, h - t, h)))
-    for z in levels:  # a roll on each shelf
-        parts.append(("paper", (-0.055, 0.055, -0.055, 0.055, z + t, z + t + 0.1)))
+    for z in levels:  # a roll standing on each shelf: paper round a cardboard core
+        parts += [("o:paper", (-0.055, 0.055, -0.055, 0.055, z + t, z + t + 0.098)),
+                  ("o:roll-core", (-0.022, 0.022, -0.022, 0.022, z + t + 0.098, z + t + 0.0995))]
     # On top: a lidded box at the far end, as photographed.
     parts.append(("box-white", (x1 + reach - 0.25, x1 + reach - 0.01, y0 + 0.02, y1 - 0.02,
                                 h, h + 0.11)))
@@ -2150,6 +2162,34 @@ def grill_cover(w: float, h: float, d: float, opts: dict) -> list[Part]:
             ("cover", (x0 + 0.14, x1 - 0.14, y0 + 0.04, y1 - 0.02, 0.88, h))]
 
 
+def kettle_grill(w: float, h: float, d: float, opts: dict) -> list[Part]:
+    """
+    A small kettle grill (the owner, in place of the covered gas grill): a
+    black enamel bowl and lid on three legs, a steel band where they meet, an
+    ash pan under it, a wooden grip on the lid and one at the side.
+    """
+    r = min(w, d) / 2
+    bowl0, lid1 = h * 0.5, h - 0.05
+    mid = (bowl0 + lid1) / 2
+    parts: list[Part] = [("s:grill-black", (-r, r, -r, r, bowl0, lid1)),
+                         ("o:steel", (-r - 0.004, r + 0.004, -r - 0.004, r + 0.004,
+                                      mid - 0.012, mid + 0.012)),
+                         ("o:steel", (-0.09, 0.09, -0.09, 0.09, bowl0 - 0.12, bowl0 - 0.1)),
+                         ("o:steel", (-0.012, 0.012, -0.012, 0.012, bowl0 - 0.1, bowl0 + 0.02)),
+                         ("steel", (-0.05, -0.04, -0.008, 0.008, lid1 - 0.01, h - 0.02)),
+                         ("steel", (0.04, 0.05, -0.008, 0.008, lid1 - 0.01, h - 0.02)),
+                         ("acacia", (-0.065, 0.065, -0.014, 0.014, h - 0.028, h)),
+                         ("acacia", (-0.06, 0.06, -r - 0.05, -r - 0.025, mid + 0.02, mid + 0.045)),
+                         ("steel", (-0.05, -0.04, -r - 0.03, -r + 0.03, mid + 0.027, mid + 0.037)),
+                         ("steel", (0.04, 0.05, -r - 0.03, -r + 0.03, mid + 0.027, mid + 0.037))]
+    for k in range(3):  # the legs, splayed to the rim's width
+        a = 2 * math.pi * k / 3 + math.pi / 2
+        lx, ly = 0.8 * r * math.cos(a), 0.8 * r * math.sin(a)
+        parts.append(("o:steel", (lx - 0.011, lx + 0.011, ly - 0.011, ly + 0.011,
+                                  0.0, bowl0 + 0.08)))
+    return parts
+
+
 def lantern(w: float, h: float, d: float, opts: dict) -> list[Part]:
     """The balcony's ceiling light (IMG_2050): an opal box behind three square black louvres."""
     x0, x1, y0, y1 = -w / 2, w / 2, -d / 2, d / 2
@@ -2303,7 +2343,7 @@ def yucca(bm: bmesh.types.BMesh, w: float, h: float, d: float, slot) -> None:
     import random
 
     rng = random.Random(7)
-    pot_r, pot_h, n = min(w, d) * 0.36, 0.34, 40
+    pot_r, pot_h, n = min(w, d) * 0.4, 0.4, 40
     lathe = [(0.74, 0.0), (0.8, 0.03), (0.93, 0.55), (1.0, 0.9), (1.05, 0.94), (1.05, 1.0),
              (0.97, 1.0), (0.95, 0.9)]
     rings = [[bm.verts.new((pot_r * f * math.cos(a), pot_r * f * math.sin(a), pot_h * z))
@@ -2311,9 +2351,16 @@ def yucca(bm: bmesh.types.BMesh, w: float, h: float, d: float, slot) -> None:
     for lower, upper in zip(rings, rings[1:], strict=False):
         for k in range(n):
             face = bm.faces.new((lower[k], lower[(k + 1) % n], upper[(k + 1) % n], upper[k]))
-            face.material_index, face.smooth = slot("terracotta"), True
-    bm.faces.new(list(reversed(rings[0]))).material_index = slot("terracotta")
+            face.material_index, face.smooth = slot("pot-yucca"), True
+    bm.faces.new(list(reversed(rings[0]))).material_index = slot("pot-yucca")
     bm.faces.new(rings[-1]).material_index = slot("soil")
+    # A saucer under it and a band below the rim (the owner: a nicer pot).
+    for z0, z1, wide in ((0.0, 0.03, 1.12), (pot_h * 0.78, pot_h * 0.84, 1.03)):
+        ring = bmesh.ops.create_cone(bm, cap_ends=True, segments=n, radius1=pot_r * wide,
+                                     radius2=pot_r * wide, depth=z1 - z0)
+        bmesh.ops.translate(bm, verts=ring["verts"], vec=(0, 0, (z0 + z1) / 2))
+        for face in {f for v in ring["verts"] for f in v.link_faces}:
+            face.material_index = slot("pot-band")
     tops = []
     for k, (rise, lean) in enumerate(((h - 0.42, 0.05), (h - 0.68, 0.11), (h - 0.95, 0.13))):
         a = 2 * math.pi * k / 3 + 0.4
@@ -2366,7 +2413,7 @@ PIECES = {
     "picture": picture, "box-cushion": box_cushion, "blinds": blinds, "railing": railing,
     "garden-table": garden_table, "garden-chair": garden_chair, "lounge-chair": lounge_chair,
     "wicker-table": wicker_table, "wicker-seat": wicker_seat, "wicker-cube": wicker_cube,
-    "grill-cover": grill_cover, "lantern": lantern,
+    "grill-cover": grill_cover, "kettle-grill": kettle_grill, "lantern": lantern,
     "backdrop": backdrop,
 }
 
@@ -3151,9 +3198,9 @@ def finished(item: dict, surfaces: dict) -> bpy.types.Object:
         # vertex through the fabric (vertex_light), so its side is cut into
         # rings for the light to vary down it.
         # A table lamp's shade is the same drum, as tall as its box, no cable.
-        radius, shade = min(w, d) / 2, min(0.28, h)
+        radius, shade = min(w, d) / 2, min(opts.get("shade", 0.28), h)
         cone = bmesh.ops.create_cone(bm, cap_ends=True, segments=48, radius1=radius,
-                                     radius2=radius, depth=shade)
+                                     radius2=radius * opts.get("taper", 1.0), depth=shade)
         bmesh.ops.translate(bm, verts=cone["verts"], vec=(0, 0, shade / 2))
         sides = [e for e in bm.edges if abs(e.verts[0].co.z - e.verts[1].co.z) > shade / 2]
         bmesh.ops.subdivide_edges(bm, edges=sides, cuts=6, use_grid_fill=True)
@@ -3168,8 +3215,24 @@ def finished(item: dict, surfaces: dict) -> bpy.types.Object:
         # the dressing's palette entry each of its surfaces is drawn in.
         remap = opts.get("surfaces", {})
         for surface, (px0, px1, py0, py1, pz0, pz1) in finish_parts(item["finish"], w, h, d, opts):
+            # A part's surface may name a round shape filling its box:
+            # "o:" an upright cylinder, "oy:" one lying front to back, "s:"
+            # an ellipsoid (toilet rolls, a washer's door, a kettle grill).
+            shape, _, surface = surface.rpartition(":")
             surface = remap.get(surface, surface)
-            cube = bmesh.ops.create_cube(bm, size=1.0)
+            if shape in ("o", "oy"):
+                cube = bmesh.ops.create_cone(bm, cap_ends=True, segments=32, radius1=0.5,
+                                             radius2=0.5, depth=1.0)
+                if shape == "oy":
+                    bmesh.ops.rotate(bm, verts=cube["verts"],
+                                     matrix=Matrix.Rotation(math.pi / 2, 3, "X"))
+            elif shape == "s":
+                cube = bmesh.ops.create_uvsphere(bm, u_segments=28, v_segments=16, radius=0.5)
+            else:
+                cube = bmesh.ops.create_cube(bm, size=1.0)
+            if shape:
+                for round_face in {f for v in cube["verts"] for f in v.link_faces}:
+                    round_face.smooth = len(round_face.verts) <= 4
             size = (px1 - px0, py1 - py0, pz1 - pz0)
             bmesh.ops.scale(bm, verts=cube["verts"], vec=size)
             bmesh.ops.translate(bm, verts=cube["verts"],
@@ -3177,9 +3240,11 @@ def finished(item: dict, surfaces: dict) -> bpy.types.Object:
             faces = {f for v in cube["verts"] for f in v.link_faces}
             if surface == "mirror":
                 # Only its face: the viewer aims a mirror's reflection along its normal.
-                back = [f for f in faces if f.normal.y > -0.5]
-                bmesh.ops.delete(bm, geom=back, context="FACES_ONLY")
-                faces = {f for f in faces if f.is_valid}
+                # Its edges and back a silvered grey of their own: left out,
+                # the glass was seen through from the side.
+                for f in [f for f in faces if f.normal.y > -0.5]:
+                    f.material_index = slot("mirror-edge")
+                faces = {f for f in faces if f.normal.y <= -0.5}
             for face in faces:
                 face.material_index = slot(surface)
             box_uvs(bm, faces, size, surfaces[surface].get("tile", (1.0, 1.0)))
@@ -3583,6 +3648,10 @@ def hang_glass_door(obj: bpy.types.Object, item: dict) -> None:
         # It shuts a doorway (the balcony's): closed, the walk stops there.
         x, _, z = item["center"]
         tag |= {"at": [round(x, 4), round(z, 4)], "width": round(w, 4)}
+    # Its hinge on the plan (scene x, z): the viewer turns it about this, not
+    # about the node's origin, which a published model moves to the mesh's middle.
+    hx, hy, _ = obj.matrix_world.translation
+    tag["pivot"] = [round(hx, 4), round(-hy, 4)]
     obj["door"] = tag
 
 

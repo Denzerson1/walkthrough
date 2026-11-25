@@ -41,6 +41,9 @@ EDGE = 1.15  # a quad whose corners' distances differ by more spans two things
 GLANCE = 0.16  # cosine to its photo's line of sight below which a surface is laid flat
 GROW = 0.12  # metres the flat's own boxes are grown by
 AGREE = 0.06  # a photo's depth agrees if it is within this of the others', at the median
+SEAM = 2.5  # degrees the photos' scores are smoothed over before they compete
+OVERLAP = 8  # vertices a photo's mesh runs on under its neighbours', past its own share
+BEHIND = 1.012  # how much farther that rim stands, so the neighbour's own lies in front
 
 
 @dataclass
@@ -64,6 +67,10 @@ class Layout:
     #: Where the photos are seen from, if not from where they were taken (a
     #: window over the street they were taken in).
     seen_from: tuple[float, float, float] | None = None
+    #: Pixels the depth is smoothed over, if any: photos seen from far off
+    #: where they were taken (from a window over the street) stand as smooth
+    #: fronts. Their depth's every step was a tear from up there.
+    smooth: float = 0.0
 
 
 def box_hits(start: np.ndarray, dirs: np.ndarray, boxes: list, lean: list[int]) -> np.ndarray:
@@ -197,6 +204,7 @@ class Photo:
         h, w = depth.shape
         self.size = (w, h)
         self.veil = layout.veil.get(view.name, 0.0)
+        self.smooth = bool(layout.smooth)
         rays = view.rays()
         rays /= np.linalg.norm(rays, axis=-1, keepdims=True)
         self.taken = bgr
@@ -205,7 +213,12 @@ class Photo:
         ys, xs = np.mgrid[0:h:STEP, 0:w:STEP]
         self.grid = ys.shape
         self.px = np.column_stack([xs.ravel() + 0.5, ys.ravel() + 0.5])
-        z = cv2.medianBlur(depth.astype(np.float32), 5)[ys, xs].ravel().astype(np.float64)
+        z = cv2.medianBlur(depth.astype(np.float32), 5)
+        if layout.smooth:
+            there = (~sky_mask(bgr, mono) & (z > 0)).astype(np.float32)
+            log = cv2.GaussianBlur(np.log(np.maximum(z, 1e-3)) * there, (0, 0), layout.smooth)
+            z = np.exp(log / np.maximum(cv2.GaussianBlur(there, (0, 0), layout.smooth), 1e-4))
+        z = z[ys, xs].ravel().astype(np.float64)
         points = ((view.rays(STEP).reshape(-1, 3) * z[:, None] - view.translation)
                   @ view.rotation) @ matrix.T + origin
         ray = points - self.centre
@@ -381,8 +394,13 @@ def match_exposure(photos: list[Photo], centre: np.ndarray, depth: np.ndarray) -
         p.gain = np.exp(0.7 * np.clip(log_gain[k], -0.6, 0.6))
 
 
-def triangles(p: Photo, mine: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
-    """Positions, texture pixels and triangles of the photo's share `mine` (its grid, bools)."""
+def triangles(p: Photo, mine: np.ndarray, push: np.ndarray | None = None
+              ) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+    """
+    Positions, texture pixels and triangles of the photo's share `mine` (its
+    grid, bools); `push`: per vertex, how many times its distance it stands at.
+    """
+    push = np.ones(mine.size) if push is None else push
     index = np.arange(mine.size).reshape(p.grid)
     quad = mine[:-1, :-1] & mine[1:, :-1] & mine[:-1, 1:] & mine[1:, 1:]
     corners = np.stack([index[:-1, :-1][quad], index[1:, :-1][quad], index[:-1, 1:][quad],
@@ -391,6 +409,8 @@ def triangles(p: Photo, mine: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.nd
         return None
     d = p.dist[corners]
     split = (d.max(axis=1) > EDGE * d.min(axis=1)) & (d.max(axis=1) - d.min(axis=1) > 0.5)
+    if p.smooth:  # one smooth front: its quads laid flat one by one were a field of dots
+        split[:] = False
     whole = corners[~split]
     # What the photo saw at a glance along it (a hedge's side, down a wall)
     # it has no picture of, only a smear: laid flat like an edge below,
@@ -400,12 +420,12 @@ def triangles(p: Photo, mine: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.nd
     normal = np.cross(b3 - a3, c3 - a3)
     normal /= np.maximum(np.linalg.norm(normal, axis=1), 1e-9)[:, None]
     facing = np.abs((normal * p.dirs[whole[:, 0]]).sum(axis=1))
-    straight = (facing > GLANCE) | p.flat[whole].all(axis=1)
+    straight = (facing > GLANCE) | p.flat[whole].all(axis=1) | p.smooth
     glancing, whole = whole[~straight], whole[straight]
     used = np.unique(whole)
     remap = np.full(mine.size, -1)
     remap[used] = np.arange(len(used))
-    positions, pixels = [p.at(used, p.dist[used])], [p.px[used]]
+    positions, pixels = [p.at(used, p.dist[used] * push[used])], [p.px[used]]
     a, b, c, e = (remap[whole[:, i]] for i in range(4))
     tris = [np.column_stack([a, b, c]), np.column_stack([c, b, e])]
     # A quad across the edge of something near: laid flat on what is behind
@@ -414,7 +434,7 @@ def triangles(p: Photo, mine: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.nd
     edge = np.concatenate([corners[split], glancing])
     if len(edge):
         flat = edge.ravel()
-        positions.append(p.at(flat, np.repeat(p.dist[edge].max(axis=1), 4)))
+        positions.append(p.at(flat, np.repeat(p.dist[edge].max(axis=1), 4) * push[flat]))
         pixels.append(p.px[flat])
         base = len(used) + 4 * np.arange(len(edge))
         tris += [np.column_stack([base, base + 1, base + 2]),
@@ -545,7 +565,12 @@ def build(photos: list[Photo], layout: Layout, frames: dict[str, Path],
     score, depth = splat(photos, centre)
     match_exposure(photos, centre, depth)
     report["gains"] = {p.name: round(float(p.gain.mean()), 2) for p in photos}
-    winner = np.where(score.max(axis=0) > 0, score.argmax(axis=0), -1)
+    # Smoothed before they compete: cell by cell, two photos of much the same
+    # score took turns, and their shares were a patchwork of blocks, each a
+    # little off the next in depth and exposure.
+    smooth = np.stack([cv2.GaussianBlur(layer, (0, 0), SEAM / CELL) * (layer > 0)
+                       for layer in score])
+    winner = np.where(score.max(axis=0) > 0, smooth.argmax(axis=0), -1)
 
     width, height = int(360 / CELL), int(180 / CELL)
     ground = np.zeros((height, width, 3), np.float32)
@@ -557,8 +582,14 @@ def build(photos: list[Photo], layout: Layout, frames: dict[str, Path],
         shows = mine.ravel() & ~p.fringe
         np.add.at(ground, (ey[shows], ax[shows]), (srgb_to_linear(p.colour) * p.gain)[shows])
         np.add.at(ground_n, (ey[shows], ax[shows]), 1)
-        mine = (cv2.dilate(mine.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0) & p.keep.reshape(
-            p.grid)
+        # Its mesh runs on under its neighbours' a little, set back behind
+        # them: where their depths differ, seen from the side, the gap
+        # between two shares showed the blurred ground behind as a hole.
+        own_share = mine
+        mine = (cv2.dilate(mine.astype(np.uint8), np.ones((2 * OVERLAP + 1,) * 2, np.uint8)) > 0
+                ) & p.keep.reshape(p.grid)
+        push = np.where(mine & ~(cv2.dilate(own_share.astype(np.uint8), np.ones((3, 3), np.uint8))
+                                 > 0), BEHIND, 1.0).ravel()
         # Specks (a far aerial, a bird) are left out: judged without their fringe.
         body = mine & ~p.fringe.reshape(p.grid)
         count, labels, stats, _ = cv2.connectedComponentsWithStats(body.astype(np.uint8),
@@ -566,7 +597,7 @@ def build(photos: list[Photo], layout: Layout, frames: dict[str, Path],
         small = np.flatnonzero(stats[:, cv2.CC_STAT_AREA] < 80)
         body &= ~np.isin(labels, small[small > 0])
         mine &= cv2.dilate(body.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
-        built = triangles(p, mine)
+        built = triangles(p, mine, push)
         if built is None:
             continue
         positions, px, tri = built

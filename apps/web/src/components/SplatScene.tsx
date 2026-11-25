@@ -49,6 +49,7 @@ import {
   type DoorState,
   doorState,
   doorsInTheWay,
+  turnedAbout,
   isDoorSpec,
   swingStep,
   toggled,
@@ -830,6 +831,14 @@ export function SplatScene({
         } else {
           // As a quaternion: past a quarter turn, rotation.y alone flips the other two axes.
           door.node.quaternion.copy(door.base).multiply(SWING.setFromAxisAngle(UP, door.state.angle));
+          // About its hinge, wherever the node's own origin is: a published
+          // model's nodes sit at their meshes' middles (quantization), and a
+          // leaf turned about its middle swung through its frame.
+          const pivot = door.state.pivot;
+          if (pivot) {
+            const [x, z] = turnedAbout([door.at.x, door.at.z], pivot, door.state.angle);
+            door.node.position.set(x, door.at.y, z);
+          }
         }
         activeAt = now;
       }
@@ -1893,7 +1902,7 @@ function addMirrors(model: THREE.Object3D): void {
   // and capped smaller they were pixelated. A phone's not multisampled.
   const phone = navigator.maxTouchPoints > 0 && Math.min(window.innerWidth, window.innerHeight) < 600;
   const target = mirrorTarget(1, 1, phone ? 0 : 4);
-  const maxSide = phone ? 2048 : 3072;
+  const maxSide = phone ? 2048 : 4096;
   const toModel = model.matrixWorld.clone().invert();
   for (const node of found) {
     // The reflector looks along its local +z: its glass laid in that frame.
@@ -1901,12 +1910,11 @@ function addMirrors(model: THREE.Object3D): void {
     if (!glass) continue;
     // clipBias only a hair: at 3 mm the wall a few millimetres behind the
     // glass was drawn into the reflection, seen at the mirror's edges.
-    const mirror = createMirror(glass.geometry, target, MIRROR_TINT, 0.0004, maxSide);
+    const mirror = createMirror(glass.geometry, target, MIRROR_TINT, 0.0004, maxSide, phone ? 1.5 : 2);
     mirror.name = node.name;
     mirror.applyMatrix4(toModel.clone().multiply(glass.frame));
     mirror.userData.mirror = true;
     model.add(mirror);
-    node.visible = false;
   }
 }
 

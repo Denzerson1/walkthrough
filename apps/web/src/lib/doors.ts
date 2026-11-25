@@ -21,6 +21,8 @@ export interface DoorSpec {
   /** Turn from the built pose to fully open, and to closed. */
   open: number;
   close: number;
+  /** A hinged door's hinge on the plan: what it turns about. Absent: its node's origin. */
+  pivot?: Vec2;
   /**
    * A sliding door's move from the built pose to closed (scene metres);
    * `open` and `close` are then the share of it taken, 0 and 1.
@@ -72,6 +74,20 @@ export function swingStep(angle: number, target: number, dt: number): number {
   const speed = (Math.PI / 2 / SWING_SECONDS) * Math.min(1, 0.25 + Math.abs(rest) / 0.26);
   const step = Math.min(Math.abs(rest), speed * dt);
   return angle + Math.sign(rest) * step;
+}
+
+/**
+ * Where a point of a hinged door (`home`, on the plan) stands once the door
+ * has turned `angle` about +Y round its `pivot`. A published model's nodes
+ * sit at their meshes' middles, not on the hinge: turned about its own
+ * origin such a leaf swung through its frame.
+ */
+export function turnedAbout(home: Vec2, pivot: Vec2, angle: number): Vec2 {
+  const dx = home[0] - pivot[0];
+  const dz = home[1] - pivot[1];
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  return [pivot[0] + c * dx + s * dz, pivot[1] - s * dx + c * dz];
 }
 
 /** How far an opening's centre may lie from a door's `at` and still be that door's. */

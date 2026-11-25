@@ -8,6 +8,7 @@ import {
   isDoorSpec,
   swingStep,
   toggled,
+  turnedAbout,
   walkableWith,
   type DoorState,
 } from '../src/lib/doors';
@@ -107,5 +108,17 @@ describe('a sliding door', () => {
     expect(walkableWith([left, right], [door])[0].openings).toHaveLength(0);
     door.angle = swingStep(door.angle, door.target, 10);
     expect(door.angle).toBe(0);
+  });
+});
+describe('a leaf whose node is not on its hinge', () => {
+  it('turns about the hinge, as three turns a node about +Y', () => {
+    const [x, z] = turnedAbout([0.4, 0], [0, 0], Math.PI / 2);
+    expect(x).toBeCloseTo(0);
+    expect(z).toBeCloseTo(-0.4);
+  });
+
+  it('stays put on the hinge and at no turn', () => {
+    expect(turnedAbout([1, 2], [1, 2], 1.2)).toEqual([1, 2]);
+    expect(turnedAbout([3, 4], [1, 2], 0)).toEqual([3, 4]);
   });
 });

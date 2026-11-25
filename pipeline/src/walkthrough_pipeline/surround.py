@@ -330,7 +330,8 @@ def build(paths: ProjectPaths, dressing: dict, pycolmap, say=print, fresh: bool 
         plain = mesh.Layout(
             own=layout.own, lean=[], air=[], sun=sun,
             quality={f"{stem}.jpg": q for stem, q in street["use"].items()},
-            veil=layout.veil, seen_from=tuple(street["seenFrom"]))
+            veil=layout.veil, seen_from=tuple(street["seenFrom"]),
+            smooth=street.get("smooth", 220.0))
         stood = []
         for name in plain.quality:
             if name not in views:
