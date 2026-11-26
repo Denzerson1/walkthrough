@@ -43,6 +43,8 @@ GROW = 0.12  # metres the flat's own boxes are grown by
 AGREE = 0.06  # a photo's depth agrees if it is within this of the others', at the median
 SEAM = 2.5  # degrees the photos' scores are smoothed over before they compete
 OVERLAP = 8  # vertices a photo's mesh runs on under its neighbours', past its own share
+PATCH = 1500  # cells: a photo's share smaller than this goes to its neighbours
+SPECK = 400  # vertices: a share's island smaller than this is left out
 BEHIND = 1.012  # how much farther that rim stands, so the neighbour's own lies in front
 
 
@@ -571,6 +573,16 @@ def build(photos: list[Photo], layout: Layout, frames: dict[str, Path],
     smooth = np.stack([cv2.GaussianBlur(layer, (0, 0), SEAM / CELL) * (layer > 0)
                        for layer in score])
     winner = np.where(score.max(axis=0) > 0, smooth.argmax(axis=0), -1)
+    # A small patch of one photo among the others' shares goes to them: left
+    # in, it stood out of place; left out, the blurred ground showed as a hole.
+    for _ in range(2):
+        for k in range(len(photos)):
+            _, labels, stats, _ = cv2.connectedComponentsWithStats(
+                (winner == k).astype(np.uint8), connectivity=8)
+            small = np.flatnonzero(stats[:, cv2.CC_STAT_AREA] < PATCH)
+            others = np.delete(score, k, axis=0).max(axis=0) > 0
+            smooth[k][np.isin(labels, small[small > 0]) & others] = 0
+        winner = np.where(smooth.max(axis=0) > 0, smooth.argmax(axis=0), -1)
 
     width, height = int(360 / CELL), int(180 / CELL)
     ground = np.zeros((height, width, 3), np.float32)
@@ -594,12 +606,12 @@ def build(photos: list[Photo], layout: Layout, frames: dict[str, Path],
         body = mine & ~p.fringe.reshape(p.grid)
         count, labels, stats, _ = cv2.connectedComponentsWithStats(body.astype(np.uint8),
                                                                    connectivity=8)
-        small = np.flatnonzero(stats[:, cv2.CC_STAT_AREA] < 80)
+        small = np.flatnonzero(stats[:, cv2.CC_STAT_AREA] < SPECK)
         body &= ~np.isin(labels, small[small > 0])
         mine &= cv2.dilate(body.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
         built = triangles(p, mine, push)
-        if built is None:
-            continue
+        if built is None or len(built[2]) < 3000:
+            continue  # a scrap of a photo among the others' shares: a patch out of place
         positions, px, tri = built
         image = texture(p, frames[p.name], distortion, layout.sun)
         th, tw = image.shape[:2]

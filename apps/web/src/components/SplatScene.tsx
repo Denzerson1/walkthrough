@@ -1868,7 +1868,7 @@ const REFLECTIVITY: Record<string, number> = {
   'surface-alu': 0.22,
   'surface-basin': 0.08,
   'surface-glass-shelf': 0.4,
-  floor: 0.035,
+  floor: 0.022,
   glass: 0.45,
   // A switched-off screen's dark glass: a faint sheen, not a mirror.
   'surface-screen': 0.08,
@@ -1940,10 +1940,13 @@ function addReflections(
   // Looked up one level down the cube's mips. Its faces are drawn without
   // antialiasing, and a roof window reflected in a front close up showed
   // their steps; a level down, each texel is four averaged.
-  const envmap = THREE.ShaderChunk.envmap_fragment.replace(
-    'textureCube( envMap, envMapRotation * reflectVec )',
-    'textureCube( envMap, envMapRotation * reflectVec, 1.0 )',
-  );
+  // A floor's reflection four levels down: an oiled floor shows where the
+  // window is, soft, not the window (the owner: less glossy, still reflecting).
+  const envmapAt = (level: string) =>
+    THREE.ShaderChunk.envmap_fragment.replace(
+      'textureCube( envMap, envMapRotation * reflectVec )',
+      `textureCube( envMap, envMapRotation * reflectVec, ${level} )`,
+    );
   addMirrors(model);
   model.traverse((node) => {
     if (!(node instanceof THREE.Mesh) || node.userData.mirror) return;
@@ -1956,7 +1959,10 @@ function addReflections(
     const decode = material.onBeforeCompile;
     material.onBeforeCompile = (shader, gl) => {
       decode.call(material, shader, gl);
-      shader.fragmentShader = shader.fragmentShader.replace('#include <envmap_fragment>', envmap);
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <envmap_fragment>',
+        envmapAt(material.name === 'floor' ? '4.0' : '1.0'),
+      );
     };
     material.needsUpdate = true;
   });

@@ -1884,3 +1884,14 @@ green test, which is worth recording:
 4. Add `ANTHROPIC_API_KEY` and run `pnpm evals:assistant` to get a real
    number for M5.
 5. Decide on the GitHub remote so CI can actually run.
+
+## 2026-11-26/27 — flat-02 review round 6
+
+- Lamp-only rooms (`steadyLight` in dressing) keep one colour balance all day.
+- Wide edge-keeping smoothing of the lightmap (`CALM_SIGMA`): cleaner plain walls.
+- Glass doors: `bakeShut` (balcony door lit shut), shower glass casts no baked
+  shadow and is no walking obstacle; mirrors lit per vertex.
+- Slat wall backing is plain `slat-felt`; yucca pot is a straight patterned pot.
+- Floor less glossy (blurred reflection). Surround: small photo patches go to
+  neighbouring photos (`PATCH`), scraps left out.
+- Open: the neighbour's wall opposite the big window is in no photo (hazy patch).

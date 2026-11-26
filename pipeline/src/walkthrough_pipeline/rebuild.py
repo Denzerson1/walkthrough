@@ -91,6 +91,7 @@ SURFACES: dict[str, tuple[str, float, str | None]] = {
     "feet": ("#a07a50", 0.5, None),
     "frame-white": ("#f2f2f0", 0.4, None),
     "felt": ("#19191a", 1.0, None),
+    "slat-felt": ("#1b1b1c", 1.0, None),     # behind a slat wall: plain, whatever felt is
     "bamboo": ("#d2a462", 0.5, "veneer"),
     "towel-grey": ("#4b4d50", 1.0, "boucle"),
     "robe": ("#d9cdb8", 1.0, "boucle"),
@@ -735,6 +736,7 @@ def scene_spec(
         # Sun elevations (on fully at or below, off at or above) between
         # which the flat's lamps come on; none: the ceiling lights always on.
         "lamps_on": (dressing.get("sun") or {}).get("lampsOn"),
+        "steady_light": dressing.get("steadyLight", []),
         # Open air outside the outline (a balcony): the walls facing it are baked.
         "outdoors": dressing.get("outdoors", []),
         "site": surroundings,

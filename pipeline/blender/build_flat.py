@@ -1759,7 +1759,7 @@ def roll_shelf(w: float, h: float, d: float, opts: dict) -> list[Part]:
     levels = [(h - t) * k / 4 for k in range(4)]
     for z in levels:
         parts.append(("oak-warm", (x0, x1, y0, y1 - t, z, z + t)))
-    parts.append(("oak-warm", (x0, x1 + reach, y0 - 0.01, y1, h - t, h)))
+    parts.append(("oak-warm", (x0, x1 + reach, y0 - (0.01 if reach else 0.0), y1, h - t, h)))
     for z in levels:  # a roll standing on each shelf: paper round a cardboard core
         parts += [("o:paper", (-0.055, 0.055, -0.055, 0.055, z + t, z + t + 0.098)),
                   ("o:roll-core", (-0.022, 0.022, -0.022, 0.022, z + t + 0.098, z + t + 0.0995))]
@@ -1898,10 +1898,10 @@ def slat_wall(w: float, h: float, d: float, opts: dict) -> list[Part]:
     """
     x0, x1, y0, y1 = -w / 2, w / 2, -d / 2, d / 2
     behind = y1 - 0.006
-    parts: list[Part] = [("felt", (x0, x1, behind, y1, 0, h))]
+    parts: list[Part] = [("slat-felt", (x0, x1, behind, y1, 0, h))]
     if opts.get("back"):
         behind = y1 - 0.012
-        parts = [("felt", (x0, x1, behind, y1 - 0.006, 0, h)),
+        parts = [("slat-felt", (x0, x1, behind, y1 - 0.006, 0, h)),
                  (opts["back"], (x0, x1, y1 - 0.006, y1, 0, h))]
     pitch, slat = opts.get("pitch", 0.045), opts.get("slat", 0.027)
     count = int((w + pitch - slat) / pitch)
@@ -2332,7 +2332,8 @@ def backdrop(w: float, h: float, d: float, opts: dict) -> list[Part]:
     return [(opts.get("surface", "facade"), (-w / 2, w / 2, -d / 2, d / 2, 0, h))]
 
 
-def yucca(bm: bmesh.types.BMesh, w: float, h: float, d: float, slot) -> None:
+def yucca(bm: bmesh.types.BMesh, w: float, h: float, d: float, slot,
+          pattern: bool = False) -> None:
     """
     The yucca beside the dining table (0084, 0092, 0093): a low red pot,
     three canes of different heights, each topped by a burst of long narrow
@@ -2344,18 +2345,26 @@ def yucca(bm: bmesh.types.BMesh, w: float, h: float, d: float, slot) -> None:
 
     rng = random.Random(7)
     pot_r, pot_h, n = min(w, d) * 0.4, 0.4, 40
-    lathe = [(0.74, 0.0), (0.8, 0.03), (0.93, 0.55), (1.0, 0.9), (1.05, 0.94), (1.05, 1.0),
-             (0.97, 1.0), (0.95, 0.9)]
+    # A straight round pot (the owner: round and uniform), its `pattern` (the
+    # dressing's picture "pot-pattern") once round its side.
+    lathe = [(0.97, 0.0), (1.0, 0.02), (1.0, 0.98), (0.985, 1.0), (0.93, 1.0), (0.92, 0.9)]
     rings = [[bm.verts.new((pot_r * f * math.cos(a), pot_r * f * math.sin(a), pot_h * z))
               for a in (2 * math.pi * k / n for k in range(n))] for f, z in lathe]
-    for lower, upper in zip(rings, rings[1:], strict=False):
+    layer = bm.loops.layers.uv.verify()
+    for row, (lower, upper) in enumerate(zip(rings, rings[1:], strict=False)):
+        side = pattern and row == 1
         for k in range(n):
             face = bm.faces.new((lower[k], lower[(k + 1) % n], upper[(k + 1) % n], upper[k]))
-            face.material_index, face.smooth = slot("pot-yucca"), True
+            face.material_index = slot("pot-pattern" if side else "pot-yucca")
+            face.smooth = True
+            if side:
+                for loop, uv in zip(face.loops, ((k / n, 0.0), ((k + 1) / n, 0.0),
+                                                 ((k + 1) / n, 1.0), (k / n, 1.0)), strict=True):
+                    loop[layer].uv = uv
     bm.faces.new(list(reversed(rings[0]))).material_index = slot("pot-yucca")
     bm.faces.new(rings[-1]).material_index = slot("soil")
-    # A saucer under it and a band below the rim (the owner: a nicer pot).
-    for z0, z1, wide in ((0.0, 0.03, 1.12), (pot_h * 0.78, pot_h * 0.84, 1.03)):
+    # A saucer under it.
+    for z0, z1, wide in ((0.0, 0.025, 1.1),):
         ring = bmesh.ops.create_cone(bm, cap_ends=True, segments=n, radius1=pot_r * wide,
                                      radius2=pot_r * wide, depth=z1 - z0)
         bmesh.ops.translate(bm, verts=ring["verts"], vec=(0, 0, (z0 + z1) / 2))
@@ -3180,7 +3189,7 @@ def finished(item: dict, surfaces: dict) -> bpy.types.Object:
     elif item["finish"] == "wc":
         wall_wc(bm, w, h, d, slot, opts)
     elif item["finish"] == "yucca":
-        yucca(bm, w, h, d, slot)
+        yucca(bm, w, h, d, slot, "pot-pattern" in surfaces)
     elif item["finish"] == "thuja":
         thuja(bm, w, h, d, slot, opts.get("seed", 0))
     elif item["finish"] == "flower-box":
@@ -3278,6 +3287,14 @@ def finished(item: dict, surfaces: dict) -> bpy.types.Object:
     if item["finish"] in ("yucca", "backdrop", "thuja", "flower-box"):
         # Leaves too thin for the light map; house fronts too big for it.
         VERTEX_LIT.add(obj.name)
+    if item["finish"] == "mirror":
+        # Its frame is a centimetre wide: out of the light map it was lit in
+        # blocks, a stepped ring round the glass (the owner: pixelated).
+        VERTEX_LIT.add(obj.name)
+    if item["finish"] == "glass-door" and not opts.get("frame"):
+        # A shower's glass lets the light in: its shadow, baked with it shut,
+        # lay in the shower when it stood open (the owner).
+        obj.visible_shadow = False
     if item["finish"] in ("barrel-chair", "wc"):
         mesh.shade_smooth()
         mesh.set_sharp_from_angle(angle=math.radians(50))
@@ -3629,6 +3646,10 @@ def glass_leaf(bm: bmesh.types.BMesh, w: float, h: float, slot, opts: dict) -> N
                 max(0.004 * side, y_bar), z - 0.005, z + 0.005)
 
 
+#: Doors baked shut: the pose each is written in (hang_glass_door).
+STAND: dict[str, Matrix] = {}
+
+
 def hang_glass_door(obj: bpy.types.Object, item: dict) -> None:
     """
     Move the glass door's origin to its hinge and stand it `open` degrees out
@@ -3641,6 +3662,7 @@ def hang_glass_door(obj: bpy.types.Object, item: dict) -> None:
     sign = 1 if opts.get("hinge", "start") == "start" else -1
     stand = math.radians(opts.get("open", 45)) * -sign
     hinge = Matrix.Translation((-sign * w / 2, 0.0, 0.0))
+    shut = obj.matrix_world.copy()
     obj.matrix_world = obj.matrix_world @ hinge @ Matrix.Rotation(stand, 4, "Z")
     full = math.radians(90) * -sign
     tag = {"open": round(full - stand, 5), "close": round(-stand, 5)}
@@ -3653,6 +3675,12 @@ def hang_glass_door(obj: bpy.types.Object, item: dict) -> None:
     hx, hy, _ = obj.matrix_world.translation
     tag["pivot"] = [round(hx, 4), round(-hy, 4)]
     obj["door"] = tag
+    if opts.get("bakeShut"):
+        # Lit shut, as it is seen shut: stood open in the bake, its room side
+        # faced the wall and came out black once closed. Stood as built again
+        # before the model is written (STAND).
+        STAND[obj.name] = obj.matrix_world.copy()
+        obj.matrix_world = shut @ hinge
 
 
 def picture_uvs(bm: bmesh.types.BMesh, faces, span: tuple[float, float, float, float],
@@ -4378,7 +4406,7 @@ def obstacles(pieces: list[bpy.types.Object]) -> list[dict]:
     """
     out = []
     for obj in pieces:
-        if "at" in (obj.get("door") or {}):
+        if {"at", "pivot"} & set(dict(obj.get("door") or {})):
             continue
         if max((obj.matrix_world @ v.co).z for v in obj.data.vertices) < 0.05:
             continue
@@ -4439,6 +4467,18 @@ ISLAND_GAP = 4
 #: pixels, and each island's object's name: set by layout_lightmap.
 ISLANDS = None
 ISLAND_OWNER: list[str] = []
+#: Rooms lit by their lamps alone (scene x0, z0, x1, z1): their light keeps
+#: the first time's colour balance at every time of day. Balanced per time
+#: like the rest, a windowless bathroom's lamp changed colour with the
+#: daylight slider (the owner), though nothing in the room had changed.
+STEADY: list[tuple[float, float, float, float]] = []
+ISLAND_STEADY: list[bool] = []
+STEADY_BALANCE: list[float] = []
+
+
+def in_steady(x: float, z: float) -> bool:
+    return any(x0 - 0.03 <= x <= x1 + 0.03 and z0 - 0.03 <= z <= z1 + 0.03
+               for x0, z0, x1, z1 in STEADY)
 #: Extra smoothing for an object's light: painted trim's light is smooth,
 #: and on few texels the denoiser leaves blotches. So is a white wall's: the
 #: hall, lit only by bounce, showed the denoiser's blotches as grey bands,
@@ -4551,6 +4591,7 @@ def island_map(objects: list[bpy.types.Object], size: int):
     from bpy_extras.bmesh_utils import bmesh_linked_uv_islands
 
     ISLAND_OWNER.clear()
+    ISLAND_STEADY.clear()
     corners = [[], [], []]
     ids = []
     for obj in objects:
@@ -4561,6 +4602,10 @@ def island_map(objects: list[bpy.types.Object], size: int):
         for island in bmesh_linked_uv_islands(bm, layer):
             index = len(ISLAND_OWNER)
             ISLAND_OWNER.append(obj.name)
+            faces = [bm.faces[f] if isinstance(f, int) else f for f in island]
+            middle = obj.matrix_world @ (sum((f.calc_center_median() for f in faces), Vector())
+                                         / max(len(faces), 1))
+            ISLAND_STEADY.append(in_steady(middle.x, -middle.y))
             for f in island:
                 loops = bm.faces[f].loops if isinstance(f, int) else f.loops
                 uvs = [tuple(loop[layer].uv) for loop in loops]
@@ -4694,7 +4739,8 @@ DIM_BELOW, DIM_SIGMA = 0.9, 8.0
 EDGE = 0.5
 
 
-def smooth_within_islands(rgb, covered, sigma: float = 1.6, islands=None):
+def smooth_within_islands(rgb, covered, sigma: float = 1.6, islands=None,
+                          edge: float | None = None):
     """
     Bake noise, blurred away without bleeding between surfaces or across
     shadows: a Gaussian over covered texels only, each neighbour weighted
@@ -4705,6 +4751,7 @@ def smooth_within_islands(rgb, covered, sigma: float = 1.6, islands=None):
     """
     import numpy as np
 
+    edge = EDGE if edge is None else edge
     radius = max(int(3 * sigma), 1)
     offsets = np.arange(-radius, radius + 1)
     kernel = np.exp(-(offsets**2) / (2 * sigma**2))
@@ -4719,11 +4766,19 @@ def smooth_within_islands(rgb, covered, sigma: float = 1.6, islands=None):
             if islands is not None:
                 same = same & (np.roll(islands, k, axis=axis) == islands)
             weight = (w * same
-                      * np.exp(-((near - lum) ** 2) / (2 * EDGE**2))).astype(np.float32)
+                      * np.exp(-((near - lum) ** 2) / (2 * edge**2))).astype(np.float32)
             total += np.roll(out, k, axis=axis) * weight[..., None]
             norm += weight
         out = np.where(covered[..., None], total / np.maximum(norm, 1e-6)[..., None], 0.0)
     return out.astype(np.float32)
+
+
+#: Everywhere, a wide smoothing (texels) of what differs by little (log
+#: light): the denoiser leaves soft blotches a few per cent deep and a
+#: hand's width across on plain white walls (the owner: "get these walls
+#: clean"), which no narrow blur reaches. A shadow's edge is far more than
+#: CALM_EDGE and stays.
+CALM_SIGMA, CALM_EDGE = 12.0, 0.1
 
 
 #: Light below this share of the atlas's median is a surface no light
@@ -4887,6 +4942,7 @@ def save_lightmap(baked: bpy.types.Image, path: str, scratch: Path,
         share = light / max(float(np.median(light[covered])), 1e-6)
         dim = np.clip((DIM_BELOW - share) / DIM_BELOW, 0.0, 1.0)[..., None]
         rgb = rgb * (1 - dim) + smooth_within_islands(rgb, covered, DIM_SIGMA, islands) * dim
+        rgb = smooth_within_islands(rgb, covered, CALM_SIGMA, islands, CALM_EDGE)
     rgb = rgb.reshape(-1, 3)
     covered = covered.ravel()
     balance = np.array(WARMTH, dtype=np.float32)
@@ -4894,6 +4950,11 @@ def save_lightmap(baked: bpy.types.Image, path: str, scratch: Path,
         shade = np.median(rgb[covered], axis=0)
         balance = balance * (shade.mean() / np.maximum(shade, 1e-6)) ** WHITE_BALANCE
     rgb = rgb * balance
+    if not STEADY_BALANCE:
+        STEADY_BALANCE.extend(float(c) for c in balance)
+    elif islands is not None and any(ISLAND_STEADY):
+        steady = np.array([*ISLAND_STEADY, False])[islands].ravel()
+        rgb[steady] *= np.array(STEADY_BALANCE, np.float32) / balance
     # The room's typical light: on its walls and ceilings, which are what a
     # camera exposes for. Over the whole atlas, the trim's larger share of
     # it (ATLAS_WEIGHT) and a lit hall pulled the median up, the room down.
@@ -5044,9 +5105,12 @@ def vertex_light(objects: list[bpy.types.Object], label: str, live_sun: bool,
     if through:
         light |= bake_vertices(through, BAKING, live_sun=False, translucent=True)
     gain = np.array(balance, np.float32) / scale
+    steady = np.array(STEADY_BALANCE or balance, np.float32) / scale
     light = {obj.name: smooth_vertices(obj.data, light[obj.name]) for obj in objects}
     for obj in objects:
-        store_light(obj.data, label, light[obj.name] * gain, "POINT")
+        at = obj.matrix_world @ (sum((Vector(c) for c in obj.bound_box), Vector()) / 8)
+        store_light(obj.data, label,
+                    light[obj.name] * (steady if in_steady(at.x, -at.y) else gain), "POINT")
     return light
 
 
@@ -5228,6 +5292,7 @@ def main() -> None:
     global WALL_T
     args = sys.argv[sys.argv.index("--") + 1 :]
     spec = json.loads(Path(args[0]).read_text())
+    STEADY.extend(tuple(box) for box in spec.get("steady_light") or [])
     preview_only = "--preview-only" in args
     # A flat drawn from its floor plan has its outer walls' real thickness.
     WALL_T = flat_geometry.WALL_T = spec["rooms"][0].get("wallT", WALL_T)
@@ -5397,6 +5462,8 @@ def main() -> None:
             piece["shadowOnly"] = True
     if probe:
         bpy.data.objects.remove(probe, do_unlink=True)
+    for name, pose in STAND.items():
+        bpy.data.objects[name].matrix_world = pose
     bpy.ops.export_scene.gltf(filepath=out["glb"], export_format="GLB", export_apply=True,
                               export_lights=False, export_cameras=False, export_extras=True,
                               export_vertex_color="NONE", export_attributes=True)
